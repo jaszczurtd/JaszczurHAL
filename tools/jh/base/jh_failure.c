@@ -5,19 +5,21 @@
 #include <string.h>
 
 void jh_failure_init(jh_failure_t *failure) {
-  const jh_failure_t empty = {HAL_OK, 0, {0}, {0}, {0}};
+  const jh_failure_t empty = {HAL_OK, 0, {0}, {0}, {0}, {0}};
   *failure = empty;
   // Initialization only checks its arguments, which are valid here.
   (void)jb_string_init(&failure->message, jb_heap_allocator());
   (void)jb_string_init(&failure->code, jb_heap_allocator());
   (void)jb_string_init(&failure->source, jb_heap_allocator());
+  (void)jb_string_init(&failure->pointer, jb_heap_allocator());
 }
 
 void jh_failure_destroy(jh_failure_t *failure) {
-  const jh_failure_t empty = {HAL_NONE, 0, {0}, {0}, {0}};
+  const jh_failure_t empty = {HAL_NONE, 0, {0}, {0}, {0}, {0}};
   jb_string_destroy(&failure->message);
   jb_string_destroy(&failure->code);
   jb_string_destroy(&failure->source);
+  jb_string_destroy(&failure->pointer);
   *failure = empty;
 }
 
@@ -38,8 +40,9 @@ hal_status_t jh_fail(jh_failure_t *failure, hal_status_t status, int exit_code,
   failure->message = message;
   jb_string_clear(&failure->code);
   jb_string_clear(&failure->source);
+  jb_string_clear(&failure->pointer);
   failure->status = status;
-  failure->exit_code = exit_code;
+  failure->exit_code = status == HAL_ENOMEM ? 4 : exit_code;
   return status;
 }
 
@@ -69,14 +72,45 @@ hal_status_t jh_fail_coded(jh_failure_t *failure, hal_status_t status,
     failure->message = message;
     failure->code = name;
     failure->source = place;
+    jb_string_clear(&failure->pointer);
     failure->status = status;
-    failure->exit_code = exit_code;
+    failure->exit_code = status == HAL_ENOMEM ? 4 : exit_code;
     return status;
   }
   jb_string_destroy(&name);
   jb_string_destroy(&place);
   jb_string_destroy(&message);
   return jh_fail_storage(failure, stored);
+}
+
+hal_status_t jh_fail_pointer(jh_failure_t *failure, const char *code,
+                             jb_json_span_t source, jb_json_span_t pointer,
+                             const jb_json_span_t *parts, size_t count) {
+  jh_failure_t next;
+  jh_failure_init(&next);
+  hal_status_t stored = HAL_OK;
+  jh_put(&next.code, &stored, code);
+  jh_put_span(&next.source, &stored, source);
+  jh_put_span(&next.pointer, &stored, pointer);
+  jh_put(&next.message, &stored, "[");
+  jh_put(&next.message, &stored, code);
+  jh_put(&next.message, &stored, "] ");
+  jh_put_span(&next.message, &stored, source);
+  jh_put(&next.message, &stored, ":");
+  jh_put_span(&next.message, &stored,
+              pointer.length == 0 ? jh_span("/") : pointer);
+  jh_put(&next.message, &stored, ": ");
+  for (size_t i = 0; i < count; ++i)
+    jh_put_span(&next.message, &stored, parts[i]);
+  if (stored != HAL_OK) {
+    jh_failure_destroy(&next);
+    return jh_fail_storage(failure, stored);
+  }
+  next.status = HAL_ECONFIG;
+  next.exit_code = 2;
+  jh_failure_destroy(failure);
+  *failure = next;
+  return HAL_ECONFIG;
 }
 
 hal_status_t jh_fail_text(jh_failure_t *failure, hal_status_t status,
@@ -91,8 +125,9 @@ hal_status_t jh_fail_storage(jh_failure_t *failure, hal_status_t status) {
   jb_string_clear(&failure->message);
   jb_string_clear(&failure->code);
   jb_string_clear(&failure->source);
+  jb_string_clear(&failure->pointer);
   failure->status = status;
-  failure->exit_code = 4;
+  failure->exit_code = status == HAL_ENOMEM || status == HAL_EOVERFLOW ? 4 : 3;
   return status;
 }
 
@@ -111,6 +146,13 @@ hal_status_t jh_require(jh_failure_t *failure, hal_status_t status,
 jb_json_span_t jh_span(const char *text) {
   const jb_json_span_t result = {text, strlen(text)};
   return result;
+}
+
+bool jh_ascii_is_upper(char c) { return c >= 'A' && c <= 'Z'; }
+bool jh_ascii_is_lower(char c) { return c >= 'a' && c <= 'z'; }
+bool jh_ascii_is_digit(char c) { return c >= '0' && c <= '9'; }
+char jh_ascii_to_upper(char c) {
+  return jh_ascii_is_lower(c) ? (char)(c - 'a' + 'A') : c;
 }
 
 bool jh_span_equal(jb_json_span_t a, jb_json_span_t b) {

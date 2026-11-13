@@ -704,7 +704,7 @@ static hal_status_t split_directive(jb_json_span_t text, place_t place,
     return HAL_OK;
   if (i < text.length) {
     size_t used = 0;
-    if (jh_config_digit(text.data[i]))
+    if (jh_ascii_is_digit(text.data[i]))
       return HAL_OK;
     if ((unsigned char)text.data[i] >= 0x80 &&
         !jh_config_space_at(text, i, &used))
@@ -960,7 +960,7 @@ static hal_status_t pp_names(jb_json_span_t text, jb_vector_t *names) {
   for (size_t i = 0; status == HAL_OK && i < size;) {
     const char c = bytes[i];
     const char next = i + 1 < size ? bytes[i + 1] : 0;
-    if (jh_config_digit(c) || (c == '.' && jh_config_digit(next))) {
+    if (jh_ascii_is_digit(c) || (c == '.' && jh_ascii_is_digit(next))) {
       size_t j = c == '.' ? i + 2 : i + 1;
       while (j < size) {
         const char d = bytes[j];
@@ -1169,7 +1169,7 @@ static bool variant_id(jb_json_span_t text) {
     return false;
   for (size_t i = 1; i < text.length; ++i) {
     const char c = text.data[i];
-    if (!((c >= 'A' && c <= 'Z') || jh_config_digit(c) || c == '_'))
+    if (!((c >= 'A' && c <= 'Z') || jh_ascii_is_digit(c) || c == '_'))
       return false;
   }
   return true;

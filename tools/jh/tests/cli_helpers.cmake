@@ -1,6 +1,17 @@
 # Helpers of the CLI checks: run jh from JH_WORK/cwd and read its JSON result,
 # and check the text and JSON it produces (also for tests/*.cmake).
 
+# Preserve wrapping when a test switches to the installed/relocated CLI.
+function(jh_test_tool executable)
+  if(DEFINED ENV{JH_TEST_WRAPPER})
+    set(ENV{JH_TEST_PROGRAM} "${executable}")
+    set(JH "$ENV{JH_TEST_WRAPPER}" PARENT_SCOPE)
+  else()
+    set(JH "${executable}" PARENT_SCOPE)
+  endif()
+endfunction()
+jh_test_tool("${JH}")
+
 # Run jh with ARGN, require exit code expected and keep stdout and stderr.
 function(invoke expected)
   execute_process(COMMAND "${JH}" ${ARGN} WORKING_DIRECTORY "${JH_WORK}/cwd"

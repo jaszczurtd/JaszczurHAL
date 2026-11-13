@@ -7,6 +7,7 @@
 #include <jb/json_number.h>
 #include <string.h>
 #ifndef _WIN32
+#include <glob.h>
 #include <unistd.h>
 #endif
 
@@ -317,6 +318,7 @@ hal_status_t jh_path_join(const char *base, const char *name,
   return status == HAL_OK ? jb_string_resize(out, required - 1u, '\0') : status;
 }
 
+#ifdef _WIN32
 static hal_status_t collect_json(void *context, const char *name,
                                  const jb_fs_info_t *info) {
   (void)info;
@@ -325,11 +327,54 @@ static hal_status_t collect_json(void *context, const char *name,
     return HAL_OK;
   return jh_list_push(context, jh_span(name));
 }
+#endif
 
 hal_status_t jh_json_names(const char *directory, jb_vector_t *names) {
+#ifdef _WIN32
   const hal_status_t listed = jb_fs_list(directory, collect_json, names);
   if (listed != HAL_OK && listed != HAL_ENOENT)
     return listed;
+#else
+  /* POSIX names need not be UTF-8. Match the suffix before inspecting any
+   * entry, so an unrelated unreadable name cannot reject the catalogue. */
+  jb_fs_info_t info;
+  hal_status_t status = jb_fs_status(directory, true, &info);
+  if (status == HAL_ENOENT)
+    return HAL_OK;
+  if (status != HAL_OK)
+    return status;
+  if (info.kind != JB_FS_DIRECTORY)
+    return HAL_ETYPE;
+  jb_string_t pattern = {0};
+  status = jb_string_init(&pattern, jb_heap_allocator());
+  for (const char *p = directory; status == HAL_OK && *p != '\0'; ++p) {
+    if (strchr("\\*?[", *p) != NULL)
+      jh_put(&pattern, &status, "\\");
+    jh_put_span(&pattern, &status, (jb_json_span_t){p, 1});
+  }
+  const size_t prefix = jb_string_size(&pattern);
+  static const char *const suffixes[] = {"/*.json", "/.*.json", "/.json"};
+  for (size_t i = 0; status == HAL_OK && i < COUNTOF(suffixes); ++i) {
+    status = jb_string_resize(&pattern, prefix, '\0');
+    jh_put(&pattern, &status, suffixes[i]);
+    if (status != HAL_OK)
+      break;
+    glob_t matches = {0};
+    const int listed = glob(jb_string_data(&pattern), GLOB_ERR, NULL, &matches);
+    if (listed == 0) {
+      for (size_t j = 0; status == HAL_OK && j < matches.gl_pathc; ++j) {
+        const char *name = strrchr(matches.gl_pathv[j], '/');
+        status = jh_list_push(names, jh_span(name + 1));
+      }
+    } else if (listed != GLOB_NOMATCH) {
+      status = listed == GLOB_NOSPACE ? HAL_ENOMEM : HAL_EIO;
+    }
+    globfree(&matches);
+  }
+  jb_string_destroy(&pattern);
+  if (status != HAL_OK)
+    return status;
+#endif
   jh_list_sort(names);
   return HAL_OK;
 }
@@ -357,7 +402,7 @@ hal_status_t jh_walk_files(const char *directory, jb_json_span_t relative,
         jh_fail_storage(failure, jb_string_init(&child, jb_heap_allocator()));
   if (status == HAL_OK) {
     const hal_status_t listed = jb_fs_list(directory, collect_entry, &names);
-    if (listed == HAL_ENOMEM)
+    if (listed == HAL_ENOMEM || listed == HAL_EOVERFLOW)
       status = jh_fail_storage(failure, listed);
     else if (listed != HAL_OK && listed != HAL_ENOENT && listed != HAL_ETYPE)
       status = jh_fail(failure, listed, 3,
@@ -377,14 +422,35 @@ hal_status_t jh_walk_files(const char *directory, jb_json_span_t relative,
       status = jh_fail_storage(
           failure, jh_join(&child, JH_PARTS(relative, jh_span(separator),
                                             jh_span(name))));
-    jb_fs_info_t entry, target;
-    if (status != HAL_OK ||
-        jb_fs_status(jb_string_data(&path), false, &entry) != HAL_OK)
+    jb_fs_info_t entry;
+    if (status != HAL_OK)
+      break;
+    const hal_status_t inspected =
+        jb_fs_status(jb_string_data(&path), false, &entry);
+    if (inspected == HAL_ENOENT)
       continue;
+    if (inspected != HAL_OK) {
+      status = jh_fail(failure, inspected, exit_code_for(inspected, 3),
+                       JH_PARTS(jh_string_span(&path),
+                                jh_span(": cannot inspect dependency")));
+      break;
+    }
     const bool link = entry.kind == JB_FS_LINK;
-    const bool followed =
-        jb_fs_status(jb_string_data(&path), true, &target) == HAL_OK;
-    if (followed && target.kind == JB_FS_REGULAR)
+    jb_fs_info_t target = entry;
+    if (link) {
+      const hal_status_t followed =
+          jb_fs_status(jb_string_data(&path), true, &target);
+      if (followed == HAL_ENOMEM || followed == HAL_EOVERFLOW) {
+        status =
+            jh_fail(failure, followed, 4,
+                    JH_PARTS(jh_string_span(&path),
+                             jh_span(": cannot inspect dependency target")));
+        break;
+      }
+      if (followed != HAL_OK)
+        continue; /* An unresolvable target, including a link loop. */
+    }
+    if (target.kind == JB_FS_REGULAR)
       status = visit(user, jb_string_data(&path), jh_string_span(&child), name);
     else if (!link && entry.kind == JB_FS_DIRECTORY)
       status = jh_walk_files(jb_string_data(&path), jh_string_span(&child),

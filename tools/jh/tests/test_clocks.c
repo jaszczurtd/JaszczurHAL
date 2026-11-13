@@ -633,11 +633,35 @@ static void test_override(void) {
   join(link_path, sizeof link_path, scan, "src/linked");
   join(target_path, sizeof target_path, scan, "outside");
   EXPECT(symlink(target_path, link_path) == 0, "cannot create the link");
+  static const char *const loop_bases[] = {"cmake", "link_libraries", "src",
+                                           "config", "examples"};
+  for (size_t i = 0; i < COUNTOF(loop_bases); ++i) {
+    formatted(link_path, sizeof link_path, "%s/keep.txt", loop_bases[i]);
+    write_under(scan, link_path, "");
+    formatted(link_path, sizeof link_path, "%s/%s/loop-a.txt", scan,
+              loop_bases[i]);
+    formatted(target_path, sizeof target_path, "%s/%s/loop-b.txt", scan,
+              loop_bases[i]);
+    EXPECT(symlink("loop-b.txt", link_path) == 0,
+           "cannot create first loop link");
+    EXPECT(symlink("loop-a.txt", target_path) == 0,
+           "cannot create second loop link");
+  }
 #endif
   jh_failure_t failure;
   jh_failure_init(&failure);
   EXPECT(jh_clock_check_no_hal_override(scan, LIMIT, &failure) == HAL_OK,
-         "a .hpp file, a file named .h or a linked directory was read");
+         "an ignored suffix, linked directory or link loop stopped the scan");
+#ifndef _WIN32
+  for (size_t i = 0; i < COUNTOF(loop_bases); ++i) {
+    formatted(link_path, sizeof link_path, "%s/%s/loop-a.txt", scan,
+              loop_bases[i]);
+    formatted(target_path, sizeof target_path, "%s/%s/loop-b.txt", scan,
+              loop_bases[i]);
+    EXPECT(unlink(link_path) == 0, "cannot remove first loop link");
+    EXPECT(unlink(target_path) == 0, "cannot remove second loop link");
+  }
+#endif
   write_under(scan, "src/b.h", "#define XOSC_HZ 1\n");
   write_under(scan, "src/a/x.h", "int a;\n#define SYS_CLK_HZ 1\n");
   (void)jh_clock_check_no_hal_override(scan, LIMIT, &failure);

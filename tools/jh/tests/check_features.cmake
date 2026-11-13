@@ -15,6 +15,22 @@ include("${CMAKE_CURRENT_LIST_DIR}/cli_helpers.cmake")
 file(REMOVE_RECURSE "${JH_WORK}")
 file(MAKE_DIRECTORY "${JH_WORK}/cwd")
 
+foreach(command build cmake)
+  set(selections "--target=rp2040")
+  set(output_args)
+  if(command STREQUAL "cmake")
+    set(output_args --output "${JH_WORK}/empty-dir.cmake")
+  else()
+    list(APPEND selections "--selector=HAL_TARGET_RP2040")
+  endif()
+  foreach(selection IN LISTS selections)
+    invoke(2 config "${command}" --root "${JH_HAL_SOURCE}" "${selection}"
+      --config-dir= ${output_args} --json)
+    status(HAL_EINVAL)
+    contains("${stderr}" "--config-dir needs a path" "Empty config directory")
+  endforeach()
+endforeach()
+
 # The two build cases formerly checked by tests/test_project_config.py.
 # SDK values remain unresolved; the compiler-independent value is an integer.
 set(project_probe "${JH_WORK}/project-build")
@@ -418,6 +434,31 @@ function(header_findings text expected code)
   set(stderr "${stderr}" PARENT_SCOPE)
 endfunction()
 header_findings("#define HAL_ENABLE_UNKNOWN\n" 1 "\\[JH-CFG-UNKNOWN\\]")
+# Fatal reader limits retain their diagnostic in text and JSON, including
+# report-only mode; the file and line are part of the reader's source.
+file(WRITE "${consumer_header}" "#if 9223372036854775807 + 1\n#endif\n")
+foreach(report_only IN ITEMS "" "--report-only")
+  foreach(json IN ITEMS "" "--json")
+    invoke(4 feature lint --root "${JH_HAL_SOURCE}" --input-root "${consumer_header}"
+      ${report_only} ${json})
+    slashed(diagnostic "${stderr}")
+    contains("${diagnostic}" "${consumer_header}:1: [JH-CFG-SCOPE]"
+      "Lint reader diagnostic")
+    contains("${diagnostic}" "exceeds the signed 64-bit range of jh" "Lint limit")
+    lacks("${stderr}" "allocation failed" "Lint limit is not an allocation failure")
+    if(json)
+      status(HAL_EOVERFLOW)
+      string(JSON code GET "${stdout}" code)
+      string(JSON source GET "${stdout}" source)
+      string(JSON message GET "${stdout}" message)
+      slashed(source "${source}")
+      if(NOT code STREQUAL "JH-CFG-SCOPE" OR NOT source STREQUAL "${consumer_header}:1")
+        message(FATAL_ERROR "Lint lost the reader code or source: ${stdout}")
+      endif()
+      contains("${message}" "exceeds the signed 64-bit range of jh" "Lint JSON message")
+    endif()
+  endforeach()
+endforeach()
 # =0 behind comments that look like they open one, and in a define spliced
 # over two lines; --report-only turns findings into warnings.
 header_findings("#define HAL_COMMENT_MARKER \"/*\"\n// another marker /*\n#define HAL_ENABLE_WIFI /* value follows\nthe multiline comment */ 0\n"

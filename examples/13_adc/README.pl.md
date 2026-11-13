@@ -12,10 +12,18 @@ inicjalizację zewnętrznego przetwornika co pięć sekund.
 
 Wariant `SCAN` włącza `HAL_ENABLE_ADC_SCAN` i próbkuje te same dwa wejścia
 wewnętrzne, `adc0` i `adc1`, oraz wbudowany czujnik temperatury w sposób
-ciągły, z taktowaniem sprzętowym: każdy pin co 12 µs, jeden blok 400 ramek
-co 4,8 ms. Raportuje średnią, minimum i maksimum z bloków zebranych
-w ostatniej sekundzie oraz liczbę bloków pominiętych. ADS1115 nie jest w tym
-wariancie używany.
+ciągły, z taktowaniem sprzętowym na RP i STM32G474. Na RP próbkuje każdy pin
+co 12 µs i zbiera jeden blok 400 ramek co 4,8 ms. Na STM32G474 czujnik
+temperatury wymaga dłuższej konwersji; rzeczywisty okres ramki odczytaj
+z komunikatu aplikacji. Raportuje ona średnią, minimum i maksimum z bloków
+zebranych w ostatniej sekundzie oraz liczbę bloków pominiętych. ADS1115 nie
+jest w tym wariancie używany.
+
+Obecna konfiguracja `SCAN` nie uruchamia się na ESP32-S3: backend odrzuca
+kanał temperatury oraz żądany okres konwersji 4000 ns statusem
+`HAL_EUNSUPPORTED`. Aby ją dostosować, pomiń temperaturę, zmień liczbę pinów
+i bufor oraz ustaw co najmniej 12000 ns na konwersję. Ograniczenia platform
+opisuje [API skanu ADC](../../doc/api/pl/25_adc_scan.md).
 
 Połączenia każdego montażu opisuje `device_tree.json`, a program bierze
 wejścia ADC, magistralę I2C i adres ADS1115 z wygenerowanego nagłówka.

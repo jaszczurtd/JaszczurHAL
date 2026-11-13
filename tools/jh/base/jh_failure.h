@@ -21,7 +21,7 @@ extern "C" {
 /** One recorded failure; status stays HAL_OK until a failure is recorded.
  * A jhbase container that cannot grow leaves message empty, with exit code 4
  * and its status (HAL_ENOMEM or HAL_EOVERFLOW). code and source are set only
- * by jh_fail_coded: the diagnostic code and the place the message starts
+ * by jh_fail_coded or jh_fail_pointer: the diagnostic code and source
  * with, which the --json error result reports as fields of their own.
  */
 typedef struct {
@@ -29,6 +29,7 @@ typedef struct {
   int exit_code;
   jb_string_t message;
   jb_string_t code, source;
+  jb_string_t pointer; /**< JSON Pointer of a hardware catalogue failure. */
 } jh_failure_t;
 
 /** Start an empty record whose message uses the host heap. failure is
@@ -42,8 +43,8 @@ void jh_failure_destroy(jh_failure_t *failure);
 
 /** Record status and exit_code with the concatenation of count message parts,
  * replacing an earlier record with its code and source; a part may quote the
- * earlier message. When the
- * message cannot be stored, the record becomes the failure of its storage
+ * earlier message. HAL_ENOMEM always uses exit code 4. When the message
+ * cannot be stored, the record becomes the failure of its storage
  * (jh_fail_storage). Returns the recorded status.
  */
 hal_status_t jh_fail(jh_failure_t *failure, hal_status_t status, int exit_code,
@@ -55,11 +56,18 @@ hal_status_t jh_fail_coded(jh_failure_t *failure, hal_status_t status,
                            int exit_code, const char *code,
                            jb_json_span_t source, const jb_json_span_t *parts,
                            size_t count);
+/** Record a hardware validation failure as "[code] source:pointer: detail",
+ * with HAL_ECONFIG and exit code 2. An empty pointer prints as / but stays
+ * empty in the record. All spans may borrow the previous record. */
+hal_status_t jh_fail_pointer(jh_failure_t *failure, const char *code,
+                             jb_json_span_t source, jb_json_span_t pointer,
+                             const jb_json_span_t *parts, size_t count);
 /** jh_fail with one NUL-terminated message. */
 hal_status_t jh_fail_text(jh_failure_t *failure, hal_status_t status,
                           int exit_code, const char *message);
-/** Record a failed jhbase container operation: status, exit code 4 and no
- * message. Returns status; HAL_OK records nothing.
+/** Record a failed helper operation without allocating a message. Allocation
+ * and overflow failures use exit code 4; other failures use 3.
+ * Returns status; HAL_OK records nothing.
  */
 hal_status_t jh_fail_storage(jh_failure_t *failure, hal_status_t status);
 /** Record HAL_EINVAL with exit code 3 for a call that lacks a required
@@ -88,6 +96,14 @@ jb_json_span_t jh_span_path_stem(jb_json_span_t path);
 /** The value of an ASCII hexadecimal digit (0-9, a-f or A-F), or -1 for any
  * other byte. */
 int jh_hex_digit(char c);
+/** ASCII byte classification, independent of locale; non-ASCII is false. */
+bool jh_ascii_is_upper(char c);
+/** Whether c is an ASCII lower-case letter. */
+bool jh_ascii_is_lower(char c);
+/** Whether c is an ASCII decimal digit. */
+bool jh_ascii_is_digit(char c);
+/** Upper-case an ASCII letter; leave every other byte unchanged. */
+char jh_ascii_to_upper(char c);
 
 /* Text built piece by piece: each jh_put* appends only while *status is
  * HAL_OK and stores the result of the append in *status, so a sequence of

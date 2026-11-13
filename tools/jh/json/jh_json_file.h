@@ -43,6 +43,8 @@ hal_status_t jh_append_posix(jb_string_t *out, jb_json_span_t path);
 /** sorted(directory.glob("*.json")): append the names ending in .json, in code
  * point order, to names (jb_string_t elements). A missing directory has none;
  * any other listing failure returns its status with names unsorted.
+ * POSIX matches names before metadata or UTF-8 validation; unrelated names
+ * cannot prevent discovery. Hidden .json names are included.
  */
 hal_status_t jh_json_names(const char *directory, jb_vector_t *names);
 
@@ -57,7 +59,11 @@ typedef hal_status_t (*jh_walk_fn)(void *user, const char *path,
  * order, visit a regular file (also through a link) and descend into a
  * directory that is not a link; relative prefixes the relative paths. A
  * missing directory or one that is a file has nothing. A listing failure
- * records "<directory>: cannot list: <status>" with exit code 3.
+ * records "<directory>: cannot list: <status>" with exit code 3 (4 for
+ * allocation/overflow). Entry inspection errors also propagate and name
+ * the path. Vanished entries and unresolvable link targets (including link
+ * loops) are skipped; allocation/overflow while following a link remains
+ * fatal and names the link path.
  */
 hal_status_t jh_walk_files(const char *directory, jb_json_span_t relative,
                            jh_walk_fn visit, void *user, jh_failure_t *failure);

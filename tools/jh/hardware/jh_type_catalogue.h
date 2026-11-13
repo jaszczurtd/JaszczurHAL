@@ -2,104 +2,87 @@
 #define JH_TYPE_CATALOGUE_H
 
 /** @file jh_type_catalogue.h
- * The catalogue of HAL component types: every binding in
- * config/hardware/bindings, validated against binding.schema.json and the
- * rules beyond the schema (C types, units, defaults, children, connections,
- * features, capabilities, cycles). Failures throw jh::failure with the
- * device tree specification's code, source file and JSON Pointer.
+ * HAL binding documents and their semantic validation. C11. A catalogue owns
+ * its documents at stable addresses; borrowed nodes and bindings live until
+ * destruction. Failures retain the hardware diagnostic code and JSON Pointer.
  */
-#include "jh_adapters.h"
+#include "jh_json_file.h"
 #include <jb/literal.h>
-#include <map>
-#include <set>
-#include <string>
-#include <vector>
+#include <jb/map.h>
 
-namespace jh::hardware {
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-/** JSON kind a C type of a property holds. */
-enum class c_kind { boolean, integer, floating, string };
+/** JSON category represented by a binding's C type. */
+typedef enum {
+  JH_C_BOOLEAN,
+  JH_C_INTEGER,
+  JH_C_FLOATING,
+  JH_C_STRING
+} jh_c_kind_t;
 
-/** One cType of binding.schema.json and how its values are checked and spelt.
- */
-struct c_type_info {
+/** A binding C type and its exact literal representation. */
+typedef struct {
   const char *name;
-  c_kind category;
+  jh_c_kind_t category;
   bool is_signed;
-  unsigned bits; /**< Integer or IEEE width; 1 for bool, 0 for string. */
+  unsigned bits; /**< Integer/IEEE width, 1 for bool, 0 for string. */
   jb_c_literal_type_t literal;
-};
+} jh_c_type_t;
 
-/** The cType named by a property definition, or null for an unknown name. */
-const c_type_info *c_type(const std::string &name);
-/** The JSON type name a category requires in a property definition. */
-const char *json_type_name(c_kind category);
+/** One owned binding. Its document and all nodes must stay at this address. */
+typedef struct {
+  jb_string_t compatible, path;
+  const char *origin;
+  jh_json_document_t document;
+} jh_binding_t;
 
-/** Read-only view of one parsed value. */
-struct view {
-  jb_json_node_t node{};
-  jb_json_type_t type() const;
-  bool is(jb_json_type_t kind) const { return type() == kind; }
-  /** Member by decoded name; absent members return false. */
-  bool find(const char *key, view *out) const;
-  view member(const char *key) const;
-  std::string string() const;
-  std::string key() const;
-  std::string raw() const;
-  bool boolean() const;
-  size_t count() const;
-  /** Direct members or items in document order. */
-  std::vector<view> children() const;
-};
+/** Bindings in sorted file order and an index by compatible. Initialize with
+ * {0}, call init, then destroy. Do not copy or move a live catalogue. */
+typedef struct {
+  jb_vector_t bindings; /**< Owned jh_binding_t pointers. */
+  jb_map_t
+      index; /**< Borrowed compatible spans mapped to load-order indices. */
+} jh_catalogue_t;
 
-/** One type: its compatible, file and parsed document. */
-struct binding {
-  std::string compatible;
-  std::string path;
-  std::string origin; /**< "hal" or "project". */
-  std::unique_ptr<json_document> document;
-  view root() const;
-};
+/** The named C type, or NULL for an unknown name. */
+const jh_c_type_t *jh_c_type(jb_json_span_t name);
+/** JSON schema type name for a C category. */
+const char *jh_c_json_type(jh_c_kind_t kind);
+/** Initialize an empty catalogue on the host heap. */
+hal_status_t jh_catalogue_init(jh_catalogue_t *types);
+/** Release all documents and containers; a zero catalogue is harmless. */
+void jh_catalogue_destroy(jh_catalogue_t *types);
+/** Binding in load order, or NULL past the end. */
+const jh_binding_t *jh_catalogue_at(const jh_catalogue_t *types, size_t index);
+/** Binding by compatible, or NULL when absent. */
+const jh_binding_t *jh_catalogue_find(const jh_catalogue_t *types,
+                                      jb_json_span_t compatible);
+/** Read and schema-check the regular *.json files in bindings_dir, in filename
+ * order. types must be initialized and empty. On failure destroy types to
+ * release any bindings already read. All pointers are required. */
+hal_status_t jh_catalogue_load(jh_catalogue_t *types, jh_json_location_t *where,
+                               const char *schema_dir, const char *bindings_dir,
+                               size_t max_bytes, jh_failure_t *failure);
+/** Check C types, units, values, children, signals, connections and cycles.
+ * features/capabilities are optional lists of jb_string_t (jh_list_init);
+ * NULL skips that list's validation. Other pointers are required. */
+hal_status_t jh_catalogue_check(const jh_catalogue_t *types,
+                                const jb_vector_t *features,
+                                const jb_vector_t *capabilities,
+                                jh_failure_t *failure);
+/** Append the declared HAL feature names to an initialized string list. */
+hal_status_t jh_catalogue_features(jh_json_location_t *where, const char *root,
+                                   size_t max_bytes, jb_vector_t *names,
+                                   jh_failure_t *failure);
+/** Append the declared board capabilities to an initialized string list. */
+hal_status_t jh_catalogue_capabilities(jh_json_location_t *where,
+                                       const char *root, size_t max_bytes,
+                                       jb_vector_t *names,
+                                       jh_failure_t *failure);
 
-/** Types by compatible; load order is the sorted file order. */
-class catalogue {
-public:
-  void add(binding entry);
-  const binding *find(const std::string &compatible) const;
-  const std::vector<binding> &in_load_order() const { return bindings_; }
-  /** Bindings by compatible in Unicode code point order. */
-  std::vector<const binding *> sorted() const;
-
-private:
-  std::vector<binding> bindings_;
-  std::map<std::string, size_t> index_;
-};
-
-/** Throw the catalogue failure for code at source:pointer. */
-[[noreturn]] void fail(const std::string &code, const std::string &source,
-                       const std::string &pointer, const std::string &detail);
-
-/** Flags of the HAL feature registry under root, for requiresFeatures. */
-std::set<std::string> hal_features(parse_location &where,
-                                   const std::string &root, size_t max_bytes);
-/** Capabilities of boards/capabilities.json under root, for provides. */
-std::set<std::string> board_capabilities(parse_location &where,
-                                         const std::string &root,
-                                         size_t max_bytes);
-
-/** Read every *.json of bindings_dir as a HAL type named after its
- * compatible, validating each with schema_dir/binding.schema.json.
- */
-catalogue load_hal_catalogue(parse_location &where,
-                             const std::string &schema_dir,
-                             const std::string &bindings_dir, size_t max_bytes);
-
-/** Semantic checks of every type beyond its schema. Null feature or
- * capability sets skip the respective check.
- */
-void check_catalogue(const catalogue &types,
-                     const std::set<std::string> *features,
-                     const std::set<std::string> *capabilities);
-
-} // namespace jh::hardware
+#ifdef __cplusplus
+}
+#endif
 #endif

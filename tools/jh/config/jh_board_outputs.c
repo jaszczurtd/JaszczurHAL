@@ -161,15 +161,11 @@ static void put_value(emit_t *e, jb_json_tree_view_t value) {
   }
 }
 
-static char ascii_upper(char c) {
-  return c >= 'a' && c <= 'z' ? (char)(c - 'a' + 'A') : c;
-}
-
 /* identifier.upper().replace("-", "_"). */
 static void put_macro_suffix(emit_t *e, jb_json_span_t identifier) {
   for (size_t i = 0; e->status == HAL_OK && i < identifier.length; ++i) {
     const char c =
-        identifier.data[i] == '-' ? '_' : ascii_upper(identifier.data[i]);
+        identifier.data[i] == '-' ? '_' : jh_ascii_to_upper(identifier.data[i]);
     e->status = jb_string_append(e->out, &c, 1);
   }
 }
@@ -178,12 +174,12 @@ static void put_macro_suffix(emit_t *e, jb_json_span_t identifier) {
 static void put_camel_suffix(emit_t *e, const char *name) {
   for (size_t i = 0; e->status == HAL_OK && name[i] != '\0'; ++i) {
     const char c = name[i];
-    if (i > 0 && c >= 'A' && c <= 'Z') {
+    if (i > 0 && jh_ascii_is_upper(c)) {
       const char p = name[i - 1];
-      if ((p >= 'a' && p <= 'z') || (p >= '0' && p <= '9'))
+      if (jh_ascii_is_lower(p) || jh_ascii_is_digit(p))
         put(e, "_");
     }
-    const char upper = ascii_upper(c);
+    const char upper = jh_ascii_to_upper(c);
     if (e->status == HAL_OK)
       e->status = jb_string_append(e->out, &upper, 1);
   }
@@ -904,7 +900,7 @@ static hal_status_t board_facts(emit_t *e, const board_facts_t *facts,
     put(e, "#define HAL_BOARD_PSRAM_INTERFACE_");
     const jb_json_span_t interface_name = text_of(get(psram, "interface"));
     for (size_t i = 0; e->status == HAL_OK && i < interface_name.length; ++i) {
-      const char c = ascii_upper(interface_name.data[i]);
+      const char c = jh_ascii_to_upper(interface_name.data[i]);
       e->status = jb_string_append(e->out, &c, 1);
     }
     line(e, " 1");

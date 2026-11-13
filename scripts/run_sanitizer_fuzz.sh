@@ -173,8 +173,8 @@ for target in fuzz_http_server fuzz_websocket fuzz_http_multipart; do
         "-runs=${FUZZ_RUNS}" -max_len=1024
 done
 
-# The jh host CLI is its own CMake project; its native tests run with the same
-# instrumentation.
+# The jh host CLI is its own CMake project. Cover its native tests and the
+# CLI subprocess suites, whose runner also checks captured sanitizer reports.
 JH_BUILD_DIR="${BUILD_DIR}-jh"
 cmake -E remove_directory "${JH_BUILD_DIR}"
 cmake -E env "CC=${CLANG_CC}" "CXX=${CLANG_CXX}" \
@@ -184,6 +184,8 @@ cmake -E env "CC=${CLANG_CC}" "CXX=${CLANG_CXX}" \
 cmake --build "${JH_BUILD_DIR}" --parallel "${JOBS}"
 cmake -E env "${SANITIZER_ENV[@]}" \
     ctest --test-dir "${JH_BUILD_DIR}" --output-on-failure -L '^memcheck$'
+cmake -E env "${SANITIZER_ENV[@]}" \
+    ctest --test-dir "${JH_BUILD_DIR}" --output-on-failure --no-tests=error -R '^jh_cli_memory$'
 
 # ThreadSanitizer cannot share a build with ASan. It covers the native tests;
 # the Python checks gain nothing from instrumentation.

@@ -70,7 +70,12 @@ Domyślna konfiguracja zachowuje oryginalne API C przetwarzające dane w pamięc
 - `LODEPNG_COMPILE_DISK` - bez funkcji obsługujących `FILE` i pliki na dysku.
 - `LODEPNG_COMPILE_CPP` - bez interfejsu C++ opartego na `std::vector` i `std::string`.
 
-Aby włączyć opcjonalną obsługę plików lub interfejs C++, zdefiniuj odpowiednio `HAL_LODEPNG_ENABLE_DISK` lub `HAL_LODEPNG_ENABLE_CPP` przed dołączeniem `hal/codecs/lodepng/lodepng.h`.
+Aby włączyć opcjonalną obsługę plików lub interfejs C++, zdefiniuj odpowiednio
+`HAL_LODEPNG_ENABLE_DISK` lub `HAL_LODEPNG_ENABLE_CPP` zarówno podczas
+kompilacji biblioteki HAL, jak i każdego pliku źródłowego aplikacji, który
+dołącza nagłówek LodePNG. Przebuduj bibliotekę z tymi samymi ustawieniami.
+Samo `#define` w pliku aplikacji udostępnia deklaracje bez skompilowania
+odpowiednich funkcji biblioteki; opcja C++ zmienia też ich wiązanie językowe.
 
 Flagi LodePNG `LODEPNG_NO_COMPILE_*` pozwalają ograniczyć rozmiar kodu, na przykład przez wyłączenie nieużywanego kodera albo dekodera.
 
@@ -89,7 +94,7 @@ Flagi LodePNG `LODEPNG_NO_COMPILE_*` pozwalają ograniczyć rozmiar kodu, na prz
 
 ## Zarządzanie pamięcią
 
-Proste funkcje kodowania i dekodowania same przydzielają bufory wyjściowe przez alokator LodePNG. Przy konfiguracji domyślnej zwalniaj te bufory przez `free(ptr)`.
+Proste funkcje kodowania i dekodowania same przydzielają bufory wyjściowe przez alokator LodePNG. Inicjalizuj wskaźniki wyjściowe wartością `NULL` i przy konfiguracji domyślnej zwalniaj je przez `free(ptr)` zarówno po sukcesie, jak i po błędzie: funkcja może pozostawić przydzielony bufor również wtedy, gdy zgłosi błąd.
 
 Zasady korzystania z buforów:
 
@@ -128,6 +133,7 @@ static bool decode_icon_rgb565(const unsigned char *png,
     unsigned char *rgba = NULL;
     unsigned error = lodepng_decode32(&rgba, width, height, png, png_size);
     if (error != 0) {
+        free(rgba);
         return false;
     }
 

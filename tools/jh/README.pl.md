@@ -148,8 +148,7 @@ identyfikatory dokumentów do 32768 bajtów. Zdekodowana wartość ma najwyżej
 [jh_json_schema.h](json/jh_json_schema.h) przyjmuje scratch użytkownika,
 własne limity i opcjonalne callbacki dokumentów oraz raportów.
 
-`jh_json_read_settings` z [jh_json_file.h](json/jh_json_file.h), wołane
-z modułów C++ jako `jh::read_settings`, czyta pliki VS Code i manifesty
+`jh_json_read_settings` z [jh_json_file.h](json/jh_json_file.h) czyta pliki VS Code i manifesty
 projektów tak samo jak `load_json_file` w narzędziach Pythona. Przyjmuje komentarze poza stringami, ostatnią wartość powtórzonej
 nazwy oraz `NaN`/`Infinity`. Brakujący plik daje pusty obiekt, a korzeń musi
 być obiektem. Liczby zachowują oryginalne tokeny. W odróżnieniu od Pythona
@@ -224,7 +223,9 @@ którego czytnik nie przyjmuje; brakujący plik daje pustą listę.
 `jh config cmake --root <HAL> --target <id> --output <plik>` zapisuje
 konfigurację jednej kompilacji dla CMake. `--config-dir <katalog>` wybiera
 jej `hal_project_config.h`; bez tej opcji polecenie konfiguruje bibliotekę
-na podstawie targetu i definicji. `--variant <id>` wybiera zadeklarowany
+na podstawie targetu i definicji. Jawnie pusty `--config-dir` jest błędem
+argumentu (exit 2), zarówno w `config build`, jak i `config cmake`.
+`--variant <id>` wybiera zadeklarowany
 wariant, powtarzane `--define NAZWA[=WARTOŚĆ]` przekazuje dodatkowe definicje,
 a `--hardware-header <plik>` najpierw czyta wygenerowany nagłówek sprzętu.
 Polecenie sprawdza target, wariant i żądane funkcje przed zapisaniem pliku;
@@ -373,7 +374,8 @@ do katalogów i `tests/hardware`, chyba że podano `--include-hardware-fixtures`
 W nagłówku sprawdza każde `#define` nazwy `HAL_ENABLE_*` lub `HAL_DISABLE_*`,
 w dowolnej gałęzi, i każdą definicję `JH_PROJECT_VARIANTS(X)`, zgłaszając to
 samo co `feature resolve` dla pojedynczego żądania. Nagłówek odrzucony przez
-czytnik konfiguracji projektu daje jedno zgłoszenie z komunikatem czytnika.
+czytnik konfiguracji projektu daje jedno zgłoszenie z komunikatem czytnika,
+z wyjątkiem opisanych poniżej błędów alokacji i limitów przerywających pracę.
 Manifest jest czytany tak jak przez `json.loads` i dostaje zgłoszenia
 `config manifest`. Polecenie wypisuje posortowane zgłoszenia jako `error:`
 (albo `warning:` z `--report-only`) oraz `linted <n> feature inputs: ...`.
@@ -381,6 +383,10 @@ Z `--json` wynik (`command: "feature.lint"`) zawiera `config`, `reportOnly`,
 `inputs` i `findings`. Kod wyjścia 1 oznacza zgłoszenia bez `--report-only`;
 2 niepoprawny rejestr, brakujący korzeń wejścia albo manifest, który nie jest
 obiektem JSON.
+Błąd alokacji lub limitu zasobów przerywa sprawdzanie z exit 4, również
+z `--report-only`; te błędy nie stają się zgłoszeniami linta. Komunikat,
+kod diagnostyki (w tym `JH-CFG-SCOPE`) i źródło czytnika (z linią, jeśli jest
+dostępna) pozostają w stderr i wyniku błędu JSON.
 
 `jh config manifest --file <ścieżka> [--label <tekst>]` zgłasza konfigurację
 projektu, którą manifest zawiera, choć należy ona do `hal_project_config.h`:
@@ -625,6 +631,11 @@ capabilities z `boards/capabilities.json`; rozwijanie dzieci nie ma cyklu.
 Liczba zapisana z ułamkiem albo wykładnikiem musi też zachować skończoną,
 niezerową wartość w binary64, tak jak wymagał loader Pythona.
 
+Na POSIX nazwy bez rozszerzenia `.json` są pomijane przed odczytem metadanych
+i sprawdzeniem UTF-8. Niezwiązany plik z nazwą spoza UTF-8 nie blokuje
+generowania. Ukryte pliki JSON i dowiązania do zwykłych plików JSON są
+uwzględniane; wiszące dowiązania są pomijane.
+
 Ścieżka nagłówka pochodzi z `generatedArtifacts.deviceDefaultsHeader`
 w `config/tooling/artifacts.json`, względem `--output-root` (domyślnie root);
 ścieżka absolutna, z dyskiem albo z segmentem `..` kończy się kodem 2, zanim
@@ -671,6 +682,21 @@ Executable oraz licencje PCRE2, jhbase, Ryu, utf8proc i JaszczurHAL instaluje
 `cmake --install <build> --config Release --component jh --prefix <destination>`. Program można przenieść wraz z prefixem
 instalacji; do uruchomienia nie potrzebuje drzewa źródeł.
 
+## Kontrola pamięci
+
+Etap `memcheck` uruchamia testy natywne pod Valgrindem, a zestawy testów CLI
+przez `jh_cli_memory`. Ten drugi sprawdza każdy podproces `jh`, także
+zainstalowany executable i polecenia, które mają zakończyć się błędem.
+Raporty trafiają do `cli-memory-reports/` w katalogu builda testów; brakujący,
+niepełny lub zawierający błąd raport zatrzymuje test. CMake i Python wykonują
+asercje poza Valgrindem.
+
+Skonfiguruj `tools/jh` z `-DJH_TEST_VALGRIND=ON`, potem uruchom
+`ctest --test-dir <build> -R '^jh_cli_memory$' --output-on-failure`.
+Etap `sanitizer-fuzz` uruchamia te same zestawy z ASan/UBSan i wykrywaniem
+wycieków. Sprawdza też pliki raportów, więc oczekiwany błąd polecenia nie
+ukryje błędu pamięci. Oba tryby korzystają z launchera testowego dla Unix.
+
 ## Źródła
 
 Moduły C narzędzia kompilują się jako C11. [jh_failure.h](base/jh_failure.h)
@@ -696,7 +722,9 @@ wynik `config inspect`. Operacje tekstowe czytnika, tokenizację warunków
 i arytmetykę ze znakiem na liczbach 64-bitowych udostępnia
 [jh_config_expression.h](config/jh_config_expression.h).
 [jh_project_build.h](config/jh_project_build.h) wybiera z tego wyniku jedną
-kompilację projektu, zbiera żądane funkcje i generuje plik CMake. Walidator
-schematów, katalog typów, generator `device-defaults` i `main.cpp` są jeszcze
-w C++. Korzystają z modułów C przez właścicieli zasobów i wyjątki
-z [cxx/](cxx/), które znikną razem z ostatnim wywołującym w C++.
+kompilację projektu, zbiera żądane funkcje i generuje plik CMake.
+[jh_type_catalogue.h](hardware/jh_type_catalogue.h) wczytuje i sprawdza typy
+HAL, a [jh_device_defaults.h](hardware/jh_device_defaults.h) generuje ich
+wartości domyślne i pozycje enum jako makra C. Te moduły oraz CLI w
+[src/](src/) są w C11, z jawnym zwracaniem statusów i własnością zasobów.
+Walidator schematów pozostaje w C++ za [interfejsem C](json/jh_json_schema.h).

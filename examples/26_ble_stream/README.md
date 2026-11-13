@@ -101,7 +101,7 @@ according to the MTU:
 ```bash
 python3 tests/hardware/bluetooth_stream/verify_commands.py \
   --address XX:XX:XX:XX:XX:XX \
-  --target rp2040 --board picow --runtime baremetal
+  --assembly picow --runtime baremetal
 ```
 
 It tests a fragmented 500-byte binary `echo`, handler and security metadata,

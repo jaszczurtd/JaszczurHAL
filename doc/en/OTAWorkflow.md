@@ -137,7 +137,7 @@ Boot V2, flash encryption, anti-rollback policy, protected keys, and recovery
 procedures are separate production controls. Standard upload and tests must not
 program irreversible eFuses.
 
-If WiFi, the new application, or OTA metadata prevents recovery over the network, reprogram the device through serial or JTAG using a complete, validated manifest. ESP32-S3 OTA has so far been checked through compilation and linking only. Trial boot and confirmation, rollback, interrupted transfers, invalid images, authentication and transfer failures, and recovery still require hardware validation.
+If WiFi, the new application, or OTA metadata prevents recovery over the network, reprogram the device through serial or JTAG using a complete, validated manifest. See the [validation status](#support-matrix) for the tested ESP32-S3 scenarios and remaining limitations.
 
 ## RP Workflow
 

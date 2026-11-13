@@ -104,7 +104,7 @@ poleceń zgodnie z MTU:
 ```bash
 python3 tests/hardware/bluetooth_stream/verify_commands.py \
   --address XX:XX:XX:XX:XX:XX \
-  --target rp2040 --board picow --runtime baremetal
+  --assembly picow --runtime baremetal
 ```
 
 Test obejmuje 500-bajtowe binarne `echo` przesyłane we fragmentach,

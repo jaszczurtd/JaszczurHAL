@@ -143,8 +143,7 @@ depth 128. Exhaustion returns `HAL_EOVERFLOW` before publishing any error prefix
 The internal C API in [jh_json_schema.h](json/jh_json_schema.h) accepts caller-owned
 scratch, custom limits and optional document/report callbacks.
 
-`jh_json_read_settings` in [jh_json_file.h](json/jh_json_file.h), called as
-`jh::read_settings` from the C++ modules, reads VS Code files and project
+`jh_json_read_settings` in [jh_json_file.h](json/jh_json_file.h) reads VS Code files and project
 manifests the way `load_json_file` of the Python tools does.
 It accepts comments outside strings, the last value of a repeated name and
 `NaN`/`Infinity`. A missing file reads as an empty object, and the root must
@@ -218,7 +217,9 @@ rejects; a missing file gives an empty list.
 `jh config cmake --root <HAL> --target <id> --output <file>` writes the
 configuration of one build for CMake. `--config-dir <directory>` selects its
 `hal_project_config.h`; without it, the command configures a library from
-the target and definitions alone. `--variant <id>` selects a declared
+the target and definitions alone. An explicitly empty `--config-dir` is an
+argument error (exit 2), for both `config build` and `config cmake`.
+`--variant <id>` selects a declared
 variant, repeated `--define NAME[=VALUE]` supplies extra definitions, and
 `--hardware-header <file>` reads the generated hardware header first.
 The command checks the selected target, variant and feature requests before
@@ -361,13 +362,18 @@ or `third_party` or starting with `build`, links to directories, and
 it checks every `#define` of a `HAL_ENABLE_*` or `HAL_DISABLE_*` name, in any
 branch, and every definition of `JH_PROJECT_VARIANTS(X)`, with the request
 findings of `feature resolve`; a header the project configuration reader
-rejects is one finding with the reader's message. A manifest is read like
+rejects is one finding with the reader's message, except for the fatal
+allocation and limit failures below. A manifest is read like
 `json.loads` reads it and gets the findings of `config manifest`. The command
 prints the findings sorted, as `error:` (or `warning:` with `--report-only`),
 and `linted <n> feature inputs: ...`. With `--json` the result
 (`command: "feature.lint"`) has `config`, `reportOnly`, `inputs` and
 `findings`. Exit code 1 means findings without `--report-only`; 2 an invalid
 registry, a missing input root or a manifest that is not a JSON object.
+Allocation or resource-limit failures stop the check with exit 4, including
+with `--report-only`; these failures are not lint findings. The reader's
+message, diagnostic code (including `JH-CFG-SCOPE`) and source (with a line
+when available) are kept in stderr and the JSON error result.
 
 `jh config manifest --file <path> [--label <text>]` reports the project
 configuration a manifest carries although it belongs in
@@ -607,6 +613,11 @@ owned once; `requiresFeatures` are flags of `config/features/*.json` and
 no cycle. A number spelt with a fraction or exponent must also keep a finite,
 nonzero magnitude in binary64, as the Python loader required.
 
+On POSIX, names without the `.json` suffix are ignored before reading their
+metadata or validating UTF-8. An unrelated file with a non-UTF-8 name does
+not block generation. Hidden JSON files and links to regular JSON files
+are included; dangling links are skipped.
+
 The header path comes from `generatedArtifacts.deviceDefaultsHeader` in
 `config/tooling/artifacts.json`, relative to `--output-root` (default: the
 root); an absolute path, a drive or a `..` segment fails with exit code 2
@@ -654,6 +665,20 @@ JaszczurHAL with `cmake --install <build> --config Release
 --component jh --prefix <destination>`. The binary can be moved with its
 installation prefix; it does not require the source tree to run.
 
+## Memory checks
+
+The `memcheck` gate runs the native tests under Valgrind and the CLI suites
+through `jh_cli_memory`. The latter checks each `jh` subprocess, including
+the installed executable and commands expected to fail. Reports live in
+`cli-memory-reports/` below the test build; a missing, incomplete or failing
+report fails the suite. CMake and Python run the assertions outside Valgrind.
+
+Configure `tools/jh` with `-DJH_TEST_VALGRIND=ON` to register this check,
+then run `ctest --test-dir <build> -R '^jh_cli_memory$' --output-on-failure`.
+The `sanitizer-fuzz` gate runs the same suites with ASan/UBSan and leak
+detection. It also checks their report files, so an expected command failure
+cannot hide a memory error. Both modes use the Unix test launcher.
+
 ## Sources
 
 The C modules of the tool build as C11. [jh_failure.h](base/jh_failure.h)
@@ -679,7 +704,9 @@ the `config inspect` result. Its text operations, condition tokenizer and
 signed 64-bit arithmetic are in
 [jh_config_expression.h](config/jh_config_expression.h).
 [jh_project_build.h](config/jh_project_build.h) selects one project build from
-that result, collects its feature requests and renders its CMake file. The
-schema validator, the type catalogue, the device defaults generator and
-`main.cpp` are still C++. They call the C modules through the owners and
-exceptions in [cxx/](cxx/), which go away with the last C++ caller.
+that result, collects its feature requests and renders its CMake file.
+[jh_type_catalogue.h](hardware/jh_type_catalogue.h) loads and checks the HAL
+types, and [jh_device_defaults.h](hardware/jh_device_defaults.h) renders their
+default values and enum positions as C macros. These modules and the CLI in
+[src/](src/) are C11, with explicit status returns and resource ownership.
+The schema validator remains C++ behind [its C API](json/jh_json_schema.h).

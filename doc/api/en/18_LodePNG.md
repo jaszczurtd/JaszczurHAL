@@ -69,7 +69,12 @@ The default configuration retains the original memory-based C API but disables:
 - `LODEPNG_COMPILE_DISK` - no `FILE` / disk helpers.
 - `LODEPNG_COMPILE_CPP` - no `std::vector` / `std::string` wrapper.
 
-To enable optional file support or the C++ interface, define `HAL_LODEPNG_ENABLE_DISK` or `HAL_LODEPNG_ENABLE_CPP`, respectively, before including `hal/codecs/lodepng/lodepng.h`.
+To enable optional file support or the C++ interface, define
+`HAL_LODEPNG_ENABLE_DISK` or `HAL_LODEPNG_ENABLE_CPP`, respectively, for both
+the HAL library build and every application source that includes the LodePNG
+header. Rebuild the library with the same settings. A `#define` in an
+application source alone exposes declarations without compiling the matching
+library functions; the C++ option also changes their language linkage.
 
 LodePNG `LODEPNG_NO_COMPILE_*` flags can reduce the code size further, for example by disabling an unused encoder or decoder.
 
@@ -90,7 +95,7 @@ Common memory APIs:
 
 ## Memory ownership
 
-The simple encode and decode functions allocate their output buffers through the LodePNG allocator. With the default configuration, free these buffers with `free(ptr)`.
+The simple encode and decode functions allocate their output buffers through the LodePNG allocator. Initialize output pointers to `NULL` and, with the default configuration, free them with `free(ptr)` on both success and failure: an error can leave an allocated buffer in the output pointer.
 
 Buffer usage rules:
 
@@ -127,6 +132,7 @@ static bool decode_icon_rgb565(const unsigned char *png,
     unsigned char *rgba = NULL;
     unsigned error = lodepng_decode32(&rgba, width, height, png, png_size);
     if (error != 0) {
+        free(rgba);
         return false;
     }
 

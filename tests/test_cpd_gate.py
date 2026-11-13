@@ -251,7 +251,7 @@ class CpdGateTests(unittest.TestCase):
             for call in run_scan.call_args_list[:2]
         )
         self.assertIn("tools/jh/json/jh_json_file.c", production)
-        self.assertIn("tools/jh/src/main.cpp", production)
+        self.assertIn("tools/jh/src/main.c", production)
         self.assertFalse(
             any(path.startswith("tools/jh/tests/") for path in production)
         )

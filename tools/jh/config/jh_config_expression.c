@@ -4,12 +4,12 @@
 #include <jb/utf8.h>
 #include <string.h>
 
-bool jh_config_digit(char c) { return c >= '0' && c <= '9'; }
+bool jh_config_digit(char c) { return jh_ascii_is_digit(c); }
 bool jh_config_name_start(char c) {
-  return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || c == '_';
+  return jh_ascii_is_upper(c) || jh_ascii_is_lower(c) || c == '_';
 }
 bool jh_config_name_part(char c) {
-  return jh_config_name_start(c) || jh_config_digit(c);
+  return jh_config_name_start(c) || jh_ascii_is_digit(c);
 }
 bool jh_config_identifier(jb_json_span_t text) {
   if (text.length == 0 || !jh_config_name_start(text.data[0]))
@@ -92,9 +92,9 @@ static size_t token_end(jb_json_span_t text, size_t i) {
       ++j;
     return literal_suffix(text, j);
   }
-  if (jh_config_digit(c)) {
+  if (jh_ascii_is_digit(c)) {
     size_t j = i;
-    while (j < size && jh_config_digit(bytes[j]))
+    while (j < size && jh_ascii_is_digit(bytes[j]))
       ++j;
     return literal_suffix(text, j);
   }
@@ -432,7 +432,7 @@ static int64_t unary(parser_t *p, bool live) {
     }
     return value;
   }
-  if (jh_config_digit(token.data[0]) || token.data[0] == '\'')
+  if (jh_ascii_is_digit(token.data[0]) || token.data[0] == '\'')
     return integer_literal(p, token, live);
   if (!jh_config_identifier(token))
     unexpected(p, token);

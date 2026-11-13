@@ -453,8 +453,9 @@ JH_MEMCHECK_REQUIRED_TESTS=(
     jh_schema
     jh_settings
     jh_config
-    jh_containers
+    jh_c_layer
     jh_clocks
+    jh_cli_failures
 )
 
 # run_memcheck BUILD LOG REQUIRED...: every native test labelled memcheck in
@@ -505,9 +506,14 @@ stage_memcheck() {
     local jh_build="${GATE_BUILD_ROOT}/jh-memcheck"
     info "Building the jh host CLI tests for Valgrind..."
     with_minimum_cmake ensure_cmake_build "${jh_build}" -S tools/jh \
-        -DCMAKE_BUILD_TYPE=Debug
+        -DCMAKE_BUILD_TYPE=Debug -DJH_TEST_VALGRIND=ON
     run_memcheck "${jh_build}" "${LOG_ROOT}/jh_cli_memcheck.log" \
         "${JH_MEMCHECK_REQUIRED_TESTS[@]}"
+    # The CMake/Python suites launch jh as a subprocess; their runner checks
+    # each CLI report, including commands expected to return an error.
+    with_minimum_cmake ctest --test-dir "${jh_build}" --output-on-failure \
+        --no-tests=error -R '^jh_cli_memory$' 2>&1 \
+        | tee "${LOG_ROOT}/jh_cli_subprocess_memcheck.log"
 }
 
 stage_cppcheck() {

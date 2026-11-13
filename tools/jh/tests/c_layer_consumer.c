@@ -1,18 +1,18 @@
 // The C layer of jh used from C: its headers compile as C11,
 // jh_unified_diff writes the lines difflib.unified_diff(..., lineterm="")
 // writes, and inputs that point into the string a call replaces keep their
-// bytes. test_containers.cpp runs jh_test_c_layer() with a work directory.
+// bytes. Runs with files in the work directory passed as its argument.
 #include "jh_config_expression.h"
+#include "jh_device_defaults.h"
 #include "jh_failure.h"
 #include "jh_generated_output.h"
 #include "jh_json_file.h"
 #include "jh_python_repr.h"
 #include <jb/array.h>
+#include <jb/filesystem.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-int jh_test_c_layer(const char *directory);
 
 /* The lines of one diff, each followed by LF. */
 typedef struct {
@@ -124,6 +124,29 @@ static void aliasing(const char *directory) {
   expect(jh_fail(&failure, HAL_EIO, 3, parts, COUNTOF(parts)) == HAL_EIO &&
              equals(&failure.message, "wrapped: cannot read input file"),
          "a message part quoting the previous message");
+  expect(
+      jh_fail_pointer(&failure, "JH-HW-SCHEMA", jh_span("binding.json"),
+                      jh_span("/properties/gain"),
+                      JH_PARTS(jh_string_span(&failure.message))) ==
+              HAL_ECONFIG &&
+          equals(&failure.message,
+                 "[JH-HW-SCHEMA] binding.json:/properties/gain: wrapped: "
+                 "cannot read input file") &&
+          equals(&failure.pointer, "/properties/gain") &&
+          failure.exit_code == 2,
+      "hardware failure retains its pointer while wrapping an earlier message");
+  expect(
+      jh_fail_pointer(&failure, jb_string_data(&failure.code),
+                      jh_string_span(&failure.source),
+                      jh_string_span(&failure.pointer),
+                      JH_PARTS(jh_span("invalid type"))) == HAL_ECONFIG &&
+          equals(&failure.message,
+                 "[JH-HW-SCHEMA] binding.json:/properties/gain: invalid type"),
+      "hardware failure may borrow all diagnostic fields from its predecessor");
+  expect(jh_fail_text(&failure, HAL_EIO, 3, "cannot read input file") ==
+                 HAL_EIO &&
+             jb_string_size(&failure.pointer) == 0,
+         "an ordinary failure clears the previous hardware pointer");
 
   jb_string_t path = {0};
   bool changed = false;
@@ -325,6 +348,101 @@ static void float_append_failure(void) {
   jb_string_destroy(&out);
 }
 
+static void macro_tokens(void) {
+  gate_t gate = {false};
+  const jb_allocator_t allocator = {&gate, gate_allocate, gate_release};
+  jb_string_t out = {0};
+  expect(jb_string_init(&out, &allocator) == HAL_OK &&
+             jh_append(&out, "fooBar") == HAL_OK,
+         "macro token owner");
+  expect(jh_macro_token(jh_string_span(&out), &out) == HAL_OK &&
+             equals(&out, "FOO_BAR"),
+         "macro token aliases its output");
+  expect(jb_string_assign(&out, "skipHTTPServer", 14) == HAL_OK &&
+             jh_macro_token((jb_json_span_t){jb_string_data(&out) + 4, 10},
+                            &out) == HAL_OK &&
+             equals(&out, "HTTP_SERVER"),
+         "macro token input starts inside its output");
+  expect(jb_string_assign(&out, "x", 1) == HAL_OK, "macro failure sentinel");
+  gate.blocked = true;
+  expect(jh_macro_token(jh_span("aLongNameThatNeedsMoreSpaceThanTheOldToken"),
+                        &out) == HAL_ENOMEM &&
+             equals(&out, "x"),
+         "failed macro token preserves output and uses its allocator");
+  gate.blocked = false;
+  expect(jh_macro_token(jh_span("---foo__bar99---"), &out) == HAL_OK &&
+             equals(&out, "FOO_BAR99"),
+         "macro token separators");
+  expect(jh_macro_token((jb_json_span_t){NULL, 0}, &out) == HAL_OK &&
+             equals(&out, ""),
+         "empty macro token");
+  jb_string_destroy(&out);
+}
+
+static void failure_codes(void) {
+  jh_failure_t failure;
+  jh_failure_init(&failure);
+  expect(jh_fail_storage(&failure, HAL_EINVAL) == HAL_EINVAL &&
+             failure.exit_code == 3,
+         "non-memory helper failure is exit 3");
+  expect(jh_fail_storage(&failure, HAL_ENOMEM) == HAL_ENOMEM &&
+             failure.exit_code == 4,
+         "allocation failure is exit 4");
+  expect(jh_require(&failure, HAL_ENOMEM, 3, "cannot create directory") ==
+                 HAL_ENOMEM &&
+             failure.exit_code == 4,
+         "filesystem ENOMEM remains exit 4 with a message");
+  jh_failure_destroy(&failure);
+}
+
+static void ascii_bytes(void) {
+  const char *letters = "abcdefghijklmnopqrstuvwxyz";
+  const char *capitals = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const char *digits = "0123456789";
+  for (unsigned value = 0; value < 256; ++value) {
+    const char c = (char)value;
+    const char *lower = value == 0 ? NULL : strchr(letters, c);
+    const char *upper = value == 0 ? NULL : strchr(capitals, c);
+    const char *digit = value == 0 ? NULL : strchr(digits, c);
+    expect(jh_ascii_is_lower(c) == (lower != NULL) &&
+               jh_ascii_is_upper(c) == (upper != NULL) &&
+               jh_ascii_is_digit(c) == (digit != NULL) &&
+               jh_config_digit(c) == (digit != NULL) &&
+               jh_ascii_to_upper(c) ==
+                   (lower == NULL ? c : capitals[lower - letters]),
+           "ASCII helpers over every byte");
+  }
+}
+
+#ifndef _WIN32
+static void json_names(const char *work) {
+  jb_string_t directory = {0}, path = {0};
+  jb_vector_t names = {0};
+  jb_string_init(&directory, jb_heap_allocator());
+  jb_string_init(&path, jb_heap_allocator());
+  jh_list_init(&names);
+  bool ready = jh_path_join(work, "json [names]*?", &directory) == HAL_OK &&
+               jb_fs_mkdir(jb_string_data(&directory), true) == HAL_OK;
+  const char *files[] = {"a.json", ".hidden.json", ".json", "note-\xff.txt"};
+  for (size_t i = 0; ready && i < COUNTOF(files); ++i) {
+    /* Raw POSIX bytes deliberately bypass path UTF-8 validation. */
+    ready = jh_join(&path, JH_PARTS(jh_string_span(&directory), jh_span("/"),
+                                    jh_span(files[i]))) == HAL_OK;
+    FILE *file = ready ? fopen(jb_string_data(&path), "wb") : NULL;
+    ready = file != NULL && fclose(file) == 0;
+  }
+  expect(ready && jh_json_names(jb_string_data(&directory), &names) == HAL_OK &&
+             jb_vector_size(&names) == 3 &&
+             jh_list_contains(&names, jh_span("a.json")) &&
+             jh_list_contains(&names, jh_span(".hidden.json")) &&
+             jh_list_contains(&names, jh_span(".json")),
+         "JSON names include hidden files and escape directory patterns");
+  jb_string_destroy(&path);
+  jb_string_destroy(&directory);
+  jh_list_destroy(&names);
+}
+#endif
+
 /* The CMake configuration uses the same path spelling as board outputs.
  * Appending a path may grow the destination while its input aliases it. */
 static void build_paths(void) {
@@ -430,7 +548,12 @@ static void config_expression(void) {
   jh_failure_destroy(&failure);
 }
 
-int jh_test_c_layer(const char *directory) {
+int main(int argc, char **argv) {
+  if (argc != 2) {
+    fprintf(stderr, "usage: jh_c_layer_test <work directory>\n");
+    return 2;
+  }
+  const char *directory = argv[1];
   failures = 0;
   diff();
   artifact_paths();
@@ -438,7 +561,15 @@ int jh_test_c_layer(const char *directory) {
   python_repr(directory);
   float_repr(directory);
   float_append_failure();
+  macro_tokens();
+  failure_codes();
+  ascii_bytes();
+#ifndef _WIN32
+  json_names(directory);
+#endif
   build_paths();
   config_expression();
-  return failures;
+  if (failures == 0)
+    printf("c layer: all checks passed\n");
+  return failures == 0 ? 0 : 1;
 }

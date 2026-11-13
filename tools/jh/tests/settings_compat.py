@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""jh::read_settings against load_json_file of the Python HAL tools.
+"""jh_json_read_settings against load_json_file of the Python HAL tools.
 
 Usage: settings_compat.py <settings_probe> <JaszczurHAL root> [<root>...]
 

@@ -13,7 +13,7 @@
 extern "C" {
 #endif
 
-/** Whether c is an ASCII decimal digit. */
+/** Whether c is an ASCII decimal digit; retained for callers of this API. */
 bool jh_config_digit(char c);
 /** Whether c starts an ASCII preprocessor identifier. */
 bool jh_config_name_start(char c);

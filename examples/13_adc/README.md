@@ -11,10 +11,19 @@ retries external ADC initialization every five seconds.
 
 The `SCAN` variant enables `HAL_ENABLE_ADC_SCAN` and samples the same two
 internal inputs, `adc0` and `adc1`, and the chip's temperature sensor
-continuously with hardware pacing: each pin every 12 µs, one block of 400
-frames every 4.8 ms. It reports the mean, minimum and maximum of every block
-collected during the last second, and how many blocks it missed. The ADS1115
-is not used in this variant.
+continuously with hardware pacing on RP and STM32G474. On RP, it samples each
+pin every 12 µs and collects one block of 400 frames every 4.8 ms. On
+STM32G474, the temperature sensor requires a longer conversion time; use
+the frame period printed by the application for the effective timing.
+It reports the mean, minimum and maximum of every block collected during
+the last second, and how many blocks it missed. The ADS1115 is not used in
+this variant.
+
+The current `SCAN` configuration cannot run on ESP32-S3: the backend rejects
+the temperature channel and the requested 4000 ns conversion period with
+`HAL_EUNSUPPORTED`. To adapt it, omit temperature, adjust the pin count and
+buffer, and request at least 12000 ns per conversion. See the
+[ADC scan API](../../doc/api/en/25_adc_scan.md) for platform limits.
 
 `device_tree.json` describes the wiring of every assembly, and the program
 takes the ADC inputs, the I2C bus and the ADS1115 address from the generated

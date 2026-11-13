@@ -443,6 +443,17 @@ file(READ "${radio_output}/jh_board_config.h" radio_header)
 # The configuration depends on the copy it read and on the component
 # catalogue of the checkout, never on the tracked registry.
 file(STRINGS "${radio_output}/generation.d" generation_inputs)
+if(UNIX)
+  # Unresolvable links are not dependencies; their names need not be JSON.
+  file(CREATE_LINK "loop-b.txt" "${fixtures}/radio-valid/loop-a.txt" SYMBOLIC)
+  file(CREATE_LINK "loop-a.txt" "${fixtures}/radio-valid/loop-b.txt" SYMBOLIC)
+  configure_fixture(radio-valid rp2040 rp2040-zero)
+  file(REMOVE "${fixtures}/radio-valid/loop-a.txt" "${fixtures}/radio-valid/loop-b.txt")
+  file(STRINGS "${radio_output}/generation.d" with_loop)
+  if(NOT with_loop STREQUAL generation_inputs)
+    message(FATAL_ERROR "A link loop changed the board dependencies")
+  endif()
+endif()
 file(REAL_PATH "${fixtures}/radio-valid" radio_root)
 foreach(input "${radio_root}/capabilities.json" "${radio_root}/profiles/rp2040-zero.json"
               "${hal_root}/config/tooling/board_components.json")

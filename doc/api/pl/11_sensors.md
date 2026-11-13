@@ -655,9 +655,9 @@ hal_irsmall_decoder_default_config(uint8_t input_pin,
 bool hal_irsmall_decoder_init(hal_irsmall_decoder_t *dev,
                               const hal_irsmall_decoder_config_t *cfg);
 void hal_irsmall_decoder_deinit(hal_irsmall_decoder_t *dev);
-void hal_irsmall_decoder_enable(hal_irsmall_decoder_t *dev);
-void hal_irsmall_decoder_disable(hal_irsmall_decoder_t *dev);
-void hal_irsmall_decoder_reset(hal_irsmall_decoder_t *dev);
+hal_status_t hal_irsmall_decoder_enable(hal_irsmall_decoder_t *dev);
+hal_status_t hal_irsmall_decoder_disable(hal_irsmall_decoder_t *dev);
+hal_status_t hal_irsmall_decoder_reset(hal_irsmall_decoder_t *dev);
 bool hal_irsmall_decoder_data_available(hal_irsmall_decoder_t *dev,
                                         hal_irsmall_decoder_data_t *out);
 bool hal_irsmall_decoder_has_data(hal_irsmall_decoder_t *dev);
@@ -670,6 +670,11 @@ extended, RC5, Sony SIRC 12/15/20-bit, Sony SIRC triple-frame, Samsung
 20-bit oraz Samsung 32-bit. `hal_irsmall_decoder_data_available()` kopiuje i
 czyści jedną zdekodowaną ramkę; `hal_irsmall_decoder_has_data()` czyści
 oczekujące dane bez ich kopiowania.
+
+`hal_irsmall_decoder_enable()`, `hal_irsmall_decoder_disable()` i
+`hal_irsmall_decoder_reset()` zwracają `HAL_OK` po sukcesie. Sprawdzaj ich
+status: odrzucają niepoprawną lub niezainicjalizowaną instancję, a włączenie
+może też zakończyć się błędem podłączania przerwania GPIO.
 
 - **Wspólna implementacja modułu:** `hal/input/irsmall_decoder/irsmall_decoder.cpp`
   jest używana na RP2040 i STM32G474 oraz w testach z mockiem. Korzysta z przerwań GPIO
@@ -997,8 +1002,8 @@ Konfiguracja zakresu pomiarowego i odczyt kanałów przetwornika ADS1115 przez I
 // Inicjalizuje ADS1115 pod podanym 7-bitowym adresem I2C.
 // adc_range: rozmiar LSB w miliwoltach (np. 0.1875 dla zakresu pełnoskalowego ±6,144 V).
 //            Zapisywany wewnętrznie dla hal_ext_adc_read_scaled().
-void    hal_ext_adc_init(uint8_t address, float adc_range);
-void    hal_ext_adc_init_bus(uint8_t i2c_bus, uint8_t address, float adc_range); // i2c_bus: 0=domyślny, 1=drugi kontroler
+hal_status_t hal_ext_adc_init(uint8_t address, float adc_range);
+hal_status_t hal_ext_adc_init_bus(uint8_t i2c_bus, uint8_t address, float adc_range); // i2c_bus: 0=domyślny, 1=drugi kontroler
 
 // Odczytuje surową wartość 16-bitową ze znakiem z kanału 0-3.
 // Ustawia wzmocnienie na 0 (±6,144 V) przed każdą konwersją; blokuje do gotowości wyniku.
@@ -1008,6 +1013,10 @@ int16_t hal_ext_adc_read(uint8_t channel);
 // Nałóż dalsze korekty specyficzne dla projektu (dzielnik napięcia itd.) na wynik.
 float   hal_ext_adc_read_scaled(uint8_t channel);
 ```
+
+Obie funkcje inicjalizacji zwracają `HAL_OK` po sukcesie. Sprawdź wynik przed
+odczytem: niepoprawne argumenty, niepowodzenie tworzenia muteksu lub brak
+wykrytego ADS1115 powodują zwrócenie statusu błędu.
 
 - **Wspólna implementacja modułu:** Sterownik ADS1X15/ADS1115 należący do HAL korzysta
   z HAL I2C i jest używany na RP2040 oraz STM32G474.

@@ -137,7 +137,7 @@ endif()
 expect_runs("${third_exe}")
 
 # 4. A changed source is a new key; the earlier result stays untouched.
-file(APPEND "${copy}/tools/jh/src/main.cpp" "\n// bootstrap check: changed input\n")
+file(APPEND "${copy}/tools/jh/src/main.c" "\n// bootstrap check: changed input\n")
 verify_fails(verify_stale "jh is not prepared for this checkout and host")
 bootstrap(0 fourth)
 get_filename_component(fourth_bin "${fourth_exe}" DIRECTORY)

@@ -157,12 +157,6 @@ static bool span_in(jb_json_span_t text, const char *const *names,
 
 /* ---- Patterns ---- */
 
-static bool lower_or_digit(char c) {
-  return (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9');
-}
-
-static bool upper(char c) { return c >= 'A' && c <= 'Z'; }
-
 /* ^[a-z0-9]+(?:-[a-z0-9]+)*$ */
 static bool id_pattern(jb_json_span_t text) {
   if (text.length == 0)
@@ -174,7 +168,7 @@ static bool id_pattern(jb_json_span_t text) {
       if (after_dash)
         return false;
       after_dash = true;
-    } else if (lower_or_digit(c)) {
+    } else if (jh_ascii_is_lower(c) || jh_ascii_is_digit(c)) {
       after_dash = false;
     } else {
       return false;
@@ -185,11 +179,11 @@ static bool id_pattern(jb_json_span_t text) {
 
 /* ^[A-Z][A-Z0-9_]*$ */
 static bool macro_pattern(jb_json_span_t text) {
-  if (text.length == 0 || !upper(text.data[0]))
+  if (text.length == 0 || !jh_ascii_is_upper(text.data[0]))
     return false;
   for (size_t i = 1; i < text.length; ++i) {
     const char c = text.data[i];
-    if (!upper(c) && !(c >= '0' && c <= '9') && c != '_')
+    if (!jh_ascii_is_upper(c) && !jh_ascii_is_digit(c) && c != '_')
       return false;
   }
   return true;
@@ -200,7 +194,8 @@ static bool camel_pattern(jb_json_span_t text) {
   if (text.length == 0 || !(text.data[0] >= 'a' && text.data[0] <= 'z'))
     return false;
   for (size_t i = 1; i < text.length; ++i)
-    if (!lower_or_digit(text.data[i]) && !upper(text.data[i]))
+    if (!jh_ascii_is_lower(text.data[i]) && !jh_ascii_is_digit(text.data[i]) &&
+        !jh_ascii_is_upper(text.data[i]))
       return false;
   return true;
 }
@@ -208,7 +203,7 @@ static bool camel_pattern(jb_json_span_t text) {
 /* ^P([A-Z])([0-9]|1[0-5])$ */
 static bool stm32_pin_pattern(jb_json_span_t text) {
   if (text.length < 3 || text.length > 4 || text.data[0] != 'P' ||
-      !upper(text.data[1]))
+      !jh_ascii_is_upper(text.data[1]))
     return false;
   if (text.length == 3)
     return text.data[2] >= '0' && text.data[2] <= '9';
@@ -1155,9 +1150,11 @@ static hal_status_t device_owner(jb_json_span_t id, jb_string_t *out) {
   hal_status_t status = jh_append(out, "board.");
   for (size_t i = 0; status == HAL_OK && i < id.length; ++i) {
     const char c = id.data[i];
-    if (upper(c) && i > 0 && lower_or_digit(id.data[i - 1]))
+    if (jh_ascii_is_upper(c) && i > 0 &&
+        (jh_ascii_is_lower(id.data[i - 1]) ||
+         jh_ascii_is_digit(id.data[i - 1])))
       status = jh_append(out, "-");
-    const char lower = upper(c) ? (char)(c - 'A' + 'a') : c;
+    const char lower = jh_ascii_is_upper(c) ? (char)(c - 'A' + 'a') : c;
     if (status == HAL_OK)
       status = jb_string_append(out, &lower, 1);
   }
@@ -2005,7 +2002,7 @@ static const jh_feature_t *find_feature(const jh_feature_registry_t *registry,
 /* ---- Feature requests ---- */
 
 static bool feature_name_char(char c) {
-  return upper(c) || (c >= '0' && c <= '9') || c == '_';
+  return jh_ascii_is_upper(c) || (c >= '0' && c <= '9') || c == '_';
 }
 
 /* The repr of text appended after prefix, then suffix, as one failure. */

@@ -156,7 +156,7 @@ klucze oraz procedury odzyskiwania to osobne zabezpieczenia wymagane w
 produkcie. Podczas standardowego wgrywania i testów nie wolno programować
 nieodwracalnych bitów eFuse.
 
-Gdy WiFi, nowa aplikacja lub metadane OTA nie pozwalają uruchomić aktualizacji, urządzenie można odzyskać przez interfejs szeregowy albo JTAG, korzystając z kompletnego, zweryfikowanego manifestu. Implementację OTA dla ESP32-S3 sprawdzono dotąd wyłącznie przez kompilację i linkowanie. Testów na sprzęcie nadal wymagają próbny rozruch i jego potwierdzanie, przywracanie poprzedniej wersji, przerwane transfery, nieprawidłowe obrazy, błędy uwierzytelniania i transmisji oraz odzyskiwanie.
+Gdy WiFi, nowa aplikacja lub metadane OTA nie pozwalają uruchomić aktualizacji, urządzenie można odzyskać przez interfejs szeregowy albo JTAG, korzystając z kompletnego, zweryfikowanego manifestu. Sprawdzone scenariusze ESP32-S3 i pozostałe ograniczenia opisuje [zakres weryfikacji](#macierz-wsparcia).
 
 ## Procedura aktualizacji RP
 
