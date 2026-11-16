@@ -4,7 +4,7 @@ resolved through jh-vscode, against the frozen baseline, the C preprocessor and
 the generated CMake resolver. The registry, its artifacts, resolution and the
 raw lint are checked natively (tools/jh/tests/check_features.cmake,
 tests/test_feature_registry.cmake, tests/test_feature_preprocessor.cmake);
-this stays until the hardware resolve moves to jh."""
+hardware resolve/finalize also run through the native CLI."""
 
 from __future__ import annotations
 
@@ -202,7 +202,8 @@ def assembly_inputs(record: dict) -> AssemblyInputs:
         for part in (record["project"], record["assembly"], record["variant"] or "base")
     )
     output = TEST_ROOT / "assemblies" / name
-    generator = ROOT / "scripts/generate_hardware_config.py"
+    from project_config import jh_executable
+    generator = jh_executable()
     config_dir = ROOT / record["project"]
     for arguments in (
         ["resolve", "--config-dir", str(config_dir), "--assembly", record["assembly"],
@@ -212,7 +213,7 @@ def assembly_inputs(record: dict) -> AssemblyInputs:
          "--config-dir", str(config_dir), "--output-dir", str(output / "final"),
          *(["--variant", record["variant"]] if record["variant"] else [])],
     ):
-        result = subprocess.run([sys.executable, str(generator), *arguments],
+        result = subprocess.run([str(generator), "hardware", arguments[0], "--root", str(ROOT), *arguments[1:]],
                                 check=False, capture_output=True, text=True)
         require(result.returncode == 0, f"{name}: {arguments[0]} failed:\n{result.stderr}")
     cmake = (output / "final/jh_hardware_config.cmake").read_text(encoding="utf-8")

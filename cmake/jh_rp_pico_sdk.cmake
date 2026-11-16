@@ -433,6 +433,11 @@ function(jh_add_rp_pico_firmware TARGET_NAME)
             "jh_add_rp_pico_firmware: target '${TARGET_NAME}' does not exist")
     endif()
     target_link_libraries("${TARGET_NAME}" PRIVATE JaszczurHAL)
+    # Describe the physical device in the map, including storage and OTA
+    # reservations outside the application's FLASH region. No image bytes.
+    target_link_options("${TARGET_NAME}" PRIVATE
+        "LINKER:--defsym=__jh_flash_device_start=__flash_binary_start-${_jh_rp_program_offset}"
+        "LINKER:--defsym=__jh_flash_device_size=${_jh_rp_physical_flash_size}")
     target_compile_options("${TARGET_NAME}" PRIVATE -Wall -Wextra -Werror)
     set_target_properties("${TARGET_NAME}" PROPERTIES LINKER_LANGUAGE CXX)
     if(NOT JH_NATIVE_CUSTOM_ENTRY)

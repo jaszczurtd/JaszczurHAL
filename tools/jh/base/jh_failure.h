@@ -30,6 +30,13 @@ typedef struct {
   jb_string_t message;
   jb_string_t code, source;
   jb_string_t pointer; /**< JSON Pointer of a hardware catalogue failure. */
+  jb_string_t
+      detail; /**< Diagnostic text without the code and source prefix. */
+  jb_string_t
+      related; /**< Earlier conflicting JSON Pointer, empty when absent. */
+  jb_string_t argument; /**< Command-line option responsible for the failure. */
+  size_t line,
+      column; /**< Optional source location, one-based; zero when absent. */
 } jh_failure_t;
 
 /** Start an empty record whose message uses the host heap. failure is

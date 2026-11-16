@@ -17,7 +17,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 import build_esp_idf
 import generate_hal_features
-import hardware_resolver
+import device_tree_project
 
 
 def require(condition: bool, message: str) -> None:
@@ -203,18 +203,15 @@ example = read("examples/17_audio_output/app.c")
 audio_tree = ROOT / "examples/17_audio_output/device_tree.json"
 esp_assemblies = [
     item["name"]
-    for item in hardware_resolver.list_assemblies(
-        hardware_resolver.load_device_tree(audio_tree)
-    )
+    for item in device_tree_project.assemblies(audio_tree.parent)
     if item["target"] == "esp32s3"
 ]
 require(
     len(esp_assemblies) == 1,
     "17_audio_output does not declare one esp32s3 assembly",
 )
-audio_nodes = hardware_resolver.Resolver(audio_tree).resolve(
-    assembly=esp_assemblies[0]
-)["hardware"]["nodes"]
+audio_nodes = device_tree_project.resolved(audio_tree.parent,
+    assembly=esp_assemblies[0])["document"]["hardware"]["nodes"]
 for path, signal in (("audioPwm", "out"), ("audioAdc", "in"), ("pga2311", "cs")):
     require(
         audio_nodes[path]["present"]

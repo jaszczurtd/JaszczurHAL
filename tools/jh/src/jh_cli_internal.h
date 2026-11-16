@@ -50,6 +50,22 @@ typedef enum {
   opt_variant_option,
   opt_hardware_header,
   opt_selector_option,
+  opt_project,
+  opt_assembly,
+  opt_build_dir,
+  opt_serial,
+  opt_port,
+  opt_tool,
+  opt_address,
+  opt_size,
+  opt_reset,
+  opt_baud,
+  opt_hardware,
+  opt_compiler,
+  opt_compiler_flag,
+  opt_include_board,
+  opt_effective,
+  opt_resolution_output,
   opt_machine,
   opt_json_version,
   opt_help,
@@ -77,7 +93,13 @@ typedef enum {
   cmd_boards,
   cmd_board_config,
   cmd_project_build,
-  cmd_project_cmake
+  cmd_project_cmake,
+  cmd_firmware,
+  cmd_hardware_list,
+  cmd_hardware_select,
+  cmd_hardware_resolve,
+  cmd_hardware_finalize,
+  cmd_hardware_identity
 } jh_command_id_t;
 
 typedef struct {
@@ -98,6 +120,8 @@ typedef struct {
   jh_failure_t failure;
   jh_json_location_t location;
   bool json, process_attempted, configuration_rejected;
+  bool firmware_published;
+  const char *device_state;
   const jh_command_spec_t *command;
   const char *base;
   jb_process_result_t process;
@@ -148,6 +172,8 @@ void jh_result_object_end(jh_cli_t *ctx);
 void jh_result_item(jh_cli_t *ctx, jb_json_span_t value);
 void jh_result_list(jh_cli_t *ctx, const char *name, const jb_vector_t *list);
 void jh_result_tree(jh_cli_t *ctx, const char *name, jb_json_tree_view_t value);
+jb_json_tree_view_t jh_cli_parse_result(jh_cli_t *ctx, const jb_string_t *text,
+                                        jb_json_tree_t **tree);
 void jh_result_process(jh_cli_t *ctx);
 bool jh_result_finish(jh_cli_t *ctx);
 
@@ -158,6 +184,10 @@ int jh_cli_validate(jh_cli_t *ctx);
 int jh_cli_defaults(jh_cli_t *ctx);
 int jh_cli_features(jh_cli_t *ctx);
 int jh_cli_repository(jh_cli_t *ctx);
+int jh_cli_firmware(jh_cli_t *ctx);
+int jh_cli_hardware(jh_cli_t *ctx, jh_command_id_t command);
+bool jh_cli_install_cancellation(jh_cli_t *ctx);
+bool jh_cli_canceled(void *user);
 int jh_cli_config(jh_cli_t *ctx);
 int jh_cli_directives(jh_cli_t *ctx);
 int jh_cli_feature_list(jh_cli_t *ctx);

@@ -44,6 +44,7 @@ typedef struct {
   jb_vector_t bindings; /**< Owned jh_binding_t pointers. */
   jb_map_t
       index; /**< Borrowed compatible spans mapped to load-order indices. */
+  size_t borrowed_count; /**< Leading bindings owned by a shared catalogue. */
 } jh_catalogue_t;
 
 /** The named C type, or NULL for an unknown name. */
@@ -54,6 +55,11 @@ const char *jh_c_json_type(jh_c_kind_t kind);
 hal_status_t jh_catalogue_init(jh_catalogue_t *types);
 /** Release all documents and containers; a zero catalogue is harmless. */
 void jh_catalogue_destroy(jh_catalogue_t *types);
+/** Seed an initialized empty catalogue with borrowed entries from base.
+ * base must remain alive and unchanged until types is destroyed. Further
+ * project bindings are owned by types; the shared documents are read once. */
+hal_status_t jh_catalogue_borrow(jh_catalogue_t *types,
+                                 const jh_catalogue_t *base);
 /** Binding in load order, or NULL past the end. */
 const jh_binding_t *jh_catalogue_at(const jh_catalogue_t *types, size_t index);
 /** Binding by compatible, or NULL when absent. */
@@ -65,6 +71,23 @@ const jh_binding_t *jh_catalogue_find(const jh_catalogue_t *types,
 hal_status_t jh_catalogue_load(jh_catalogue_t *types, jh_json_location_t *where,
                                const char *schema_dir, const char *bindings_dir,
                                size_t max_bytes, jh_failure_t *failure);
+/** Append the project bindings named by a schema-checked bindings array.
+ * Paths are relative to config_dir, use forward slashes and name regular
+ * files. Repeated real paths are read once. Existing compatible names cannot
+ * be replaced. On failure the catalogue still owns every appended binding.
+ */
+hal_status_t
+jh_catalogue_load_project(jh_catalogue_t *types, jh_json_location_t *where,
+                          const char *schema_dir, const char *config_dir,
+                          const char *source, jb_json_node_t entries,
+                          size_t max_bytes, jh_failure_t *failure);
+/** Check a property against its schema-checked binding definition: exact C
+ * type/range, enum and inclusive bounds. Both nodes remain caller-owned.
+ * A rejected value records JH-HW-PROPERTY at source:pointer.
+ */
+hal_status_t jh_catalogue_property(jb_json_node_t definition,
+                                   jb_json_node_t value, const char *source,
+                                   const char *pointer, jh_failure_t *failure);
 /** Check C types, units, values, children, signals, connections and cycles.
  * features/capabilities are optional lists of jb_string_t (jh_list_init);
  * NULL skips that list's validation. Other pointers are required. */

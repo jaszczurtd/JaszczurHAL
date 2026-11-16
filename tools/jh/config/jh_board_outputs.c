@@ -231,7 +231,7 @@ static int64_t encode_id(jb_json_tree_view_t id) {
 }
 
 /* encode_hal_pin: the HAL pin ID of an endpoint; false for None. */
-static bool encode_pin(jb_json_tree_view_t endpoint, int64_t *out) {
+bool jh_board_encode_pin(jb_json_tree_view_t endpoint, int64_t *out) {
   if (text_is(get(endpoint, "domain"), "soc-gpio")) {
     const jb_json_tree_view_t id = get(endpoint, "id");
     if (jh_json_type(id) != JB_JSON_STRING && !jh_json_int64(id, out))
@@ -251,7 +251,7 @@ static void put_pin_text(emit_t *e, jb_json_tree_view_t endpoint) {
     return;
   }
   int64_t pin = 0;
-  if (encode_pin(endpoint, &pin))
+  if (jh_board_encode_pin(endpoint, &pin))
     put_int(e, pin);
   else
     put(e, "None");
@@ -463,9 +463,9 @@ static bool uses_component(jb_json_tree_view_t target,
 
 /* board_compile_definitions: the definitions direct compiler consumers need
  * for the components of target and board, appended to out. */
-static hal_status_t board_definitions(jb_json_tree_view_t target,
-                                      jb_json_tree_view_t board,
-                                      jb_vector_t *out) {
+hal_status_t jh_board_compile_definitions(jb_json_tree_view_t target,
+                                          jb_json_tree_view_t board,
+                                          jb_vector_t *out) {
   static const char *const cyw43_pico[] = {
       "HAL_NETWORK_BACKEND_CYW43", "HAL_CYW43_BUS_PICO_PIO",
       "HAL_CYW43_STACK_LWIP", "HAL_CYW43_MAX_TRANSACTION_BYTES=2048u"};
@@ -516,7 +516,7 @@ static hal_status_t fallback_definitions(const jh_board_registry_t *registry,
     status = jh_fail_storage(failure, jh_list_init(&variant));
     if (status == HAL_OK)
       status = jh_fail_storage(
-          failure, board_definitions(target->root, board, &variant));
+          failure, jh_board_compile_definitions(target->root, board, &variant));
     if (status == HAL_OK && i == 0) {
       for (size_t d = 0; status == HAL_OK && d < jb_vector_size(&variant); ++d)
         status = jh_fail_storage(
@@ -749,7 +749,7 @@ static void device_facts(emit_t *e, jb_json_tree_view_t board) {
         line(e, "HAL_BOARD_DEVICE_PIN_NONE");
         continue;
       }
-      if (encode_pin(pin, &encoded))
+      if (jh_board_encode_pin(pin, &encoded))
         put_int(e, encoded);
       else
         put(e, "None");
@@ -1018,7 +1018,7 @@ static hal_status_t board_facts(emit_t *e, const board_facts_t *facts,
     put_macro_suffix(e, text_of(kind));
     line(e, " 1");
     int64_t pin = 0;
-    if (encode_pin(endpoint, &pin)) {
+    if (jh_board_encode_pin(endpoint, &pin)) {
       put(e, "#define HAL_BOARD_STATUS_LED_PIN ");
       put_pin_text(e, endpoint);
       end_line(e);
@@ -2090,8 +2090,8 @@ hal_status_t jh_board_build_outputs(const jh_board_build_t *build,
                      ? copy_list(overrides->components, &components)
                      : board_components(target, board, &components));
   if (status == HAL_OK)
-    status = jh_fail_storage(failure,
-                             board_definitions(target, board, &definitions));
+    status = jh_fail_storage(
+        failure, jh_board_compile_definitions(target, board, &definitions));
   if (status == HAL_OK)
     status = jh_fail_storage(
         failure,

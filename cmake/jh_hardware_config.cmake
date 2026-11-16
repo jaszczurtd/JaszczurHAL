@@ -1,5 +1,4 @@
 include_guard(GLOBAL)
-include("${CMAKE_CURRENT_LIST_DIR}/jh_python.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/jh_project_config.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/jh_project_features.cmake")
 # Empty keyword values, such as ASSEMBLY "" or VARIANT "", are empty strings;
@@ -9,7 +8,7 @@ if(POLICY CMP0174)
 endif()
 
 # A configuration directory with device_tree.json builds from its assemblies
-# through scripts/generate_hardware_config.py; without the file the build
+# through jh hardware; without the file the build
 # keeps the board path. Only the presence of the file selects the mode.
 
 # Variables jh_generate_hardware_config() hands to its caller, beside the
@@ -42,18 +41,83 @@ function(jh_device_tree_build OUT_VAR CONFIG_DIR)
 endfunction()
 
 function(_jh_hardware_generator)
-    # The generator reads the project configuration and the feature registry
-    # through jh.
-    jh_python_with_tool(_jh_hw_python "${JH_HW_ROOT}" "${JH_HW_SCRATCH}")
+    file(MAKE_DIRECTORY "${JH_HW_SCRATCH}")
+    jh_project_config_tool(_jh_hw_tool "${JH_HW_ROOT}" "${JH_HW_SCRATCH}")
     execute_process(
-        COMMAND ${_jh_hw_python} "${JH_HW_ROOT}/scripts/generate_hardware_config.py"
-            ${ARGN}
+        COMMAND "${_jh_hw_tool}" hardware ${ARGN} --root "${JH_HW_ROOT}"
         RESULT_VARIABLE _jh_hw_result
         ERROR_VARIABLE _jh_hw_error)
     if(NOT _jh_hw_result EQUAL 0)
         string(STRIP "${_jh_hw_error}" _jh_hw_error)
         message(FATAL_ERROR "Hardware configuration failed: ${_jh_hw_error}")
     endif()
+endfunction()
+
+# jh_resolve_hardware_header(<out-var> ROOT <HAL root> CONFIG_DIR <dir>
+#     OUTPUT_DIR <dir> [OUTPUT_ROOT <dir>] [TARGET <id>] [ASSEMBLY <key>])
+#
+# Generate only the early hardware header and resolved model, for host builds
+# that keep their mock board configuration. The caller receives the header in
+# <out-var> and the model in JH_HARDWARE_RESOLVED_FILE. Read dependencies and
+# new HAL registry JSON files trigger configure; project bindings are explicit
+# inputs of device_tree.json, which is also watched.
+function(jh_resolve_hardware_header OUT_VAR)
+    cmake_parse_arguments(PARSE_ARGV 1 _JH_HR ""
+        "ROOT;CONFIG_DIR;OUTPUT_DIR;OUTPUT_ROOT;TARGET;ASSEMBLY" "")
+    foreach(_jh_hr_required ROOT CONFIG_DIR OUTPUT_DIR)
+        if("${_JH_HR_${_jh_hr_required}}" STREQUAL "")
+            message(FATAL_ERROR "jh_resolve_hardware_header requires ${_jh_hr_required}")
+        endif()
+    endforeach()
+    set(JH_HW_ROOT "${_JH_HR_ROOT}")
+    set(JH_HW_SCRATCH "${_JH_HR_OUTPUT_DIR}")
+    set(_jh_hr_command resolve --config-dir "${_JH_HR_CONFIG_DIR}"
+        --output-dir "${_JH_HR_OUTPUT_DIR}")
+    foreach(_jh_hr_option TARGET ASSEMBLY OUTPUT_ROOT)
+        if(NOT "${_JH_HR_${_jh_hr_option}}" STREQUAL "")
+            string(TOLOWER "${_jh_hr_option}" _jh_hr_flag)
+            string(REPLACE "_" "-" _jh_hr_flag "${_jh_hr_flag}")
+            list(APPEND _jh_hr_command "--${_jh_hr_flag}" "${_JH_HR_${_jh_hr_option}}")
+        endif()
+    endforeach()
+    _jh_hardware_generator(${_jh_hr_command})
+    set(_jh_hr_file "${_JH_HR_OUTPUT_DIR}/jh_hardware_resolved.json")
+    file(READ "${_jh_hr_file}" _jh_hr_model)
+    string(JSON _jh_hr_count LENGTH "${_jh_hr_model}" dependencies)
+    set(_jh_hr_inputs "")
+    set(_jh_hr_roots "")
+    if(_jh_hr_count GREATER 0)
+        math(EXPR _jh_hr_last "${_jh_hr_count} - 1")
+        foreach(_jh_hr_index RANGE ${_jh_hr_last})
+            string(JSON _jh_hr_path GET "${_jh_hr_model}" dependencies ${_jh_hr_index} path)
+            if(_jh_hr_path MATCHES "^hal:(.*)$")
+                set(_jh_hr_relative "${CMAKE_MATCH_1}")
+                list(APPEND _jh_hr_inputs "${_JH_HR_ROOT}/${_jh_hr_relative}")
+                if(_jh_hr_relative MATCHES "\\.json$" AND _jh_hr_relative MATCHES "^([^/]+)/")
+                    list(APPEND _jh_hr_roots "${_JH_HR_ROOT}/${CMAKE_MATCH_1}")
+                endif()
+            elseif(IS_ABSOLUTE "${_jh_hr_path}")
+                list(APPEND _jh_hr_inputs "${_jh_hr_path}")
+            else()
+                list(APPEND _jh_hr_inputs "${_JH_HR_CONFIG_DIR}/${_jh_hr_path}")
+            endif()
+        endforeach()
+    endif()
+    list(REMOVE_DUPLICATES _jh_hr_roots)
+    foreach(_jh_hr_root IN LISTS _jh_hr_roots)
+        jh_config_glob(_jh_hr_pattern "${_jh_hr_root}" "*.json")
+        file(GLOB_RECURSE _jh_hr_new CONFIGURE_DEPENDS "${_jh_hr_pattern}")
+        list(APPEND _jh_hr_inputs ${_jh_hr_new})
+    endforeach()
+    set(_jh_hr_normal_inputs "")
+    foreach(_jh_hr_input IN LISTS _jh_hr_inputs)
+        _jh_normal_path(_jh_hr_normal "${_jh_hr_input}")
+        list(APPEND _jh_hr_normal_inputs "${_jh_hr_normal}")
+    endforeach()
+    list(REMOVE_DUPLICATES _jh_hr_normal_inputs)
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS ${_jh_hr_normal_inputs})
+    set(${OUT_VAR} "${_JH_HR_OUTPUT_DIR}/jh_hardware.h" PARENT_SCOPE)
+    set(JH_HARDWARE_RESOLVED_FILE "${_jh_hr_file}" PARENT_SCOPE)
 endfunction()
 
 # jh_generate_hardware_config(ROOT <JaszczurHAL root> CONFIG_DIR <dir>
@@ -91,15 +155,10 @@ function(jh_generate_hardware_config)
         set(_jh_hc_root_args --output-root "${_JH_HC_OUTPUT_ROOT}")
     endif()
 
-    set(_jh_hc_resolve resolve --config-dir "${_JH_HC_CONFIG_DIR}")
-    if(NOT "${_JH_HC_TARGET}" STREQUAL "")
-        list(APPEND _jh_hc_resolve --target "${_JH_HC_TARGET}")
-    endif()
-    if(NOT "${_JH_HC_ASSEMBLY}" STREQUAL "")
-        list(APPEND _jh_hc_resolve --assembly "${_JH_HC_ASSEMBLY}")
-    endif()
-    _jh_hardware_generator(${_jh_hc_resolve}
-        --output-dir "${_jh_hc_out}" ${_jh_hc_root_args})
+    jh_resolve_hardware_header(_jh_hc_header ROOT "${_JH_HC_ROOT}"
+        CONFIG_DIR "${_JH_HC_CONFIG_DIR}" OUTPUT_DIR "${_jh_hc_out}"
+        OUTPUT_ROOT "${_JH_HC_OUTPUT_ROOT}" TARGET "${_JH_HC_TARGET}"
+        ASSEMBLY "${_JH_HC_ASSEMBLY}")
     file(READ "${_jh_hc_out}/jh_hardware_resolved.json" _jh_hc_model)
     string(JSON _jh_hc_target GET "${_jh_hc_model}" selection target)
     if(_JH_HC_ALL_FEATURES)

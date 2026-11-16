@@ -19,9 +19,8 @@ from typing import Any, Callable, Mapping, Sequence
 import component_manager
 import generate_board_config
 import generate_hal_features
-import generate_hardware_config as hardware_generator
-from hardware_model import HardwareError
-import hardware_resolver
+import device_tree_project as hardware_generator
+from device_tree_project import HardwareError
 import project_config
 
 
@@ -1204,11 +1203,10 @@ def resolve_build_model(
                 "the board through its assemblies; use --assembly instead of --board"
             )
         try:
-            document, hardware_header = hardware_generator.resolve(config_dir, target, assembly)
+            device_tree = hardware_generator.resolved(config_dir, target, assembly, include_board=True)
         except (HardwareError, generate_board_config.DescriptorError) as error:
             raise EspIdfError(str(error)) from error
-        device_tree = {"document": document, "header": hardware_header}
-        selected_board = document["selection"]["board"]
+        selected_board = device_tree["document"]["selection"]["board"]
     else:
         if assembly:
             raise EspIdfError(
@@ -1349,13 +1347,7 @@ def board_definitions(
     them from its assembly, without the macros the generated headers own."""
     if device_tree is None:
         return generate_board_config.board_compile_definitions(target, board)
-    try:
-        _, definitions, _ = hardware_generator.assembly_board(
-            device_tree["document"], hardware_resolver.load_registry(), dict(target)
-        )
-    except generate_board_config.DescriptorError as error:
-        raise EspIdfError(str(error)) from error
-    return hardware_generator.compiler_definitions(definitions)
+    return device_tree["assemblyBoard"]["compilerDefinitions"]
 
 
 def _cmake_quote(value: str) -> str:
@@ -1854,17 +1846,14 @@ def generate_board_inputs(directory: Path, model: Mapping[str, Any], compiler: S
         hardware_file, header_file = hardware_generator.write_model(
             directory, device_tree["document"], device_tree["header"]
         )
-        outputs = hardware_generator.Finalize(
+        hardware_generator.finalize(
+            model["projectConfigDir"],
+            directory,
             hardware_file,
             header_file,
-            model["projectConfigDir"],
             device_tree["variant"],
             device_tree["definitions"],
-            directory,
             compiler,
-        ).run()
-        hardware_generator.write_outputs(
-            directory, outputs, hardware_generator.FINALIZE_OUTPUTS
         )
     except (HardwareError, generate_board_config.DescriptorError) as error:
         raise EspIdfError(str(error)) from error

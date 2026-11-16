@@ -18,6 +18,16 @@
 extern "C" {
 #endif
 
+/** Encode a validated endpoint for the HAL pin API: soc-gpio integer IDs
+ * directly, STM32 P<port><pin> as port*16+pin, other domains by halPin.
+ * False for an endpoint without an encoding; out is required. */
+bool jh_board_encode_pin(jb_json_tree_view_t endpoint, int64_t *out);
+/** Append compiler definitions required by the components of target and
+ * board to an initialized string list. Inputs must be registry-validated. */
+hal_status_t jh_board_compile_definitions(jb_json_tree_view_t target,
+                                          jb_json_tree_view_t board,
+                                          jb_vector_t *out);
+
 /** The artifacts checked into the repository. */
 enum {
   JH_BOARD_STATIC_REGISTRY,   /**< jh_board_registry.h */

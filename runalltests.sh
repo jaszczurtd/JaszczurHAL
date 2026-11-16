@@ -455,6 +455,7 @@ JH_MEMCHECK_REQUIRED_TESTS=(
     jh_config
     jh_c_layer
     jh_clocks
+    jh_hardware
     jh_cli_failures
 )
 
@@ -786,7 +787,7 @@ stage_esp_idf() {
         fail "ESP32-S3 device tree library lacks libJaszczurHAL.a or jh_hardware.h"
         exit 1
     fi
-    if ! grep -q "HAL_BOARD_LAYOUT_ASSERT(" "${device_tree_library}/include/generated/jh_board_config.h"; then
+    if ! grep -q '^JB_STATIC_ASSERT(.*compiled with another struct layout' "${device_tree_library}/include/generated/jh_board_config.h"; then
         fail "ESP32-S3 device tree library was finalized without the struct layout of its compile flags"
         exit 1
     fi

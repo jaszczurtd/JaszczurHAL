@@ -1,4 +1,5 @@
 #include "jh_catalogue_internal.h"
+#include <jb/json_number.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -173,4 +174,88 @@ void jh_catalogue_fail(jh_node_reader_t *reader, const char *code,
   if (reader->status == HAL_OK)
     reader->status = jh_fail_pointer(reader->failure, code, jh_span(source),
                                      jh_span(pointer), parts, count);
+}
+static void literal_failure(jh_node_reader_t *r, hal_status_t status,
+                            jb_json_node_t value, const jh_c_type_t *type,
+                            const char *origin) {
+  const jb_json_span_t raw = jh_node_raw(r, value);
+  const char *reason;
+  if (status == HAL_ETYPE) {
+    reason = jh_node_type(r, value) == JB_JSON_NUMBER &&
+                     type->category == JH_C_INTEGER
+                 ? " is not an integer"
+                 : jh_node_join(
+                       r, JH_PARTS(jh_span(" is not a "),
+                                   jh_span(jh_c_json_type(type->category))));
+  } else if (status == HAL_EOVERFLOW && type->category == JH_C_FLOATING) {
+    size_t bytes = 0;
+    hal_status_t rounded =
+        jb_json_float_workspace_size(value, type->bits, &bytes);
+    jb_vector_t scratch = {0};
+    jh_node_storage(r, jb_vector_init(&scratch, 1, jb_heap_allocator()));
+    if (rounded == HAL_OK && r->status == HAL_OK) {
+      jh_node_storage(r, jb_vector_resize(&scratch, bytes));
+      const jb_json_float_options_t options = {false, true,
+                                               64 * raw.length + 1000000};
+      const jb_json_workspace_t memory = {jb_vector_data(&scratch), bytes};
+      uint32_t bits32;
+      uint64_t bits64;
+      if (r->status == HAL_OK)
+        rounded = type->bits == 32
+                      ? jb_json_get_f32_bits(value, &options, memory, &bits32)
+                      : jb_json_get_f64_bits(value, &options, memory, &bits64);
+    }
+    jb_vector_destroy(&scratch);
+    reason = jh_node_join(
+        r, JH_PARTS(jh_span(rounded == HAL_OK ? " rounds to zero in "
+                                              : " overflows "),
+                    jh_span(type->name)));
+  } else if (status == HAL_EOVERFLOW) {
+    reason = jh_node_join(
+        r, JH_PARTS(jh_span(" does not fit "), jh_span(type->name)));
+  } else {
+    reason = jh_node_join(
+        r, JH_PARTS(jh_span(": "), jh_span(hal_status_to_string(status))));
+  }
+  if (r->status == HAL_OK)
+    r->status =
+        jh_fail(r->failure, HAL_ECONFIG, 2,
+                JH_PARTS(jh_span(origin), jh_span(": "), raw, jh_span(reason)));
+}
+
+const char *jh_node_literal(jh_node_reader_t *r, jb_json_node_t value,
+                            const jh_c_type_t *type, const char *origin) {
+  size_t bytes = 0, required = 0;
+  hal_status_t status = HAL_OK;
+  jb_vector_t scratch = {0};
+  jb_string_t text = {0};
+  jh_node_storage(r, jb_vector_init(&scratch, 1, jb_heap_allocator()));
+  jh_node_storage(r, jb_string_init(&text, jb_heap_allocator()));
+  const jb_json_span_t raw = jh_node_raw(r, value);
+  if (r->status == HAL_OK)
+    status = jb_c_literal_workspace_size(value, type->literal, &bytes);
+  if (status == HAL_OK && r->status == HAL_OK) {
+    jh_node_storage(r, jb_vector_resize(&scratch, bytes));
+    jh_node_storage(r, jb_string_resize(&text, 256, '\0'));
+    const jb_json_workspace_t memory = {jb_vector_data(&scratch), bytes};
+    if (r->status == HAL_OK)
+      status = jb_c_literal(
+          value, type->literal, memory, 64 * raw.length + 1000000,
+          jb_string_mutable_data(&text), jb_string_size(&text), &required);
+    if (status == HAL_EOVERFLOW && required > jb_string_size(&text)) {
+      jh_node_storage(r, jb_string_resize(&text, required, '\0'));
+      if (r->status == HAL_OK)
+        status = jb_c_literal(
+            value, type->literal, memory, 64 * raw.length + 1000000,
+            jb_string_mutable_data(&text), jb_string_size(&text), &required);
+    }
+    if (status == HAL_OK && r->status == HAL_OK)
+      jh_node_storage(r, jb_string_resize(&text, required, '\0'));
+  }
+  if (status != HAL_OK)
+    literal_failure(r, status, value, type, origin);
+  const char *result = jh_node_join(r, JH_PARTS(jh_string_span(&text)));
+  jb_string_destroy(&text);
+  jb_vector_destroy(&scratch);
+  return result;
 }

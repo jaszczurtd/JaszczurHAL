@@ -1,6 +1,26 @@
 #include "jh_cli_internal.h"
 #include <string.h>
 
+jb_json_tree_view_t jh_cli_parse_result(jh_cli_t *ctx, const jb_string_t *text,
+                                        jb_json_tree_t **tree) {
+  jh_json_document_t document = {0};
+  const jb_json_tree_limits_t limits = {100000, 128, 64u * 1024u * 1024u,
+                                        256u * 1024u * 1024u};
+  jb_json_tree_view_t result = {0};
+  jb_json_node_t root = {0};
+  if (ctx->failure.status == HAL_OK)
+    (void)jh_cli_ok(
+        ctx, jh_json_parse_document(&ctx->location, "command result",
+                                    jh_string_span(text), 64u * 1024u * 1024u,
+                                    &document, &ctx->failure));
+  if (ctx->failure.status == HAL_OK &&
+      jh_cli_ok(ctx, jb_json_root(&document.doc, &root)) &&
+      jh_cli_ok(ctx, jb_json_tree_create(root, &limits, tree)))
+    (void)jh_cli_ok(ctx, jb_json_tree_root(*tree, &result));
+  jh_json_document_destroy(&document);
+  return result;
+}
+
 bool jh_cli_ok(jh_cli_t *ctx, hal_status_t status) {
   if (status != HAL_OK && ctx->failure.status == HAL_OK)
     (void)jh_fail_storage(&ctx->failure, status);

@@ -35,12 +35,12 @@
         }
       },
       "nodes": {
-        "mcp23017": { "present": true, "bus": "i2c", "address": 32 },
-        "pca9654e": { "present": true, "bus": "i2c", "address": 33 },
-        "pcf8574": { "present": true, "bus": "i2c", "address": 34 },
-        "mcp3221": { "present": true, "bus": "i2c", "address": 77 },
-        "mcp4725": { "present": true, "bus": "i2c", "address": 96 },
-        "adp5360": { "present": true, "bus": "i2c", "address": 70 },
+        "mcp23017": { "present": true, "bus": "i2c", "address": "0x20" },
+        "pca9654e": { "present": true, "bus": "i2c", "address": "0x21" },
+        "pcf8574": { "present": true, "bus": "i2c", "address": "0x22" },
+        "mcp3221": { "present": true, "bus": "i2c", "address": "0x4d" },
+        "mcp4725": { "present": true, "bus": "i2c", "address": "0x60" },
+        "adp5360": { "present": true, "bus": "i2c", "address": "0x46" },
         "hc595": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
         "rgbLed": { "present": true, "pins": { "data": 22 } }
       }
@@ -65,12 +65,12 @@
         }
       },
       "nodes": {
-        "mcp23017": { "present": true, "bus": "i2c", "address": 32 },
-        "pca9654e": { "present": true, "bus": "i2c", "address": 33 },
-        "pcf8574": { "present": true, "bus": "i2c", "address": 34 },
-        "mcp3221": { "present": true, "bus": "i2c", "address": 77 },
-        "mcp4725": { "present": true, "bus": "i2c", "address": 96 },
-        "adp5360": { "present": true, "bus": "i2c", "address": 70 },
+        "mcp23017": { "present": true, "bus": "i2c", "address": "0x20" },
+        "pca9654e": { "present": true, "bus": "i2c", "address": "0x21" },
+        "pcf8574": { "present": true, "bus": "i2c", "address": "0x22" },
+        "mcp3221": { "present": true, "bus": "i2c", "address": "0x4d" },
+        "mcp4725": { "present": true, "bus": "i2c", "address": "0x60" },
+        "adp5360": { "present": true, "bus": "i2c", "address": "0x46" },
         "hc595": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
         "rgbLed": { "present": true, "pins": { "data": 22 } }
       }
@@ -95,12 +95,12 @@
         }
       },
       "nodes": {
-        "mcp23017": { "present": true, "bus": "i2c", "address": 32 },
-        "pca9654e": { "present": true, "bus": "i2c", "address": 33 },
-        "pcf8574": { "present": true, "bus": "i2c", "address": 34 },
-        "mcp3221": { "present": true, "bus": "i2c", "address": 77 },
-        "mcp4725": { "present": true, "bus": "i2c", "address": 96 },
-        "adp5360": { "present": true, "bus": "i2c", "address": 70 },
+        "mcp23017": { "present": true, "bus": "i2c", "address": "0x20" },
+        "pca9654e": { "present": true, "bus": "i2c", "address": "0x21" },
+        "pcf8574": { "present": true, "bus": "i2c", "address": "0x22" },
+        "mcp3221": { "present": true, "bus": "i2c", "address": "0x4d" },
+        "mcp4725": { "present": true, "bus": "i2c", "address": "0x60" },
+        "adp5360": { "present": true, "bus": "i2c", "address": "0x46" },
         "hc595": { "present": true, "bus": "spi", "pins": { "cs": 17 } },
         "rgbLed": { "present": true, "pins": { "data": 22 } }
       }
@@ -125,12 +125,12 @@
         }
       },
       "nodes": {
-        "mcp23017": { "present": true, "bus": "i2c", "address": 32 },
-        "pca9654e": { "present": true, "bus": "i2c", "address": 33 },
-        "pcf8574": { "present": true, "bus": "i2c", "address": 34 },
-        "mcp3221": { "present": true, "bus": "i2c", "address": 77 },
-        "mcp4725": { "present": true, "bus": "i2c", "address": 96 },
-        "adp5360": { "present": true, "bus": "i2c", "address": 70 },
+        "mcp23017": { "present": true, "bus": "i2c", "address": "0x20" },
+        "pca9654e": { "present": true, "bus": "i2c", "address": "0x21" },
+        "pcf8574": { "present": true, "bus": "i2c", "address": "0x22" },
+        "mcp3221": { "present": true, "bus": "i2c", "address": "0x4d" },
+        "mcp4725": { "present": true, "bus": "i2c", "address": "0x60" },
+        "adp5360": { "present": true, "bus": "i2c", "address": "0x46" },
         "hc595": { "present": true, "bus": "spi", "pins": { "cs": "PB6" } },
         "rgbLed": { "present": true, "pins": { "data": "PA8" } }
       }
@@ -155,12 +155,12 @@
         }
       },
       "nodes": {
-        "mcp23017": { "present": true, "bus": "i2c", "address": 32 },
-        "pca9654e": { "present": true, "bus": "i2c", "address": 33 },
-        "pcf8574": { "present": true, "bus": "i2c", "address": 34 },
-        "mcp3221": { "present": true, "bus": "i2c", "address": 77 },
-        "mcp4725": { "present": true, "bus": "i2c", "address": 96 },
-        "adp5360": { "present": true, "bus": "i2c", "address": 70 },
+        "mcp23017": { "present": true, "bus": "i2c", "address": "0x20" },
+        "pca9654e": { "present": true, "bus": "i2c", "address": "0x21" },
+        "pcf8574": { "present": true, "bus": "i2c", "address": "0x22" },
+        "mcp3221": { "present": true, "bus": "i2c", "address": "0x4d" },
+        "mcp4725": { "present": true, "bus": "i2c", "address": "0x60" },
+        "adp5360": { "present": true, "bus": "i2c", "address": "0x46" },
         "hc595": { "present": true, "bus": "spi", "pins": { "cs": 16 } },
         "rgbLed": { "present": true, "pins": { "data": 8 } }
       }

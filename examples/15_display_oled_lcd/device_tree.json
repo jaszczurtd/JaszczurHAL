@@ -39,7 +39,7 @@
         }
       },
       "nodes": {
-        "ssd1306": { "present": true, "bus": "i2c", "address": 60 },
+        "ssd1306": { "present": true, "bus": "i2c", "address": "0x3c" },
         "lcdRs": { "present": true, "pins": { "out": 12 } },
         "lcdEn": { "present": true, "pins": { "out": 11 } },
         "lcdD4": { "present": true, "pins": { "out": 10 } },
@@ -62,7 +62,7 @@
         }
       },
       "nodes": {
-        "ssd1306": { "present": true, "bus": "i2c", "address": 60 },
+        "ssd1306": { "present": true, "bus": "i2c", "address": "0x3c" },
         "lcdRs": { "present": true, "pins": { "out": 12 } },
         "lcdEn": { "present": true, "pins": { "out": 11 } },
         "lcdD4": { "present": true, "pins": { "out": 10 } },
@@ -85,7 +85,7 @@
         }
       },
       "nodes": {
-        "ssd1306": { "present": true, "bus": "i2c", "address": 60 },
+        "ssd1306": { "present": true, "bus": "i2c", "address": "0x3c" },
         "lcdRs": { "present": true, "pins": { "out": 12 } },
         "lcdEn": { "present": true, "pins": { "out": 11 } },
         "lcdD4": { "present": true, "pins": { "out": 10 } },
@@ -108,7 +108,7 @@
         }
       },
       "nodes": {
-        "ssd1306": { "present": true, "bus": "i2c", "address": 60 },
+        "ssd1306": { "present": true, "bus": "i2c", "address": "0x3c" },
         "lcdRs": { "present": true, "pins": { "out": "PC0" } },
         "lcdEn": { "present": true, "pins": { "out": "PC1" } },
         "lcdD4": { "present": true, "pins": { "out": "PC2" } },
@@ -131,7 +131,7 @@
         }
       },
       "nodes": {
-        "ssd1306": { "present": true, "bus": "i2c", "address": 60 },
+        "ssd1306": { "present": true, "bus": "i2c", "address": "0x3c" },
         "lcdRs": { "present": true, "pins": { "out": 12 } },
         "lcdEn": { "present": true, "pins": { "out": 11 } },
         "lcdD4": { "present": true, "pins": { "out": 10 } },

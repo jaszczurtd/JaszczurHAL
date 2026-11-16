@@ -20,8 +20,8 @@
         }
       },
       "nodes": {
-        "tsc2007": { "present": true, "bus": "i2c", "address": 72 },
-        "stmpe610": { "present": true, "bus": "i2c", "address": 65 }
+        "tsc2007": { "present": true, "bus": "i2c", "address": "0x48" },
+        "stmpe610": { "present": true, "bus": "i2c", "address": "0x41" }
       }
     },
     "pico2-arm": {
@@ -38,8 +38,8 @@
         }
       },
       "nodes": {
-        "tsc2007": { "present": true, "bus": "i2c", "address": 72 },
-        "stmpe610": { "present": true, "bus": "i2c", "address": 65 }
+        "tsc2007": { "present": true, "bus": "i2c", "address": "0x48" },
+        "stmpe610": { "present": true, "bus": "i2c", "address": "0x41" }
       }
     },
     "pico2-riscv": {
@@ -56,8 +56,8 @@
         }
       },
       "nodes": {
-        "tsc2007": { "present": true, "bus": "i2c", "address": 72 },
-        "stmpe610": { "present": true, "bus": "i2c", "address": 65 }
+        "tsc2007": { "present": true, "bus": "i2c", "address": "0x48" },
+        "stmpe610": { "present": true, "bus": "i2c", "address": "0x41" }
       }
     },
     "nucleo": {
@@ -74,8 +74,8 @@
         }
       },
       "nodes": {
-        "tsc2007": { "present": true, "bus": "i2c", "address": 72 },
-        "stmpe610": { "present": true, "bus": "i2c", "address": 65 }
+        "tsc2007": { "present": true, "bus": "i2c", "address": "0x48" },
+        "stmpe610": { "present": true, "bus": "i2c", "address": "0x41" }
       }
     },
     "esp32s3-zero": {
@@ -92,8 +92,8 @@
         }
       },
       "nodes": {
-        "tsc2007": { "present": true, "bus": "i2c", "address": 72 },
-        "stmpe610": { "present": true, "bus": "i2c", "address": 65 }
+        "tsc2007": { "present": true, "bus": "i2c", "address": "0x48" },
+        "stmpe610": { "present": true, "bus": "i2c", "address": "0x41" }
       }
     }
   }

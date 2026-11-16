@@ -1,4 +1,5 @@
 #include "jh_cli_internal.h"
+#include "jh_effective_features.h"
 #include "jh_feature_lint.h"
 #include "jh_feature_registry.h"
 #include "jh_project_config.h"
@@ -359,14 +360,31 @@ done:
 
 int jh_cli_feature_lint(jh_cli_t *ctx) {
   const jh_arguments_t *args = &ctx->args;
+  const bool effective = args->present[opt_effective];
+  if ((args->present[opt_resolution_output] && !effective &&
+       !jh_cli_require(ctx, HAL_EINVAL, 2,
+                       "--resolution-output requires --effective")) ||
+      (effective && !jh_cli_value(ctx, opt_root,
+                                  "feature lint --effective requires --root")))
+    return 0;
   const char *config = jh_cli_feature_config(ctx, "feature lint");
   jb_vector_t roots = {0}, found = {0}, inputs = {0}, findings = {0};
+  jb_vector_t effective_findings = {0};
+  jb_string_t resolution = {0};
+  jb_json_tree_t *resolution_tree = NULL;
+  jb_json_tree_view_t resolution_view = {0};
+  size_t configurations = 0;
+  jh_hardware_registry_t hardware;
+  jh_hardware_registry_init(&hardware);
   jh_feature_registry_t registry = {0};
   jh_feature_registry_init(&registry);
+  const jh_feature_registry_t *features = &registry;
   (void)jh_cli_ok(ctx, jh_list_init(&roots));
   (void)jh_cli_ok(ctx, jh_list_init(&found));
   (void)jh_cli_ok(ctx, jh_list_init(&inputs));
   (void)jh_cli_ok(ctx, jh_list_init(&findings));
+  (void)jh_cli_ok(ctx, jh_list_init(&effective_findings));
+  (void)jh_cli_ok(ctx, jb_string_init(&resolution, jb_heap_allocator()));
   for (size_t i = 0; i < jb_vector_size(&args->lists[opt_input_root]) &&
                      ctx->failure.status == HAL_OK;
        ++i) {
@@ -384,9 +402,22 @@ int jh_cli_feature_lint(jh_cli_t *ctx) {
     if (ctx->failure.status == HAL_OK)
       (void)jh_cli_ok(ctx, jh_list_push(&roots, jh_span(path)));
   }
+  if (effective && ctx->failure.status == HAL_OK) {
+    const char *root =
+        jh_cli_path(ctx, args->values[opt_root], ctx->base, true);
+    if (ctx->failure.status == HAL_OK)
+      (void)jh_cli_ok(ctx, jh_hardware_registry_load(&hardware, root,
+                                                     16 * 1024 * 1024,
+                                                     &ctx->failure));
+    const char *default_config = jh_cli_path(ctx, "config", root, true);
+    if (strcmp(config, default_config) == 0)
+      features = &hardware.feature_registry;
+  }
   if (ctx->failure.status != HAL_OK ||
-      !jh_cli_ok(ctx, jh_feature_registry_load(
-                          &registry, config, 16 * 1024 * 1024, &ctx->failure)))
+      (features == &registry &&
+       !jh_cli_ok(ctx,
+                  jh_feature_registry_load(&registry, config, 16 * 1024 * 1024,
+                                           &ctx->failure))))
     goto done;
   for (size_t i = 0;
        i < jb_vector_size(&roots) && ctx->failure.status == HAL_OK; ++i)
@@ -410,7 +441,7 @@ int jh_cli_feature_lint(jh_cli_t *ctx) {
       if (*p == '/' || *p == '\\')
         name = p + 1;
     if (strcmp(name, "hal_project_config.h") == 0) {
-      lint_header(ctx, &registry, path, &findings);
+      lint_header(ctx, features, path, &findings);
       continue;
     }
     jb_json_tree_t *tree = NULL;
@@ -423,6 +454,24 @@ int jh_cli_feature_lint(jh_cli_t *ctx) {
   }
   if (ctx->failure.status != HAL_OK)
     goto done;
+  if (effective) {
+    if (!jh_cli_ok(ctx,
+                   jh_effective_features(&hardware, features, &roots, &inputs,
+                                         &resolution, &configurations,
+                                         &effective_findings, &ctx->failure)))
+      goto done;
+    jh_list_sort(&effective_findings);
+    resolution_view = jh_cli_parse_result(ctx, &resolution, &resolution_tree);
+    if (args->present[opt_resolution_output] && ctx->failure.status == HAL_OK) {
+      const char *path = jh_cli_path(ctx, args->values[opt_resolution_output],
+                                     ctx->base, false);
+      bool changed = false;
+      if (ctx->failure.status == HAL_OK)
+        (void)jh_cli_ok(
+            ctx, jh_write_generated_mode(path, jh_string_span(&resolution),
+                                         0644, &changed, &ctx->failure));
+    }
+  }
   jh_list_sort(&findings);
   const bool report_only = args->present[opt_report_only];
   jb_json_span_t report =
@@ -444,27 +493,66 @@ int jh_cli_feature_lint(jh_cli_t *ctx) {
   if (ctx->failure.status != HAL_OK)
     goto done;
   (void)fwrite(report.data, 1, report.length, stderr);
+  if (effective) {
+    const jb_json_span_t effective_report = jh_cli_lines(
+        ctx, &effective_findings, report_only ? "warning: " : "error: ");
+    if (ctx->failure.status == HAL_OK)
+      (void)fwrite(effective_report.data, 1, effective_report.length, stderr);
+  }
   if (!ctx->json) {
     if (jb_vector_size(&findings) == 0)
       (void)jh_cli_stdout(ctx, summary);
+    if (effective && ctx->failure.status == HAL_OK) {
+      const jb_json_span_t effective_summary = jh_cli_join(
+          ctx,
+          JH_PARTS(
+              jh_span("linted "), jh_span(jh_cli_size(ctx, configurations)),
+              jh_span(" effective feature configurations: "),
+              jb_vector_size(&effective_findings) == 0
+                  ? jh_span("no findings")
+                  : jh_cli_join(
+                        ctx,
+                        JH_PARTS(jh_span(jh_cli_size(
+                                     ctx, jb_vector_size(&effective_findings))),
+                                 jh_span(" finding(s)"))),
+              jh_span("\n")));
+      if (ctx->failure.status == HAL_OK)
+        (void)fwrite(effective_summary.data, 1, effective_summary.length,
+                     jb_vector_size(&effective_findings) == 0 ? stdout
+                                                              : stderr);
+    }
   } else {
-    const size_t bytes =
-        strlen(config) + report.length + jh_cli_list_bytes(&inputs) + 1024;
-    jh_result_begin(ctx, bytes, 32);
+    const size_t bytes = strlen(config) + report.length +
+                         jh_cli_list_bytes(&inputs) +
+                         jb_string_size(&resolution) +
+                         jh_cli_list_bytes(&effective_findings) + 1024;
+    jh_result_begin(ctx, bytes, jb_string_size(&resolution) / 2 + 32);
     jh_result_text(ctx, "command", "feature.lint");
     jh_result_text(ctx, "status",
-                   report_only || jb_vector_size(&findings) == 0
+                   report_only || (jb_vector_size(&findings) == 0 &&
+                                   jb_vector_size(&effective_findings) == 0)
                        ? "HAL_OK"
                        : "HAL_ECONFIG");
     jh_result_text(ctx, "config", config);
     jh_result_boolean(ctx, "reportOnly", report_only);
     jh_result_list(ctx, "inputs", &inputs);
     jh_result_list(ctx, "findings", &findings);
+    if (effective) {
+      jh_result_tree(ctx, "effectiveReport", resolution_view);
+      jh_result_list(ctx, "effectiveFindings", &effective_findings);
+    }
     (void)jh_result_finish(ctx);
   }
 done:;
-  const int result =
-      args->present[opt_report_only] || jb_vector_size(&findings) == 0 ? 0 : 1;
+  const int result = args->present[opt_report_only] ||
+                             (jb_vector_size(&findings) == 0 &&
+                              jb_vector_size(&effective_findings) == 0)
+                         ? 0
+                         : 1;
+  jb_json_tree_destroy(resolution_tree);
+  jb_string_destroy(&resolution);
+  jh_list_destroy(&effective_findings);
+  jh_hardware_registry_destroy(&hardware);
   jh_feature_registry_destroy(&registry);
   jh_list_destroy(&findings);
   jh_list_destroy(&inputs);

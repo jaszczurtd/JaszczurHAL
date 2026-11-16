@@ -19,7 +19,7 @@ static const option_spec_t options[] = {
      "board config: the values an assembly owns)"},
     {"schema", "<path>", "Validate with this local schema (json validate)"},
     {"pointer", "<path>", "Select a plain RFC 6901 pointer (default: root)"},
-    {"output", "<path>", "Atomically write the selected JSON value"},
+    {"output", "<path>", "Atomically write command output"},
     {"root", "<path>", "JaszczurHAL checkout the generator reads"},
     {"bindings", "<path>",
      "Directory of HAL types (default: <root>/config/hardware/bindings)"},
@@ -75,10 +75,34 @@ static const option_spec_t options[] = {
      "Directory the board configuration writes, below a .build directory or "
      "--output-root"},
     {"config-dir", "<path>", "Directory containing hal_project_config.h"},
-    {"variant", "<id>", "Declared project variant to build"},
+    {"variant", "<id>", "Select a declared project variant"},
     {"hardware-header", "<path>",
      "Generated jh_hardware.h read before the project"},
     {"selector", "<macro>", "Explicit target selector (config build adapter)"},
+    {"project", "<path>",
+     "Project whose completed build selects the flash map"},
+    {"assembly", "<name>", "Assembly of the selected firmware build"},
+    {"build-dir", "<path>",
+     "CMake build directory (default: discover below project/.build)"},
+    {"serial", "<id>", "Exact picotool device or OpenOCD probe serial"},
+    {"port", "<path>",
+     "Explicit ESP serial port, preferably a stable device path"},
+    {"tool", "<path>", "Reader executable override (ESP: ESP-IDF Python)"},
+    {"address", "<number>",
+     "Flash start address, decimal or 0x; requires --size"},
+    {"size", "<number>",
+     "Bytes to read inside the build map; requires --address"},
+    {"reset", NULL, "Allow resetting the selected device for flash read"},
+    {"baud", "<count>", "ESP reader baud rate (default: 115200)"},
+    {"hardware", "<path>", "Resolved jh_hardware_resolved.json to finalize"},
+    {"compiler", "<path>", "GCC or Clang compiler for hardware ABI probes"},
+    {"compiler-flag", "<flag>", "Compiler ABI flag; repeatable"},
+    {"include-board", NULL,
+     "Include the assembly's board definitions and components"},
+    {"effective", NULL,
+     "Lint the resolved project, assembly and variant matrix"},
+    {"resolution-output", "<path>",
+     "Write the effective feature report (requires --effective)"},
     {"json", NULL, "Write a versioned JSON result on stdout"},
     {"json-version", "<major>",
      "Require a supported JSON result major version (1)"},
@@ -125,7 +149,7 @@ static const jh_command_spec_t commands[] = {
      "lint",
      "feature.lint",
      {opt_root, opt_config_root, opt_input_root, opt_report_only,
-      opt_include_hardware, opt_count}},
+      opt_include_hardware, opt_effective, opt_resolution_output, opt_count}},
     {"config", "manifest", "config.manifest", {opt_file, opt_label, opt_count}},
     {"board", "list", "board.list", {opt_root, opt_boards_root, opt_count}},
     {"board",
@@ -166,11 +190,48 @@ static const jh_command_spec_t commands[] = {
      "config.cmake",
      {opt_root, opt_target, opt_project_directory, opt_variant_option,
       opt_define, opt_hardware_header, opt_output, opt_count}},
+    {"firmware",
+     "read",
+     "firmware.read",
+     {opt_project, opt_assembly, opt_variant_option, opt_build_dir, opt_output,
+      opt_serial, opt_port, opt_tool, opt_address, opt_size, opt_reset,
+      opt_timeout_ms, opt_baud, opt_count}},
+    {"hardware",
+     "list",
+     "hardware.list",
+     {opt_root, opt_project_directory, opt_max_bytes, opt_count}},
+    {"hardware",
+     "select",
+     "hardware.select",
+     {opt_root, opt_project_directory, opt_target, opt_assembly, opt_max_bytes,
+      opt_count}},
+    {"hardware",
+     "resolve",
+     "hardware.resolve",
+     {opt_root, opt_project_directory, opt_target, opt_assembly, opt_output_dir,
+      opt_output_root, opt_include_board, opt_max_bytes, opt_count}},
+    {"hardware",
+     "finalize",
+     "hardware.finalize",
+     {opt_root, opt_project_directory, opt_hardware, opt_hardware_header,
+      opt_variant_option, opt_define, opt_compiler, opt_compiler_flag,
+      opt_output_dir, opt_output_root, opt_max_bytes, opt_count}},
+    {"hardware",
+     "identity",
+     "hardware.identity",
+     {opt_root, opt_project_directory, opt_target, opt_assembly,
+      opt_variant_option, opt_define, opt_compiler, opt_compiler_flag,
+      opt_max_bytes, opt_count}},
 };
 
 static const char usage[] =
     "Usage: jh [--help | --version] [--json]\n"
     "       jh json inspect --file <path> [options]\n"
+    "       jh hardware (list | select | resolve | finalize | identity) --root "
+    "<path>"
+    " --config-dir <path> [options]\n"
+    "       jh firmware read --project <path> --assembly <name> --output "
+    "<path> [options]\n"
     "       jh json validate --file <path> --schema <path> [--json]\n"
     "       jh generate device-defaults --root <path> (--check | --write)"
     " [options]\n"
@@ -268,7 +329,8 @@ static void parse_arguments(jh_cli_t *ctx, size_t argc,
       break;
     }
     const bool repeatable = id == opt_define || id == opt_request ||
-                            id == opt_source || id == opt_required_feature ||
+                            id == opt_compiler_flag || id == opt_source ||
+                            id == opt_required_feature ||
                             id == opt_input_root || id == opt_esp_sdkconfig ||
                             id == opt_feature_option;
     if (parsed.present[id] && !repeatable) {
@@ -466,6 +528,14 @@ static int dispatch(jh_cli_t *ctx, size_t argc, const char *const *argv) {
     return jh_cli_project_build(ctx, false);
   case cmd_project_cmake:
     return jh_cli_project_build(ctx, true);
+  case cmd_firmware:
+    return jh_cli_firmware(ctx);
+  case cmd_hardware_list:
+  case cmd_hardware_select:
+  case cmd_hardware_resolve:
+  case cmd_hardware_finalize:
+  case cmd_hardware_identity:
+    return jh_cli_hardware(ctx, (jh_command_id_t)(ctx->command - commands));
   }
   (void)jh_cli_require(ctx, HAL_EINTERNAL, 3, "unexpected failure");
   return 0;
@@ -509,14 +579,22 @@ static int report_failure(jh_cli_t *ctx) {
   if (no_message)
     fallback_json(ctx->json, error.status);
   else if (ctx->json) {
-    jh_result_begin(ctx,
-                    jb_string_size(&ctx->location.source) +
-                        jb_string_size(&error.message) + 1024,
-                    32);
+    jh_result_begin(
+        ctx,
+        jb_string_size(&ctx->location.source) + jb_string_size(&error.message) +
+            jb_string_size(&error.detail) + jb_string_size(&error.related) +
+            jb_string_size(&error.argument) + 1024,
+        /* Includes structured hardware diagnostic detail. */
+        48);
     jh_result_text(ctx, "command",
                    ctx->command == NULL ? "jh" : ctx->command->name);
     jh_result_text(ctx, "status", hal_status_to_string(error.status));
     jh_result_string(ctx, "message", jh_string_span(&error.message));
+    if (ctx->command == &commands[cmd_firmware]) {
+      jh_result_text(ctx, "deviceState",
+                     ctx->device_state ? ctx->device_state : "unchanged");
+      jh_result_boolean(ctx, "changed", ctx->firmware_published);
+    }
     if (ctx->command == &commands[cmd_project_build] ||
         ctx->command == &commands[cmd_project_cmake])
       jh_result_boolean(ctx, "configurationRejected",
@@ -527,6 +605,15 @@ static int report_failure(jh_cli_t *ctx) {
       jh_result_string(ctx, "code", jh_string_span(&error.code));
       jh_result_string(ctx, "source", jh_string_span(&error.source));
       jh_result_string(ctx, "pointer", jh_string_span(&error.pointer));
+      if (jb_string_size(&error.detail) != 0)
+        jh_result_string(ctx, "detail", jh_string_span(&error.detail));
+      if (jb_string_size(&error.argument) != 0)
+        jh_result_string(ctx, "argument", jh_string_span(&error.argument));
+      if (jb_string_size(&error.related) != 0) {
+        jh_result_array(ctx, "related");
+        jh_result_item(ctx, jh_string_span(&error.related));
+        jh_result_array_end(ctx);
+      }
     } else {
       if (jb_string_size(&ctx->location.source) != 0)
         jh_result_string(ctx, "source", jh_string_span(&ctx->location.source));
@@ -538,6 +625,9 @@ static int report_failure(jh_cli_t *ctx) {
       jh_result_number(ctx, "offset", ctx->location.error.offset);
       jh_result_number(ctx, "line", ctx->location.line);
       jh_result_number(ctx, "column", ctx->location.column);
+    } else if (error.line != 0) {
+      jh_result_number(ctx, "line", error.line);
+      jh_result_number(ctx, "column", error.column != 0 ? error.column : 1);
     }
     if (!jh_result_finish(ctx)) {
       fallback_json(true, ctx->failure.status);

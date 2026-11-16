@@ -25,7 +25,7 @@
         }
       },
       "nodes": {
-        "mcp9600": { "present": true, "bus": "i2c", "address": 103 },
+        "mcp9600": { "present": true, "bus": "i2c", "address": "0x67" },
         "max6675Sclk": { "present": true, "pins": { "out": 18 } },
         "max6675Cs": { "present": true, "pins": { "out": 17 } },
         "max6675So": { "present": true, "pins": { "in": 16 } }
@@ -45,7 +45,7 @@
         }
       },
       "nodes": {
-        "mcp9600": { "present": true, "bus": "i2c", "address": 103 },
+        "mcp9600": { "present": true, "bus": "i2c", "address": "0x67" },
         "max6675Sclk": { "present": true, "pins": { "out": 18 } },
         "max6675Cs": { "present": true, "pins": { "out": 17 } },
         "max6675So": { "present": true, "pins": { "in": 16 } }
@@ -65,7 +65,7 @@
         }
       },
       "nodes": {
-        "mcp9600": { "present": true, "bus": "i2c", "address": 103 },
+        "mcp9600": { "present": true, "bus": "i2c", "address": "0x67" },
         "max6675Sclk": { "present": true, "pins": { "out": 18 } },
         "max6675Cs": { "present": true, "pins": { "out": 17 } },
         "max6675So": { "present": true, "pins": { "in": 16 } }
@@ -85,7 +85,7 @@
         }
       },
       "nodes": {
-        "mcp9600": { "present": true, "bus": "i2c", "address": 103 },
+        "mcp9600": { "present": true, "bus": "i2c", "address": "0x67" },
         "max6675Sclk": { "present": true, "pins": { "out": "PB3" } },
         "max6675Cs": { "present": true, "pins": { "out": "PB6" } },
         "max6675So": { "present": true, "pins": { "in": "PA6" } }
@@ -105,7 +105,7 @@
         }
       },
       "nodes": {
-        "mcp9600": { "present": true, "bus": "i2c", "address": 103 },
+        "mcp9600": { "present": true, "bus": "i2c", "address": "0x67" },
         "max6675Sclk": { "present": true, "pins": { "out": 18 } },
         "max6675Cs": { "present": true, "pins": { "out": 17 } },
         "max6675So": { "present": true, "pins": { "in": 16 } }

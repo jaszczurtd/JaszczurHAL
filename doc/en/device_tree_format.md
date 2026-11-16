@@ -1,6 +1,6 @@
 # Device tree format, version 1
 
-This specification defines the inputs and generated interface for project hardware. `scripts/generate_hardware_config.py` resolves an assembly and writes both headers. A firmware project, or a static library whose configuration directory holds `device_tree.json`, builds from that file; without it the build keeps the board path.
+This specification defines the inputs and generated interface for project hardware. `scripts/jh hardware` resolves an assembly and writes both headers. A firmware project, or a static library whose configuration directory holds `device_tree.json`, builds from that file; without it the build keeps the board path.
 
 ## Files and validation
 
@@ -18,7 +18,7 @@ One firmware application, including a subproject, owns one `device_tree.json`. A
 
 Schemas use JSON Schema 2020-12. Input is UTF-8 JSON with unique object keys, finite numbers, `schemaVersion: 1`, and no unknown fields. A nonzero decimal number that binary64 would turn into infinity or zero fails when read. Boolean values do not count as integers. `$schema` is optional editor metadata, never a fetched dependency. Other versions fail rather than falling back to a build without JSON.
 
-Schema validation checks structure. The resolver, `scripts/hardware_resolver.py`, additionally checks references, binding types, board/target compatibility, ownership, resource use and supported clocks. A `semantic` case in the example index deliberately passes structural validation and names the resolver's rejection.
+Schema validation checks structure. The resolver, `jh hardware resolve`, additionally checks references, binding types, board/target compatibility, ownership, resource use and supported clocks. A `semantic` case in the example index deliberately passes structural validation and names the resolver's rejection.
 
 ## Nodes and assemblies
 
@@ -172,9 +172,11 @@ For a selected target, one assembly is automatic, several require an explicit ke
 
 In JSON mode, any project-owned definition of `JH_PROJECT_TARGETS` is rejected, including an inactive conditional definition. Targets come from assemblies. Variant declarations must be independent of target, assembly and `JH_HW_*` so list operations work before a build. Conditions inside a selected variant's program configuration may still inspect hardware.
 
-The generator is `scripts/generate_hardware_config.py`. `list --config-dir DIR` reads assemblies without output generation. `resolve --config-dir DIR [--target ID] [--assembly ID] --output-dir DIR` resolves hardware and writes `jh_hardware.h` plus `jh_hardware_resolved.json`. `finalize --hardware FILE --hardware-header FILE --config-dir DIR [--variant ID] [--define NAME[=VALUE]] --output-dir DIR` reads that same model, preloads its exact header into the project-config reader, resolves features/tunables and emits late build data. `identity` takes the selection, variant and definitions of `resolve` and `finalize` without output directories and prints the selection, `hardwareSha256` and `configSha256` as JSON.
+The generator is `scripts/jh hardware`. `list --config-dir DIR` reads assemblies without output generation. `resolve --config-dir DIR [--target ID] [--assembly ID] --output-dir DIR` resolves hardware and writes `jh_hardware.h` plus `jh_hardware_resolved.json`. `finalize --hardware FILE --hardware-header FILE --config-dir DIR [--variant ID] [--define NAME[=VALUE]] --output-dir DIR` reads that same model, preloads its exact header into the project-config reader, resolves features/tunables and emits late build data. `identity` takes the selection, variant and definitions of `resolve` and `finalize` without output directories and prints the selection, `hardwareSha256` and `configSha256` as JSON.
 
 CMake calls the commands through `cmake/jh_hardware_config.cmake`. `jh_generate_hardware_config()` runs `resolve`, reads the project configuration with the generated header, runs `finalize` and loads the CMake record. A build that knows its compiler only after `project()` passes `ABI_LATER`, takes the record from a preliminary finalize in `pre-project/`, and calls `jh_finalize_hardware_abi()` after `project()`; only that call writes the files the build compiles, so an unchanged reconfigure rewrites nothing. A firmware project selects with `JH_ASSEMBLY`, `JH_VARIANT` and, as a filter, `JH_TARGET`; a static library reads the same selectors next to `HAL_PROJECT_CONFIG_DIR`. `jh-vscode`, the examples dispatcher and the VS Code library workspace choose the assembly by the rules of [Projects with device_tree.json](FwProjectWorkflow.md#device-tree-projects). Both generate into their build directory and add every file the generation read to the reconfigure dependencies, so an edited description, binding, registry or board file regenerates the headers on the next build.
+
+Host builds that use a mock board can call `jh_resolve_hardware_header(OUT ROOT HAL_ROOT CONFIG_DIR CONFIG OUTPUT_DIR OUTPUT)` from the same CMake module. It returns the early header in `OUT` and the model in `JH_HARDWARE_RESOLVED_FILE`, watches their inputs and leaves late board configuration to the caller.
 
 Finalization adds software configuration to the existing resolved model; it does not resolve hardware independently or rewrite early hardware facts. It emits `jh_board_config.h`, `jh_hardware_config.cmake`, the relocatable package record `jh_hardware_package.cmake`, `jh_hardware_config.json`, existing link-signature header/source artifacts and `generation.d`. Output is atomic per file; builds consume it only after successful generation. Dependency content digests prevent finalizing a stale early model. Both phases depend on the selected JSON, all loaded bindings, board/target data, clock registry and generator/schema inputs.
 

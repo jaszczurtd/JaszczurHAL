@@ -19,9 +19,11 @@ import unittest
 from repo_root import repo_root  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
+sys.path.insert(0, str(ROOT / "scripts"))
+from project_config import jh_executable  # noqa: E402
 WORK = ROOT / ".build" / "tests" / "hardware package"
 FIXTURE = ROOT / "tests" / "fixtures" / "device_tree" / "hal" / "nucleo-canhat"
-GENERATOR = ROOT / "scripts" / "generate_hardware_config.py"
+GENERATOR = jh_executable()
 TOOLCHAIN = ROOT / "link_libraries" / "stm32_lib" / "toolchain_stm32g474.cmake"
 ARCH = ["-mcpu=cortex-m4", "-mthumb", "-mfpu=fpv4-sp-d16", "-mfloat-abi=hard"]
 # The compiler and flags the application compiles with; its ABI joins the
@@ -54,7 +56,7 @@ def config(name: str, relay_pin: str = "PC3", extra: str = "") -> Path:
 
 
 def identity(config_dir: Path) -> dict:
-    result = run(sys.executable, GENERATOR, "identity", "--config-dir", config_dir, "--assembly", "canhat",
+    result = run(GENERATOR, "hardware", "identity", "--root", ROOT, "--config-dir", config_dir, "--assembly", "canhat",
                  *COMPILER)
     assert result.returncode == 0, result.stderr
     return json.loads(result.stdout)
@@ -123,7 +125,7 @@ class Package(unittest.TestCase):
                         ["finalize", "--hardware", generated / "jh_hardware_resolved.json",
                          "--hardware-header", generated / "jh_hardware.h",
                          "--config-dir", app_config, "--output-dir", generated, *COMPILER]):
-            result = run(sys.executable, GENERATOR, *command)
+            result = run(GENERATOR, "hardware", *command, "--root", ROOT)
             self.assertEqual(0, result.returncode, result.stderr)
         app = WORK / name / "app.c"
         app.write_text(source, encoding="utf-8")

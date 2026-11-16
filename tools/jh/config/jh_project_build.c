@@ -417,16 +417,14 @@ static const char cmake_newline[] = "\r\n";
 static const char cmake_newline[] = "\n";
 #endif
 
-static void cmake_value(cmake_writer_t *writer, const char *prefix,
-                        jb_json_span_t suffix, jb_json_span_t value) {
-  jb_string_t name = {0}, fence = {0};
-  (void)jb_string_init(&name, jb_heap_allocator());
+hal_status_t jh_cmake_assignment(jb_string_t *out, jb_json_span_t name,
+                                 jb_json_span_t value) {
+  if (out == NULL || name.data == NULL || name.length == 0 ||
+      (value.data == NULL && value.length != 0))
+    return HAL_EINVAL;
+  jb_string_t fence = {0};
   (void)jb_string_init(&fence, jb_heap_allocator());
-  if (writer->status == HAL_OK)
-    writer->status = jh_join(&name, JH_PARTS(jh_span(prefix), suffix));
-  if (writer->status == HAL_OK)
-    writer->status = jh_list_push(&writer->names, jh_string_span(&name));
-  jh_put(&fence, &writer->status, "=");
+  hal_status_t status = jh_append(&fence, "=");
   for (;;) {
     bool found = false;
     const size_t width = jb_string_size(&fence);
@@ -437,21 +435,35 @@ static void cmake_value(cmake_writer_t *writer, const char *prefix,
         break;
       }
     }
-    if (!found || writer->status != HAL_OK)
+    if (!found || status != HAL_OK)
       break;
-    jh_put(&fence, &writer->status, "=");
+    jh_put(&fence, &status, "=");
   }
-  jh_put(writer->out, &writer->status, "set(");
-  jh_put_span(writer->out, &writer->status, jh_string_span(&name));
-  jh_put(writer->out, &writer->status, " [");
-  jh_put_span(writer->out, &writer->status, jh_string_span(&fence));
-  jh_put(writer->out, &writer->status, "[");
-  jh_put_span(writer->out, &writer->status, value);
-  jh_put(writer->out, &writer->status, "]");
-  jh_put_span(writer->out, &writer->status, jh_string_span(&fence));
-  jh_put(writer->out, &writer->status, "])");
-  jh_put(writer->out, &writer->status, cmake_newline);
+  jh_put(out, &status, "set(");
+  jh_put_span(out, &status, name);
+  jh_put(out, &status, " [");
+  jh_put_span(out, &status, jh_string_span(&fence));
+  jh_put(out, &status, "[");
+  jh_put_span(out, &status, value);
+  jh_put(out, &status, "]");
+  jh_put_span(out, &status, jh_string_span(&fence));
+  jh_put(out, &status, "])");
   jb_string_destroy(&fence);
+  return status;
+}
+
+static void cmake_value(cmake_writer_t *writer, const char *prefix,
+                        jb_json_span_t suffix, jb_json_span_t value) {
+  jb_string_t name = {0};
+  (void)jb_string_init(&name, jb_heap_allocator());
+  if (writer->status == HAL_OK)
+    writer->status = jh_join(&name, JH_PARTS(jh_span(prefix), suffix));
+  if (writer->status == HAL_OK)
+    writer->status = jh_list_push(&writer->names, jh_string_span(&name));
+  if (writer->status == HAL_OK)
+    writer->status =
+        jh_cmake_assignment(writer->out, jh_string_span(&name), value);
+  jh_put(writer->out, &writer->status, cmake_newline);
   jb_string_destroy(&name);
 }
 

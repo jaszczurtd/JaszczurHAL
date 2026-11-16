@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""generate_hardware_config.py against the device tree specification: every
-case of cases.json, the command line, identity, both headers and the module
-combinations of the HAL types on registry boards."""
+"""Native hardware CLI, ABI, generated headers and HAL module combinations.
+Specification and scalar cases run in the C test jh_hardware.
+"""
 
 from __future__ import annotations
 
@@ -13,34 +13,36 @@ import subprocess
 import sys
 from typing import Sequence
 import unittest
-from unittest import mock
 
 from repo_root import hal_include_dirs, repo_root  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import generate_hardware_config as generator  # noqa: E402
-from hardware_model import HardwareError  # noqa: E402
-import hardware_output  # noqa: E402
-import hardware_renderers as renderers  # noqa: E402
-import hardware_resolver as resolver  # noqa: E402
-import hardware_schema  # noqa: E402
+import device_tree_project as hardware  # noqa: E402
+from device_tree_project import HardwareError  # noqa: E402
+from project_config import jh_executable  # noqa: E402
 
 FIXTURES = ROOT / "tests" / "fixtures" / "device_tree"
-CASES = json.loads((FIXTURES / "cases.json").read_text(encoding="utf-8"))
 WORK = ROOT / ".build" / "tests" / "hardware-config"
-SCRIPT = ROOT / "scripts" / "generate_hardware_config.py"
-REGISTRY = resolver.load_registry()
+TOOL = jh_executable()
+HARDWARE_HEADER = "jh_hardware.h"
+RESOLVED_JSON = "jh_hardware_resolved.json"
+CONFIG_JSON = "jh_hardware_config.json"
+BOARD_HEADER = "jh_board_config.h"
+CMAKE_RECORD = "jh_hardware_config.cmake"
+PACKAGE_RECORD = "jh_hardware_package.cmake"
+RESOLVE_OUTPUTS = (HARDWARE_HEADER, RESOLVED_JSON)
+FINALIZE_OUTPUTS = (BOARD_HEADER, CMAKE_RECORD, PACKAGE_RECORD, "jh_link_contract.h",
+                    "jh_link_contract_definition.c", "jh_link_contract_reference.c", CONFIG_JSON, "generation.d")
 CYW43_DEFINITIONS = ["HAL_ENABLE_WIFI", "HAL_NETWORK_BACKEND_CYW43", "HAL_CYW43_BUS_STM32_GSPI",
                      "HAL_CYW43_STACK_LWIP"]
 RP_CYW43_DEFINITIONS = ["HAL_ENABLE_WIFI", "HAL_NETWORK_BACKEND_CYW43", "HAL_CYW43_BUS_PICO_PIO",
                         "HAL_CYW43_STACK_LWIP"]
 
 
-def resolve(path: Path, assembly: str | None = None, target: str | None = None,
-            registry: resolver.Registry = REGISTRY) -> dict:
-    return resolver.Resolver(path, registry).resolve(target, assembly)
+def resolve(path: Path, assembly: str | None = None, target: str | None = None) -> dict:
+    return hardware.resolved(path.parent, target, assembly)["document"]
 
 
 def workdir(name: str) -> Path:
@@ -69,8 +71,8 @@ def mutate(name: str, relative: str, change) -> Path:
     return path
 
 
-def run(*arguments: str) -> subprocess.CompletedProcess:
-    return subprocess.run([sys.executable, str(SCRIPT), *arguments], capture_output=True, text=True)
+def run(command: str, *arguments: str) -> subprocess.CompletedProcess:
+    return subprocess.run([str(TOOL), "hardware", command, "--root", str(ROOT), *arguments], capture_output=True, text=True)
 
 
 def generate(name: str, config_dir: Path, assembly: str, *defines: str,
@@ -82,8 +84,8 @@ def generate(name: str, config_dir: Path, assembly: str, *defines: str,
                    "--output-dir", str(out))
     if resolved.returncode:
         return out, resolved
-    arguments = ["finalize", "--hardware", str(out / generator.RESOLVED_JSON),
-                 "--hardware-header", str(out / generator.HARDWARE_HEADER),
+    arguments = ["finalize", "--hardware", str(out / RESOLVED_JSON),
+                 "--hardware-header", str(out / HARDWARE_HEADER),
                  "--config-dir", str(config_dir), "--output-dir", str(out)]
     for definition in defines:
         arguments += ["--define", definition]
@@ -117,154 +119,6 @@ def value(name: str, *headers: dict[str, str]) -> str:
     return text
 
 
-class SpecificationCases(unittest.TestCase):
-    """Every expectation of cases.json."""
-
-    def test_resolver_cases(self) -> None:
-        for case in CASES["cases"]:
-            if case["schema"] != "device_tree.schema.json" or case.get("phase") == "finalize":
-                continue
-            path = FIXTURES / case["file"]
-            if case["expected"] == "accept":
-                for assembly in case["resolveAssemblies"]:
-                    with self.subTest(file=case["file"], assembly=assembly):
-                        resolve(path, assembly)
-                continue
-            with self.subTest(file=case["file"]):
-                with self.assertRaises(HardwareError) as raised:
-                    resolve(path, case.get("input", {}).get("assembly"))
-                error = raised.exception
-                self.assertEqual((case["error"], case["at"]), (error.code, error.pointer), error)
-                self.assertEqual(Path(error.source).resolve(), path.resolve())
-                if "related" in case:
-                    self.assertEqual(tuple(case["related"]), error.related)
-
-    def test_selection_cases(self) -> None:
-        for case in CASES["selectionCases"]:
-            with self.subTest(file=case["file"], input=case["input"]):
-                path = FIXTURES / case["file"]
-                data = resolver.load_device_tree(path)
-                arguments = (path, data, case["input"].get("target"), case["input"].get("assembly"))
-                if "error" in case:
-                    with self.assertRaises(HardwareError) as raised:
-                        resolver.select_assembly(*arguments)
-                    self.assertEqual(case["error"], raised.exception.code)
-                    self.assertTrue(raised.exception.argument)
-                else:
-                    self.assertEqual(case["assembly"], resolver.select_assembly(*arguments))
-
-    def test_resolution_cases(self) -> None:
-        for case in CASES["resolutionCases"]:
-            with self.subTest(file=case["file"]):
-                hardware = resolve(FIXTURES / case["file"], case["assembly"])["hardware"]
-                nodes = hardware["nodes"]
-
-                def signal(key: str) -> dict:
-                    path, _, name = key.rpartition(".")
-                    return nodes[path]["signals"][name]
-
-                for key, expected in case.get("properties", {}).items():
-                    path, _, name = key.rpartition(".")
-                    self.assertEqual(expected, nodes[path]["properties"][name]["value"], key)
-                for key, owner in case.get("owners", {}).items():
-                    self.assertEqual(owner, signal(key)["owner"], key)
-                for key in case.get("unconnected", []):
-                    self.assertIsNone(signal(key)["endpoint"], key)
-                for key, expected in case.get("transport", {}).items():
-                    self.assertEqual(expected, nodes[key]["transport"], key)
-                for key in case.get("noDrivingInitializer", []):
-                    self.assertIsNone(renderers.config_init(key, nodes[key], hardware))
-                    self.assertTrue(all(item["owner"] != f"{key}.{name}"
-                                        for name, item in nodes[key]["signals"].items()))
-                if "uart" in case:
-                    bus = next(item for item in hardware["buses"].values() if item["kind"] == "uart")
-                    self.assertEqual(case["uart"]["baudRate"], bus["baudRate"])
-                    self.assertEqual(case["uart"]["frameConfig"], renderers.uart_frame_token(bus["frame"]))
-                if "statusLed" in case:
-                    for key, expected in case["statusLed"].items():
-                        self.assertEqual(expected, hardware["statusLed"][key])
-                for capability, path in case.get("providers", {}).items():
-                    self.assertEqual(path, hardware["providers"][capability])
-                if "releasedReservations" in case:
-                    self.assertEqual(case["releasedReservations"],
-                                     sorted(k for k, v in hardware["reservations"].items() if v["released"]))
-                if "boardMacros" in case:
-                    out, result = generate(f"resolution-{case['file'].split('/')[1]}",
-                                           (FIXTURES / case["file"]).parent, case["assembly"])
-                    self.assertEqual(0, result.returncode, result.stderr)
-                    headers = macros(out / "jh_hardware.h"), macros(out / "jh_board_config.h")
-                    for name, expected in case["boardMacros"].items():
-                        self.assertEqual(str(expected), value(name, *headers), name)
-
-    def test_feature_cases(self) -> None:
-        for index, case in enumerate(CASES["featureCases"]):
-            with self.subTest(file=case["file"], definitions=case["definitions"]):
-                config = (FIXTURES / case["file"]).parent
-                defines = [f"{name}={number}" for name, number in case["definitions"].items()]
-                out, result = generate(f"feature-{index}", config, case["assembly"], *defines)
-                if "error" in case:
-                    self.assertNotEqual(0, result.returncode)
-                    self.assertIn(f"[{case['error']}]", result.stderr)
-                    self.assertIn(case["definition"], result.stderr)
-                    self.assertIn(f"argument {case['argument']}", result.stderr)
-                    self.assertFalse((out / "jh_board_config.h").exists())
-                    model = resolve(FIXTURES / case["file"], case["assembly"])["hardware"]
-                    for name, expected in case["boardMacros"].items():
-                        capability = name.removeprefix("HAL_BOARD_HAS_").lower().replace("_", "-")
-                        self.assertEqual(bool(expected), model["capabilities"][capability])
-                    continue
-                self.assertEqual(0, result.returncode, result.stderr)
-                headers = macros(out / "jh_hardware.h"), macros(out / "jh_board_config.h")
-                for name, expected in case.get("boardMacros", {}).items():
-                    self.assertEqual(str(expected), value(name, *headers), name)
-                final = json.loads((out / generator.CONFIG_JSON).read_text(encoding="utf-8"))
-                for feature in case.get("doesNotEnable", []):
-                    self.assertNotIn(feature, final["software"]["resolvedFeatures"])
-
-    def test_finalize_phase_cases(self) -> None:
-        for case in CASES["cases"]:
-            if case.get("phase") != "finalize":
-                continue
-            with self.subTest(file=case["file"]):
-                work = workdir(f"phase-{Path(case['file']).stem}")
-                shutil.copytree(FIXTURES / "bindings", work / "bindings")
-                config = work / "invalid"
-                config.mkdir()
-                shutil.copy(FIXTURES / case["file"], config / "device_tree.json")
-                defines = [f"{name}={number}" for name, number in case["definitions"].items()]
-                _, result = generate(f"phase-out-{Path(case['file']).stem}", config,
-                                     case["input"]["assembly"], *defines)
-                self.assertNotEqual(0, result.returncode)
-                self.assertIn(f"[{case['error']}]", result.stderr)
-                self.assertIn(f":{case['at']}:", result.stderr)
-
-    def test_header_cases(self) -> None:
-        for index, case in enumerate(CASES["headerCases"]):
-            with self.subTest(file=case["file"]):
-                config = copy_fixture(f"header-{index}", str(Path(case["deviceTree"]).parent))
-                shutil.copy(FIXTURES / case["file"], config / "hal_project_config.h")
-                assembly = resolver.list_assemblies(resolver.load_device_tree(config / "device_tree.json"))[0]
-                _, result = generate(f"header-out-{index}", config, assembly["name"])
-                self.assertNotEqual(0, result.returncode)
-                self.assertIn(f"[{case['error']}]", result.stderr)
-                self.assertIn(f"hal_project_config.h:{case['line']}:", result.stderr)
-
-    def test_renderer_cases(self) -> None:
-        for case in CASES["rendererCases"]:
-            with self.subTest(case=case):
-                if "frame" in case:
-                    problem = renderers.uart_frame_problem(case["renderer"].split("-", 1)[1], case["frame"])
-                    self.assertEqual(case["at"], problem[0])
-                    continue
-                problem = renderers.transport_problem_for(case["renderer"], case["transport"])
-                if "error" in case:
-                    self.assertEqual(case["at"], f"/transport/{problem[0]}")
-                    continue
-                self.assertIsNone(problem)
-                config_type, clock_field = renderers.RENDERER_TYPES[case["renderer"]]
-                self.assertEqual(case["configType"], config_type)
-                self.assertEqual(case.get("clockField"), clock_field)
-                self.assertEqual(not case.get("hasSpiClockField", True), clock_field is None)
 
 
 class CommandLine(unittest.TestCase):
@@ -325,7 +179,7 @@ class CommandLine(unittest.TestCase):
         self.assertNotEqual(0, result.returncode)
         self.assertIn("[JH-HW-ASSEMBLY]", result.stderr)
         # Nothing the earlier model produced survives either.
-        self.assertEqual([], [name for name in (*generator.RESOLVE_OUTPUTS, *generator.FINALIZE_OUTPUTS)
+        self.assertEqual([], [name for name in (*RESOLVE_OUTPUTS, *FINALIZE_OUTPUTS)
                               if (out / name).exists()])
 
     def test_outputs_stay_in_a_managed_build_directory(self) -> None:
@@ -338,9 +192,9 @@ class CommandLine(unittest.TestCase):
         config = copy_fixture("stale", "valid/status")
         out, result = generate("stale-out", config, "pico")
         self.assertEqual(0, result.returncode, result.stderr)
-        finalize = ["finalize", "--hardware", str(out / generator.RESOLVED_JSON), "--hardware-header",
-                    str(out / generator.HARDWARE_HEADER), "--config-dir", str(config), "--output-dir", str(out)]
-        header = out / generator.HARDWARE_HEADER
+        finalize = ["finalize", "--hardware", str(out / RESOLVED_JSON), "--hardware-header",
+                    str(out / HARDWARE_HEADER), "--config-dir", str(config), "--output-dir", str(out)]
+        header = out / HARDWARE_HEADER
         original = header.read_text(encoding="utf-8")
         header.write_text(original.replace('_SHA256 "', '_SHA256 "0', 1).replace('0"', '"', 1),
                           encoding="utf-8")
@@ -374,10 +228,10 @@ class CommandLine(unittest.TestCase):
         config = FIXTURES / "valid" / "status"
         out, result = generate("edited-header", config, "pico")
         self.assertEqual(0, result.returncode, result.stderr)
-        header = out / generator.HARDWARE_HEADER
+        header = out / HARDWARE_HEADER
         header.write_text(header.read_text(encoding="utf-8").replace(
             "#define JH_HW_NODE_LED_PIN_OUT 14U", "#define JH_HW_NODE_LED_PIN_OUT 15U"), encoding="utf-8")
-        result = run("finalize", "--hardware", str(out / generator.RESOLVED_JSON), "--hardware-header",
+        result = run("finalize", "--hardware", str(out / RESOLVED_JSON), "--hardware-header",
                      str(header), "--config-dir", str(config), "--output-dir", str(out))
         self.assertIn("[JH-HW-GENERATION]", result.stderr)
         self.assertIn("not the one this model produces", result.stderr)
@@ -392,7 +246,7 @@ class CommandLine(unittest.TestCase):
                     "#define HAL_CYW43_STACK_LWIP\n#endif\n", encoding="utf-8")
                 out, result = generate(f"early-out-{enabled}", config, "nucleo")
                 self.assertEqual(0, result.returncode, result.stderr)
-                final = json.loads((out / generator.CONFIG_JSON).read_text(encoding="utf-8"))
+                final = json.loads((out / CONFIG_JSON).read_text(encoding="utf-8"))
                 self.assertEqual(enabled, "HAL_ENABLE_WIFI" in final["software"]["resolvedFeatures"])
 
     def test_unknown_variant_fails(self) -> None:
@@ -400,13 +254,14 @@ class CommandLine(unittest.TestCase):
         self.assertIn("[JH-HW-FEATURE]", result.stderr)
 
     def test_dependencies_name_every_input(self) -> None:
-        model = generator.resolve(FIXTURES / "valid" / "project", None, "nucleo")[0]
+        model = resolve(FIXTURES / "valid" / "project" / "device_tree.json", "nucleo")
         names = {item["path"] for item in model["dependencies"]}
         for expected in ("device_tree.json", "../../bindings/power-stage.json",
                          "hal:boards/profiles/nucleo-g474re.json", "hal:boards/targets/stm32g474.json",
                          "hal:config/hardware/clocks/stm32g474.json",
                          "hal:config/hardware/bindings/jaszczurhal-gpio-output.json",
-                         "hal:scripts/hardware_resolver.py"):
+                         "hal:tools/jh/hardware/jh_hardware.c", "hal:src/hal/security/jh_sha256.c",
+                         "hal:scripts/jh_tool_inputs.cmake"):
             self.assertIn(expected, names)
 
 
@@ -416,35 +271,15 @@ class Identity(unittest.TestCase):
         moved = copy_fixture("moved", "valid/project") / "device_tree.json"
         data = json.loads(moved.read_text(encoding="utf-8"))
         moved.write_text(json.dumps(data, separators=(",", ":"), sort_keys=True), encoding="utf-8")
-        self.assertEqual(hardware_output.hardware_digest(here),
-                         hardware_output.hardware_digest(resolve(moved, "nucleo")))
+        self.assertEqual(here["hardwareSha256"],
+                         resolve(moved, "nucleo")["hardwareSha256"])
 
-    def test_a_project_on_another_drive_resolves(self) -> None:
-        # Windows has no relative path between drives: os.path.relpath raises
-        # ValueError for a HAL file and a project directory on another drive.
-        project = workdir("other-drive") / "nucleo-canhat"
-        shutil.copytree(FIXTURES / "hal" / "nucleo-canhat", project)
-        relpath = resolver.os.path.relpath
-
-        def drive(path) -> str:
-            return "project" if Path(path).resolve().is_relative_to(WORK) else "hal"
-
-        def across_drives(path, start=resolver.os.curdir):
-            if drive(path) != drive(start):
-                raise ValueError("path is on another drive")
-            return relpath(path, start)
-
-        here = resolve(FIXTURES / "hal" / "nucleo-canhat" / "device_tree.json", "canhat")
-        with mock.patch.object(resolver.os.path, "relpath", across_drives):
-            moved = resolve(project / "device_tree.json", "canhat")
-        self.assertEqual(hardware_output.hardware_digest(here), hardware_output.hardware_digest(moved))
 
     def test_a_pin_or_an_unused_node_changes_the_hash(self) -> None:
-        base = hardware_output.hardware_digest(resolve(FIXTURES / "valid" / "project" / "device_tree.json",
-                                                       "nucleo"))
+        base = resolve(FIXTURES / "valid" / "project" / "device_tree.json", "nucleo")["hardwareSha256"]
         pin = mutate("pin", "valid/project", lambda d: d["assemblies"]["nucleo"]["nodes"]["stage"]["pins"]
                      .update(driveA="PC8"))
-        self.assertNotEqual(base, hardware_output.hardware_digest(resolve(pin, "nucleo")))
+        self.assertNotEqual(base, resolve(pin, "nucleo")["hardwareSha256"])
 
     def test_integers_hash_at_their_exact_value(self) -> None:
         models = []
@@ -464,23 +299,17 @@ class Identity(unittest.TestCase):
         values = [model["hardware"]["nodes"]["n"]["properties"]["big"]["value"] for model in models]
         self.assertEqual([2**53, 2**53 + 1], values)
         self.assertTrue(all(type(item) is int for item in values))
-        self.assertNotEqual(*(hardware_output.hardware_digest(model) for model in models))
-        self.assertIn('"value": 9007199254740993', hardware_output.dump_json(models[1]))
+        self.assertNotEqual(*(model["hardwareSha256"] for model in models))
+        self.assertIn('"value": 9007199254740993', json.dumps(models[1]))
 
-    def test_text_never_turns_into_a_number(self) -> None:
-        data = {"text": "\u0000raw:1", "nested": [{"x": "\u0000raw:2.5e+00"}], "n": 7}
-        self.assertEqual(data, json.loads(hardware_output.dump_json(data)))
 
-    def test_floats_are_hashed_as_bit_patterns(self) -> None:
-        typed = {"value": hardware_schema.JsonNumber("0.250"), "cType": "float", "unit": "ohm"}
-        self.assertEqual(hardware_output.digest({"p": typed}),
-                         hardware_output.digest({"p": {**typed, "value": 0.25}}))
-        self.assertNotEqual(hardware_output.digest({"p": typed}),
-                            hardware_output.digest({"p": {**typed, "cType": "double"}}))
 
     def test_resolved_json_keeps_the_literal_digits(self) -> None:
-        text = hardware_output.dump_json(resolve(FIXTURES / "valid" / "project" / "device_tree.json",
-                                                 "nucleo"))
+        out = workdir("literal-digits")
+        result = run("resolve", "--config-dir", str(FIXTURES / "valid" / "project"),
+                     "--assembly", "nucleo", "--output-dir", str(out))
+        self.assertEqual(0, result.returncode, result.stderr)
+        text = (out / RESOLVED_JSON).read_text(encoding="utf-8")
         self.assertIn('"value": 2.50000000e-01', text)
         self.assertEqual(0.25, json.loads(text)["hardware"]["nodes"]["stage"]["properties"]["shuntOhms"]["value"])
 
@@ -492,7 +321,7 @@ class BuildRecords(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.out, result = generate("records", FIXTURES / "hal" / "nucleo-canhat", "canhat", "HAL_ENABLE_WIFI")
         assert result.returncode == 0, result.stderr
-        cls.config = json.loads((cls.out / generator.CONFIG_JSON).read_text(encoding="utf-8"))
+        cls.config = json.loads((cls.out / CONFIG_JSON).read_text(encoding="utf-8"))
 
     def record(self, name: str) -> dict[str, str]:
         text = (self.out / name).read_text(encoding="utf-8")
@@ -506,9 +335,9 @@ class BuildRecords(unittest.TestCase):
         self.assertIn("JH-CFG-VALUE", result.stderr)
 
     def test_the_board_header_belongs_to_one_hardware_generation(self) -> None:
-        early = macros(self.out / generator.HARDWARE_HEADER)
-        text = (self.out / generator.BOARD_HEADER).read_text(encoding="utf-8")
-        identity = hardware_output.hardware_id(self.config["hardwareSha256"])
+        early = macros(self.out / HARDWARE_HEADER)
+        text = (self.out / BOARD_HEADER).read_text(encoding="utf-8")
+        identity = "0x" + self.config["hardwareSha256"][:16] + "ULL"
         self.assertEqual(identity, early["JH_HW_HARDWARE_ID"])
         self.assertIn(f"#if JH_HW_HARDWARE_ID != {identity}\n#error", text)
         self.assertIn(f"#define HAL_BOARD_HARDWARE_ID {identity}\n", text)
@@ -518,7 +347,7 @@ class BuildRecords(unittest.TestCase):
                      "--assembly", "canhat", "--define", "HAL_ENABLE_WIFI")
         self.assertEqual(0, result.returncode, result.stderr)
         identity = json.loads(result.stdout)
-        record = self.record(generator.CMAKE_RECORD)
+        record = self.record(CMAKE_RECORD)
         self.assertEqual(identity["configSha256"], record["JH_CONFIG_SHA256"])
         self.assertEqual(identity["selection"], self.config["selection"])
         self.assertTrue(record["JH_BOARD_CONTRACT_SYMBOL"].endswith(identity["configSha256"][:12]))
@@ -529,18 +358,18 @@ class BuildRecords(unittest.TestCase):
 
     def test_the_abi_is_part_of_the_configuration(self) -> None:
         self.assertEqual({"isa": "armv7e-m", "fpu": 1, "recipe": "stm32g474"}, self.config["software"]["abi"])
-        self.assertEqual("isa=armv7e-m;fpu=1;recipe=stm32g474", self.record(generator.CMAKE_RECORD)["JH_HARDWARE_ABI"])
+        self.assertEqual("isa=armv7e-m;fpu=1;recipe=stm32g474", self.record(CMAKE_RECORD)["JH_HARDWARE_ABI"])
 
     def test_the_package_record_follows_its_installation(self) -> None:
-        text = (self.out / generator.PACKAGE_RECORD).read_text(encoding="utf-8")
+        text = (self.out / PACKAGE_RECORD).read_text(encoding="utf-8")
         self.assertNotIn(str(ROOT), text)
         self.assertNotIn("JH_BOARD_INPUT_GLOBS", text)
         prefix = workdir("records-package") / "prefix with space"
         share = prefix / "share" / "JaszczurHAL" / "generated"
         share.mkdir(parents=True)
-        shutil.copy2(self.out / generator.PACKAGE_RECORD, share / generator.CMAKE_RECORD)
+        shutil.copy2(self.out / PACKAGE_RECORD, share / CMAKE_RECORD)
         script = prefix.parent / "print.cmake"
-        script.write_text(f'include("{(share / generator.CMAKE_RECORD).as_posix()}")\n'
+        script.write_text(f'include("{(share / CMAKE_RECORD).as_posix()}")\n'
                           'foreach(name JH_HARDWARE_HEADER JH_HAL_PACKAGE_LIBRARY JH_CONFIG_SHA256 JH_ASSEMBLY)\n'
                           '  message("${name}=${${name}}")\n'
                           'endforeach()\n', encoding="utf-8")
@@ -562,11 +391,11 @@ class BuildRecords(unittest.TestCase):
             encoding="utf-8")
         out, result = generate("records-variant-out", config, "canhat", variant="SERIAL")
         self.assertEqual(0, result.returncode, result.stderr)
-        final = json.loads((out / generator.CONFIG_JSON).read_text(encoding="utf-8"))
+        final = json.loads((out / CONFIG_JSON).read_text(encoding="utf-8"))
         self.assertEqual("SERIAL", final["software"]["variant"])
         self.assertIn("HAL_ENABLE_UART", final["software"]["resolvedFeatures"])
         self.assertIn("set(JH_PROJECT_VARIANT [=[SERIAL]=])",
-                      (out / generator.CMAKE_RECORD).read_text(encoding="utf-8"))
+                      (out / CMAKE_RECORD).read_text(encoding="utf-8"))
         variant = json.loads(run("identity", "--config-dir", str(config), "--assembly", "canhat",
                                  "--variant", "SERIAL").stdout)
         base = json.loads(run("identity", "--config-dir", str(config), "--assembly", "canhat").stdout)
@@ -596,7 +425,7 @@ class StructLayout(unittest.TestCase):
                                    compiler=("cc", *flags))
             assert result.returncode == 0, result.stderr
             cls.out[name] = out
-            cls.config[name] = json.loads((out / generator.CONFIG_JSON).read_text(encoding="utf-8"))
+            cls.config[name] = json.loads((out / CONFIG_JSON).read_text(encoding="utf-8"))
 
     def test_the_layout_joins_the_configuration(self) -> None:
         abi = {name: config["software"]["abi"] for name, config in self.config.items()}
@@ -608,7 +437,7 @@ class StructLayout(unittest.TestCase):
         self.assertEqual(4, abi["natural"]["layout"]["enum"])
         self.assertEqual(1, abi["short enums"]["layout"]["enum"])
         self.assertEqual(3, len({config["configSha256"] for config in self.config.values()}))
-        record = (self.out["packed"] / generator.CMAKE_RECORD).read_text(encoding="utf-8")
+        record = (self.out["packed"] / CMAKE_RECORD).read_text(encoding="utf-8")
         self.assertIn("layout.member_int=1", record)
 
     def compile(self, name: str, language: str, *flags: str, prelude: str = "") -> subprocess.CompletedProcess:
@@ -618,7 +447,8 @@ class StructLayout(unittest.TestCase):
                           "int main(void) { return 0; }\n", encoding="utf-8")
         compiler, standard = ("c++", "-std=c++17") if language == "c++" else ("cc", "-std=c11")
         return subprocess.run([compiler, standard, "-Wall", "-Wextra", "-Wpedantic", "-Werror", *flags,
-                               f"-I{self.out['natural']}", "-fsyntax-only", str(source)],
+                               f"-I{self.out['natural']}", *[f"-I{path}" for path in hal_include_dirs(ROOT)],
+                               "-fsyntax-only", str(source)],
                               capture_output=True, text=True)
 
     def test_a_unit_with_the_same_layout_compiles(self) -> None:
@@ -643,7 +473,7 @@ class StructLayout(unittest.TestCase):
         out = workdir("layout cwd")
         here = out / "cwd"
         here.mkdir()
-        result = subprocess.run([sys.executable, str(SCRIPT), "identity", "--config-dir",
+        result = subprocess.run([str(TOOL), "hardware", "identity", "--root", str(ROOT), "--config-dir",
                                  str(FIXTURES / "hal" / "nucleo-canhat"), "--assembly", "canhat",
                                  "--compiler", "cc", "--compiler-flag=-fstack-usage",
                                  "--compiler-flag=-save-temps"], capture_output=True, text=True, cwd=here)
@@ -691,7 +521,7 @@ class Headers(unittest.TestCase):
         self.assertIn("JH_HW_NODE_HAT_CAN2_PIN_TX", self.late["HAL_BOARD_CAN_CHANNELS(X)"]
                       if "HAL_BOARD_CAN_CHANNELS(X)" in self.late else
                       (self.out / "jh_board_config.h").read_text(encoding="utf-8"))
-        cmake = (self.out / generator.CMAKE_RECORD).read_text(encoding="utf-8")
+        cmake = (self.out / CMAKE_RECORD).read_text(encoding="utf-8")
         compiled = re.search(r'set\(JH_BOARD_COMPILE_DEFINITIONS "([^"]*)"\)', cmake).group(1).split(";")
         # The module radio brings its component's transport to the compiler;
         # the macros the header owns, such as its pins and the clock, stay off -D.
@@ -715,9 +545,7 @@ class Headers(unittest.TestCase):
         self.assertNotIn("JH_HW_NODE_UNCONNECTED_LED_PIN_OUT", early)
 
     def test_device_pins_export_provider_and_index(self) -> None:
-        early = hardware_output.render_header(
-            {**resolve(FIXTURES / "valid" / "expander" / "device_tree.json", "pico"), "hardwareSha256": "0" * 64},
-            sorted(REGISTRY.capabilities))
+        early = hardware.resolved(FIXTURES / "valid" / "expander", assembly="pico")["header"]
         self.assertIn('#define JH_HW_NODE_LED_PIN_OUT_PROVIDER "io0"', early)
         self.assertIn("#define JH_HW_NODE_LED_PIN_OUT_INDEX 0U", early)
         self.assertNotIn("#define JH_HW_NODE_LED_PIN_OUT ", early)
@@ -831,17 +659,6 @@ class ModuleCombinations(unittest.TestCase):
                 self.assertEqual((code, "/assemblies/canhat/nodes/wifi/pins/clock"), (error.code, error.pointer))
 
     def test_a_clock_tree_needs_its_board_source(self) -> None:
-        boards = workdir("boards-without-hse") / "boards"
-        shutil.copytree(ROOT / "boards", boards)
-        profile = boards / "profiles" / "nucleo-g474re.json"
-        data = json.loads(profile.read_text(encoding="utf-8"))
-        del data["clockSources"]["hse"]
-        del data["gpio"]["reservations"]["hse-crystal"]
-        profile.write_text(json.dumps(data, indent=2), encoding="utf-8")
-        with self.assertRaises(HardwareError) as raised:
-            resolve(self.canhat, "canhat", registry=resolver.load_registry(boards))
-        self.assertEqual(("JH-HW-CLOCK", "/assemblies/canhat/clock/tree"),
-                         (raised.exception.code, raised.exception.pointer))
         other = self.hal_mutate("pico-hse", "pico-lora",
                                 lambda d: d["assemblies"]["pico"]["clock"].update(tree="hse-160mhz"))
         self.assertEqual("JH-HW-CLOCK", self.rejected(other, "pico").code)
@@ -937,10 +754,10 @@ class ModuleCombinations(unittest.TestCase):
             with self.subTest(node=node):
                 path = self.hal_mutate(f"no-{line}", fixture, lambda d: d["assemblies"][assembly]["buses"]
                                        [bus]["pins"].update({line: None}))
-                hardware = resolve(path, assembly)["hardware"]
-                self.assertIsNone(renderers.config_init(node, hardware["nodes"][node], hardware))
-        hardware = resolve(self.display, "display")["hardware"]
-        self.assertIsNotNone(renderers.config_init("display", hardware["nodes"]["display"], hardware))
+                header = hardware.resolved(path.parent, assembly=assembly)["header"]
+                self.assertNotIn(f"#define JH_HW_NODE_{node.upper()}_CONFIG_INIT", header)
+        header = hardware.resolved(self.display.parent, assembly="display")["header"]
+        self.assertIn("#define JH_HW_NODE_DISPLAY_CONFIG_INIT", header)
 
     def test_one_phase_reports_its_first_pointer(self) -> None:
         def two_errors(data: dict) -> None:

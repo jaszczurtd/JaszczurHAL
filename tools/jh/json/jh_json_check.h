@@ -18,6 +18,10 @@
 extern "C" {
 #endif
 
+/** Order valid JSON Pointers by path segments: decimal indices numerically
+ * before other UTF-8 tokens, shorter paths before their descendants. */
+int jh_json_pointer_compare(jb_json_span_t a, jb_json_span_t b);
+
 /** Record the concatenation of count parts as a validation failure. */
 hal_status_t jh_check_fail(jh_failure_t *failure, const jb_json_span_t *parts,
                            size_t count);

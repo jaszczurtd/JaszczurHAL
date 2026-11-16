@@ -16,7 +16,7 @@ static BOOL WINAPI cancel_console(DWORD event) {
   InterlockedExchange(&interrupted, 1);
   return TRUE;
 }
-static bool canceled(void *user) {
+bool jh_cli_canceled(void *user) {
   (void)user;
   return InterlockedCompareExchange(&interrupted, 0, 0) != 0;
 }
@@ -28,13 +28,13 @@ static void cancel_signal(int signal_number) {
   (void)signal_number;
   interrupted = 1;
 }
-static bool canceled(void *user) {
+bool jh_cli_canceled(void *user) {
   (void)user;
   return interrupted != 0;
 }
 #endif
 
-static bool install_cancellation(jh_cli_t *ctx) {
+bool jh_cli_install_cancellation(jh_cli_t *ctx) {
 #ifdef _WIN32
   return jh_cli_require(
       ctx,
@@ -53,7 +53,7 @@ static bool install_cancellation(jh_cli_t *ctx) {
 static hal_status_t stream_bytes(FILE *stream, const char *data,
                                  size_t length) {
   while (length != 0) {
-    if (canceled(NULL))
+    if (jh_cli_canceled(NULL))
       return HAL_ECANCELED;
 #ifdef _WIN32
     const HANDLE handle = (HANDLE)_get_osfhandle(_fileno(stream));
@@ -61,7 +61,7 @@ static hal_status_t stream_bytes(FILE *stream, const char *data,
     DWORD written = 0;
     if (WriteFile(handle, data, requested, &written, NULL) == FALSE ||
         written == 0)
-      return canceled(NULL) ? HAL_ECANCELED : HAL_EIO;
+      return jh_cli_canceled(NULL) ? HAL_ECANCELED : HAL_EIO;
     const size_t count = written;
 #else
     const size_t count = fwrite(data, 1, length, stream);
@@ -156,9 +156,9 @@ int jh_cli_repository(jh_cli_t *ctx) {
   options.working_directory = ctx->base;
   options.timeout_ms = timeout;
   options.output = repository_bytes;
-  options.canceled = canceled;
+  options.canceled = jh_cli_canceled;
   options.context = &output;
-  if (!jh_cli_source(ctx, directory) || !install_cancellation(ctx))
+  if (!jh_cli_source(ctx, directory) || !jh_cli_install_cancellation(ctx))
     goto done;
   if (!jh_cli_require(
           ctx, fflush(stdout) == 0 && fflush(stderr) == 0 ? HAL_OK : HAL_EIO, 3,

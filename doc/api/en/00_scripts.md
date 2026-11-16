@@ -764,9 +764,9 @@ Gives the Python tools that import it the target, board and capability
 descriptors under `boards/` as `jh board list` validates them, each registry
 read once per process until its files change, and the files of one build from
 `jh board config` ([jh README](../../../tools/jh/README.md#board-registry)).
-`build_outputs()` returns those files for a target and board; the hardware
-configuration generator passes the board and the values of a device tree
-assembly. `generate()` writes them for the ESP-IDF build. The script has no
+`build_outputs()` returns those files for a target and board; `generate()`
+writes them for an ESP-IDF build without a device tree. Device-tree builds
+use `jh hardware resolve` and `finalize` directly. The script has no
 command line: CMake and `scripts/sync_generated.py` call `jh` directly.
 
 ### `scripts/generate_hal_features.py`
@@ -789,7 +789,13 @@ manifest that carries project configuration is reported with
 `[JH-CFG-MANIFEST]`. Findings fail the command by default; `--report-only` is
 an explicit manual diagnostic mode.
 
-`--effective` uses `jh-vscode` to resolve every configuration a project builds: each declared target with the base build and each variant, without the pairs the header stops with `#error`. Boards come from the manifest; the ignored local board-selection state is not read. A project with `device_tree.json` contributes each assembly with each variant, and its records also name the `assembly`.
+`--effective` delegates to `jh feature lint --effective`. The C implementation
+resolves every configuration a project builds, sharing the feature, board and
+hardware registries in one process. It checks each declared target with the
+base build and each variant, excluding pairs rejected by `#error`. Boards
+come from the manifest; local board-selection state is not read. A project
+with `device_tree.json` contributes each assembly with each variant, and its
+records also name the `assembly`.
 
 It checks constraints and duplicate active feature requests for each configuration. A `.vscode/jaszczurhal.project.json` manifest marks a project.
 
@@ -884,25 +890,18 @@ Provides other scripts with validated target and board data from `boards/`. It i
 
 Two commands serve the library build scripts: `target-facts <target>` prints the build facts of one target as `KEY=VALUE` lines, and `list-targets` prints every target that has a library runner, with its provider and status. `build_link_library.sh` uses both.
 
-### `scripts/hardware_schema.py` and `scripts/hardware_model.py`
+### Hardware schemas and component types
 
-Import-only readers of the hardware description data in `config/hardware/`.
-`hardware_schema.py` validates JSON against the schemas in that directory
-without a third-party JSON Schema package. It knows only the keywords those
-schemas use and refuses any other, so a schema cannot quietly lose a rule.
-Duplicate keys and non-finite numbers fail before validation. Each error
-carries the JSON Pointer the [device tree format](../../en/device_tree_format.md)
-names.
+The C modules in `tools/jh/json` and `tools/jh/hardware` read the hardware
+data in `config/hardware/`. `jh hardware resolve` checks the schema,
+component types, property bounds, connections, features, capabilities and
+recursive child expansion. It rejects duplicate JSON keys and non-finite
+numbers before validation. Diagnostics use the `JH-HW-*` codes and JSON
+Pointers in the [device tree format](../../en/device_tree_format.md).
+The catalogue combines HAL bindings in `config/hardware/bindings/` with
+the project bindings listed by `device_tree.json`.
 
-`hardware_model.py` loads component types: the HAL types in
-`config/hardware/bindings/`, each file named after its `compatible`, plus the
-project bindings a `device_tree.json` lists. It checks what a schema cannot
-express: C types and bounds of properties, child types and the values a
-module sets for them, module connections, feature flags, capabilities, and
-child expansion that would loop. Errors use the specification's `JH-HW-*`
-codes.
-
-### `scripts/generate_hardware_config.py`
+### `jh hardware`
 
 Resolves the `device_tree.json` of a configuration directory into the
 hardware of one assembly, following the [device tree format](../../en/device_tree_format.md).
@@ -929,13 +928,11 @@ application linking an installed device tree package uses
 `jh_link_hal_package()` from `cmake/jh_hal_package.cmake`, which compares the
 package's configuration digest with the one the application generates.
 
-### `scripts/clock_registry.py`
+### `jh clock`
 
-Gives `hardware_resolver.py` and `generate_hardware_config.py` the clock trees
-of `config/hardware/clocks/<target>.json` as `jh clock list` reads them: the
-trees by target, the board component behind each STM32G474 tree and, for a
-board, target and tree, why the board cannot run the tree. The result is read
-once per process until the clock or board registry files change.
+`jh clock list` reads `config/hardware/clocks/<target>.json` and the board
+registry. It lists clock trees, their STM32G474 board components and reasons
+why a board cannot run a tree. Hardware generation uses the same C registry.
 `jh clock check` checks the registry: the output frequencies of each tree
 follow from its parameters, every board provides the clock sources of the
 default tree of each of its targets, the trees match the STM32G474 startup

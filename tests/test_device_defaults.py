@@ -16,11 +16,11 @@ from repo_root import repo_root  # noqa: E402
 ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import hardware_model  # noqa: E402
 from hal_type_copies import HalTypeCopies  # noqa: E402
 from repository_layout import DEVICE_DEFAULTS_HEADER_OUTPUT as OUTPUT  # noqa: E402
 
 HEADER = ROOT / OUTPUT
+HAL_BINDINGS = ROOT / "config/hardware/bindings"
 # The generator is the jh host CLI; the tools/jh CTest suite names its
 # executable, and there is no other generator to fall back to.
 TOOL = os.environ.get("JH_SCHEMA_TOOL") or sys.exit("JH_SCHEMA_TOOL must name the jh executable")
@@ -62,15 +62,15 @@ class HeaderTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="jh native defaults ") as text:
             output = Path(text)
             target = output / OUTPUT
-            missing = native(hardware_model.HAL_BINDINGS, output, "--check")
+            missing = native(HAL_BINDINGS, output, "--check")
             self.assertEqual(1, missing.returncode, missing.stderr)
             self.assertEqual("HAL_ESTATE", json.loads(missing.stdout)["status"])
             self.assertIn("missing generated artifact", missing.stderr)
-            written = native(hardware_model.HAL_BINDINGS, output, "--write")
+            written = native(HAL_BINDINGS, output, "--write")
             self.assertEqual(0, written.returncode, written.stderr)
             self.assertEqual(HEADER.read_bytes(), target.read_bytes())
             target.write_text(target.read_text(encoding="utf-8") + "/* edit */\n", encoding="utf-8")
-            stale = native(hardware_model.HAL_BINDINGS, output, "--check")
+            stale = native(HAL_BINDINGS, output, "--check")
             self.assertEqual(1, stale.returncode)
             self.assertIn("stale", stale.stderr)
             self.assertIn("+++ generated:", stale.stderr)
@@ -98,7 +98,7 @@ class NativeRender(HalTypeCopies):
 class CollisionTests(NativeRender):
     """Names that meet after token conversion fail instead of being renamed."""
 
-    bindings = hardware_model.HAL_BINDINGS
+    bindings = HAL_BINDINGS
 
     def test_enum_values_meeting_as_tokens(self) -> None:
         self.change("jaszczurhal-gpio-input.json",
@@ -119,7 +119,7 @@ class CollisionTests(NativeRender):
 class FloatingDefaultTests(NativeRender):
     """Float and double defaults are rounded once from the decimal in the type."""
 
-    bindings = hardware_model.HAL_BINDINGS
+    bindings = HAL_BINDINGS
 
     def prepare(self, c_type: str, token: str) -> None:
         def add(data: dict) -> None:

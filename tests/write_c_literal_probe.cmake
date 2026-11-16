@@ -1,0 +1,6 @@
+execute_process(COMMAND "${PROGRAM}" RESULT_VARIABLE status OUTPUT_VARIABLE source)
+if(NOT status STREQUAL "0")
+    message(FATAL_ERROR "C literal probe generator failed: ${status}")
+endif()
+file(WRITE "${OUTPUT}.c" "${source}")
+file(WRITE "${OUTPUT}.cpp" "${source}")

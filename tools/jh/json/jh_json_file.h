@@ -79,6 +79,14 @@ hal_status_t jh_resolved_path(const char *root, jb_string_t *out);
  */
 hal_status_t jh_working_directory(jb_string_t *out, jh_failure_t *failure);
 
+/** Join path to base (or the working directory when base is NULL) without
+ * resolving symbolic links. POSIX preserves components, including ".." after
+ * a link; Windows normalizes lexically. Inputs must not point into out.
+ * File errors have exit code 3, memory errors 4.
+ */
+hal_status_t jh_unresolved_path(const char *path, const char *base,
+                                jb_string_t *out, jh_failure_t *failure);
+
 /** Path(base, path).resolve(), as os.path.realpath(strict=False) computes it,
  * in out. A relative path joins base, or the process working directory when
  * base is NULL. On POSIX the components resolve from left to right: a
@@ -240,6 +248,14 @@ const jh_schema_report_t *jh_schema_files_report(const jh_schema_files_t *files,
 hal_status_t jh_schema_files_validate(jh_schema_files_t *files,
                                       const jh_json_document_t *instance,
                                       jh_failure_t *failure);
+/** Validate a device tree with work proportional to its parsed size: the
+ * usual budget plus one root-schema scan per nesting level and instance
+ * token, capped at UINT32_MAX units on every host. Other limits and workspace
+ * are unchanged.
+ * Status, reports and ownership follow jh_schema_files_validate. */
+hal_status_t jh_schema_files_validate_sized(jh_schema_files_t *files,
+                                            const jh_json_document_t *instance,
+                                            jh_failure_t *failure);
 
 #ifdef __cplusplus
 }

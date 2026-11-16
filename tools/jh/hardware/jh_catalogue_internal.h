@@ -41,6 +41,12 @@ bool jh_node_first(jh_node_reader_t *reader, jb_json_node_t node,
 bool jh_node_next(jh_node_reader_t *reader, jb_json_node_t *node);
 /* Compare borrowed UTF-8 spans used as ordered-map keys. */
 int jh_catalogue_span_order(const void *left, const void *right, void *user);
+/* Exact JSON equality, including decimal number spellings. */
+bool jh_node_equal(jh_node_reader_t *reader, jb_json_node_t a,
+                   jb_json_node_t b);
+/* C scalar literal owned by reader, with the defaults generator's failures. */
+const char *jh_node_literal(jh_node_reader_t *reader, jb_json_node_t value,
+                            const jh_c_type_t *type, const char *origin);
 /* Format the hardware diagnostic unless an earlier operation failed. */
 void jh_catalogue_fail(jh_node_reader_t *reader, const char *code,
                        const char *source, const char *pointer,

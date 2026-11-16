@@ -4,9 +4,9 @@
 from __future__ import annotations
 
 import json
+import re
 import os
 from pathlib import Path
-import shutil
 import subprocess
 import sys
 import tempfile
@@ -18,69 +18,61 @@ from repo_root import repo_root  # noqa: E402
 ROOT = repo_root(sys.argv, __file__)
 sys.path.insert(0, str(ROOT / "scripts"))
 
-import hardware_model  # noqa: E402
 from hal_type_copies import HalTypeCopies  # noqa: E402
-import hardware_schema  # noqa: E402
+from project_config import jh_executable  # noqa: E402
+
+SCHEMA_DIR = ROOT / "config/hardware"
+HAL_BINDINGS = SCHEMA_DIR / "bindings"
+TOOL = os.environ.get("JH_SCHEMA_TOOL") or str(jh_executable())
 
 FIXTURES = ROOT / "tests" / "fixtures" / "device_tree"
 CASES = json.loads((FIXTURES / "cases.json").read_text(encoding="utf-8"))
 
 
 class SchemaReaderTests(unittest.TestCase):
-    """The dependency-free reader against the specification's rules."""
+    """Native schema CLI against independent fixture and regex expectations.
 
-    def setUp(self) -> None:
-        self.schemas = hardware_schema.SchemaSet()
+    Scalar parsing, exact equality, unsupported keywords and pointer ordering
+    are covered by jh_hardware and jh_schema in C.
+    """
 
     def native_errors(self, path: Path, schema: str,
-                      directory: Path = hardware_schema.SCHEMA_DIR) -> None:
-        """Compare the migrated validator with these existing regressions."""
-        executable = os.environ.get("JH_SCHEMA_TOOL")
-        if not executable:
-            return
-        schemas = self.schemas if directory == hardware_schema.SCHEMA_DIR else hardware_schema.SchemaSet(directory)
-        expected = schemas.validate(schema, hardware_schema.load_json(path))
-        expected.sort(key=lambda e: hardware_schema.pointer_key(e.pointer))
+                      directory: Path = SCHEMA_DIR) -> list[dict]:
         result = subprocess.run(
-            [executable, "json", "validate", "--file", str(path), "--schema",
+            [TOOL, "json", "validate", "--file", str(path), "--schema",
              str(directory / schema), "--json"],
             capture_output=True, encoding="utf-8", check=False, timeout=30)
-        self.assertEqual(2 if expected else 0, result.returncode, result.stderr)
         output = json.loads(result.stdout)
-        self.assertEqual("HAL_ECONFIG" if expected else "HAL_OK", output["status"])
-        self.assertEqual([(e.pointer, e.message) for e in expected],
-                         [(e["instancePointer"], e["message"]) for e in output["errors"]])
-        for error in expected:
-            self.assertIn(f":{error.pointer or '/'}: {error.message}", result.stderr)
-        for error in output["errors"]:
+        errors = output["errors"]
+        self.assertEqual(2 if errors else 0, result.returncode, result.stderr)
+        self.assertEqual("HAL_ECONFIG" if errors else "HAL_OK", output["status"])
+        for error in errors:
+            self.assertIn(f":{error['instancePointer'] or '/'}: {error['message']}", result.stderr)
             self.assertTrue(error["reason"])
             self.assertTrue(Path(unquote(error["schemaUri"])).is_file())
             self.assertTrue(error["schemaPointer"].startswith("/"))
+        return errors
 
     def test_every_index_case_is_classified_as_listed(self) -> None:
         for case in CASES["cases"]:
             with self.subTest(case=case["file"]):
-                data = hardware_schema.load_json(FIXTURES / case["file"])
-                self.native_errors(FIXTURES / case["file"], case["schema"])
-                first = self.schemas.first_error(case["schema"], data)
+                errors = self.native_errors(FIXTURES / case["file"], case["schema"])
                 if case["expected"] == "schema":
-                    self.assertIsNotNone(first)
-                    self.assertEqual(case["at"], first.pointer)
+                    self.assertTrue(errors)
+                    self.assertEqual(case["at"], errors[0]["instancePointer"])
                 else:
-                    self.assertIsNone(first, first)
+                    self.assertEqual([], errors)
 
     def test_fixture_bindings_are_valid_types(self) -> None:
         paths = sorted((FIXTURES / "bindings").glob("*.json"))
-        paths += sorted(hardware_model.HAL_BINDINGS.glob("*.json"))
+        paths += sorted(HAL_BINDINGS.glob("*.json"))
         for path in paths:
             with self.subTest(binding=path.name):
-                self.assertEqual([], self.schemas.validate(
-                    "binding.schema.json", hardware_schema.load_json(path)))
-                self.native_errors(path, "binding.schema.json")
+                self.assertEqual([], self.native_errors(path, "binding.schema.json"))
         # The C regex backend once treated NBSP differently from Python re.
         # Combining marks/new scalars remain legal at the schema layer; NFC and
         # printable checks belong to the catalogue rules.
-        binding = hardware_schema.load_json(hardware_model.HAL_BINDINGS / "jaszczurhal-pwm-output.json")
+        binding = json.loads((HAL_BINDINGS / "jaszczurhal-pwm-output.json").read_text(encoding="utf-8"))
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "unit.json"
             for unit in ("Hz", "Hz ", "\u00a0Hz", "Hz\u00a0", "\u001cHz",
@@ -88,13 +80,17 @@ class SchemaReaderTests(unittest.TestCase):
                 with self.subTest(unit=unit):
                     binding["properties"]["frequencyHz"]["unit"] = unit
                     path.write_text(json.dumps(binding, ensure_ascii=False), encoding="utf-8")
-                    self.native_errors(path, "binding.schema.json")
+                    errors = self.native_errors(path, "binding.schema.json")
+                    # Python's $ anchor also matches before a final LF;
+                    # the catalogue separately rejects surrounding whitespace.
+                    self.assertEqual(unit not in ("Hz", "Hz\n", "e\u0301", "\U0001fae9"), bool(errors))
             # printf("%s") used to truncate this valid JSON member's Pointer.
             binding["properties"]["frequencyHz"]["unit"] = "Hz"
             binding["a\0b"] = True
             path.write_text(json.dumps(binding, ensure_ascii=False), encoding="utf-8")
-            self.native_errors(path, "binding.schema.json")
-            if os.environ.get("JH_SCHEMA_TOOL"):
+            errors = self.native_errors(path, "binding.schema.json")
+            self.assertEqual(["/a\0b"], [error["instancePointer"] for error in errors])
+            if TOOL:
                 # Every production pattern uses the same host adapter. Check
                 # its search/anchor, escape, lookahead and Unicode behavior.
                 patterns: set[str] = set()
@@ -109,8 +105,8 @@ class SchemaReaderTests(unittest.TestCase):
                         for child in value:
                             collect(child)
 
-                for document in self.schemas.documents.values():
-                    collect(document)
+                for schema in SCHEMA_DIR.glob("*.schema.json"):
+                    collect(json.loads(schema.read_text(encoding="utf-8")))
                 schema_path = Path(directory) / "pattern.schema.json"
                 for pattern in sorted(patterns):
                     schema_path.write_text(json.dumps({"pattern": pattern}), encoding="utf-8")
@@ -119,100 +115,19 @@ class SchemaReaderTests(unittest.TestCase):
                                   "Hz\n", "\u00a0Hz", "Hz\u001c", "e\u0301", "\U0001fae9", "a\0b"):
                         with self.subTest(pattern=pattern, value=value):
                             path.write_text(json.dumps(value, ensure_ascii=False), encoding="utf-8")
-                            self.native_errors(path, schema_path.name, Path(directory))
-
-    def test_json_rules_beyond_the_schemas(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            duplicate = Path(directory) / "duplicate.json"
-            duplicate.write_text('{"a": 1, "a": 2}', encoding="utf-8")
-            with self.assertRaises(hardware_schema.InputError):
-                hardware_schema.load_json(duplicate)
-            infinite = Path(directory) / "infinite.json"
-            infinite.write_text('{"a": Infinity}', encoding="utf-8")
-            with self.assertRaises(hardware_schema.InputError):
-                hardware_schema.load_json(infinite)
-            # Python reads 1e400 as inf and 1e-400 as 0 unless the reader stops it.
-            numbers = Path(directory) / "numbers.json"
-            for token in ("1e400", "-1e400", "1e-400", "-2.5e-999"):
-                with self.subTest(token=token):
-                    numbers.write_text(f'{{"a": [{token}]}}', encoding="utf-8")
-                    with self.assertRaisesRegex(hardware_schema.InputError, "binary64"):
-                        hardware_schema.load_json(numbers)
-            numbers.write_text('{"a": [4.9e-324, 0e400, -0.0, 1.7976931348623157e308]}',
-                               encoding="utf-8")
-            self.assertEqual({"a": [5e-324, 0.0, 0.0, 1.7976931348623157e308]},
-                             hardware_schema.load_json(numbers))
-            surrogate = Path(directory) / "surrogate.json"
-            surrogate.write_text('{"a": ["\\ud800"]}', encoding="utf-8")
-            with self.assertRaisesRegex(hardware_schema.InputError, "surrogate"):
-                hardware_schema.load_json(surrogate)
-            surrogate.write_text('{"a": "\\ud83d\\ude00"}', encoding="utf-8")
-            self.assertEqual({"a": "\U0001f600"}, hardware_schema.load_json(surrogate))
-
-    def test_a_schema_number_is_finite(self) -> None:
-        for value in (float("inf"), float("-inf"), float("nan")):
-            with self.subTest(value=value):
-                self.assertFalse(hardware_schema.type_matches(value, "number"))
-        self.assertTrue(hardware_schema.type_matches(10**400, "number"))
-        self.assertTrue(hardware_schema.type_matches(1.5, "number"))
-
-    def test_booleans_are_not_integers_and_equality_is_json(self) -> None:
-        self.assertFalse(hardware_schema.type_matches(True, "integer"))
-        self.assertTrue(hardware_schema.type_matches(2.0, "integer"))
-        self.assertTrue(hardware_schema.json_equal(1, 1.0))
-        self.assertFalse(hardware_schema.json_equal(True, 1))
-
-    def test_pointers_follow_code_point_and_index_order(self) -> None:
-        pointers = ["/nodes/fooBar", "/nodes/fooBAR", "/a/10", "/a/9"]
-        self.assertEqual(["/a/9", "/a/10", "/nodes/fooBAR", "/nodes/fooBar"],
-                         sorted(pointers, key=hardware_schema.pointer_key))
-
-    def test_unknown_schema_keywords_are_refused(self) -> None:
-        with tempfile.TemporaryDirectory() as directory:
-            Path(directory, "x.schema.json").write_text(
-                '{"type": "object", "dependentRequired": {}}', encoding="utf-8")
-            with self.assertRaises(ValueError):
-                hardware_schema.SchemaSet(Path(directory))
-
-
-class HalCatalogueTests(unittest.TestCase):
-    def test_hal_types_pass_every_check(self) -> None:
-        catalogue = hardware_model.load_hal_catalogue()
-        hardware_model.check_catalogue(
-            catalogue, hardware_model.hal_features(), hardware_model.board_capabilities())
-        for compatible in ("pimoroni,pim730", "waveshare,core1262-hf",
-                           "embeddedgarage,can-fd-hat-g474", "microchip,mcp2515",
-                           "ilitek,ili9341", "semtech,sx1262", "infineon,cyw43439"):
-            self.assertIn(compatible, catalogue.bindings)
-
-    def test_module_children_and_connections_name_declared_parts(self) -> None:
-        catalogue = hardware_model.load_hal_catalogue()
-        core = catalogue.bindings["waveshare,core1262-hf"].data
-        self.assertEqual("radio.rfSwitchA", core["connections"]["rxen"]["owner"])
-        self.assertEqual("radio.rfSwitchB", core["connections"]["txen"]["owner"])
-        pim = catalogue.bindings["pimoroni,pim730"].data
-        self.assertEqual(["radio.btOn"], pim["connections"]["wlOn"]["aliases"])
+                            errors = self.native_errors(path, schema_path.name, Path(directory))
+                            self.assertEqual(re.search(pattern, value) is None, bool(errors))
 
 
 class CatalogueRuleTests(HalTypeCopies):
     """Rules beyond the binding schema, on copies of the HAL types."""
 
-    bindings = hardware_model.HAL_BINDINGS
+    bindings = HAL_BINDINGS
 
     def expect(self, code: str, file: str, pointer: str) -> None:
-        with self.assertRaises(hardware_model.HardwareError) as raised:
-            catalogue = hardware_model.load_hal_catalogue(self.work)
-            hardware_model.check_catalogue(catalogue, hardware_model.hal_features(),
-                                           hardware_model.board_capabilities())
-        self.assertEqual((code, file, pointer), (raised.exception.code,
-                                                 Path(raised.exception.source).name,
-                                                 raised.exception.pointer))
-        executable = os.environ.get("JH_SCHEMA_TOOL")
-        if not executable:
-            return
         # The migrated catalogue reports the same code, file and Pointer.
         result = subprocess.run(
-            [executable, "generate", "device-defaults", "--root", str(ROOT), "--bindings",
+            [TOOL, "generate", "device-defaults", "--root", str(ROOT), "--bindings",
              str(self.work), "--output-root", str(self.work / "out"), "--check", "--json"],
             capture_output=True, encoding="utf-8", check=False, timeout=120)
         self.assertEqual(2, result.returncode, result.stderr)
@@ -282,59 +197,6 @@ class CatalogueRuleTests(HalTypeCopies):
         self.change("microchip-mcp2515.json",
                     lambda d: d["requiresFeatures"].append("HAL_ENABLE_MCP2516"))
         self.expect("JH-HW-BINDING", "microchip-mcp2515.json", "/requiresFeatures/2")
-
-
-class ProjectBindingTests(unittest.TestCase):
-    def setUp(self) -> None:
-        self.work = Path(tempfile.mkdtemp(prefix="jh bindings "))
-        self.hal = hardware_model.load_hal_catalogue()
-        shutil.copy(FIXTURES / "bindings" / "gpio-output.json", self.work / "led.json")
-
-    def tearDown(self) -> None:
-        shutil.rmtree(self.work)
-
-    def write(self, name: str, compatible: str) -> None:
-        data = json.loads((self.work / "led.json").read_text(encoding="utf-8"))
-        data["compatible"] = compatible
-        (self.work / name).write_text(json.dumps(data), encoding="utf-8")
-
-    def expect(self, entries: list[str], pointer: str) -> hardware_model.HardwareError:
-        with self.assertRaises(hardware_model.HardwareError) as raised:
-            hardware_model.load_catalogue(self.work / "device_tree.json", entries, self.hal)
-        self.assertEqual("JH-HW-BINDING", raised.exception.code)
-        self.assertEqual(pointer, raised.exception.pointer)
-        return raised.exception
-
-    def test_valid_fixtures_load_their_project_types(self) -> None:
-        for case in CASES["cases"]:
-            if case["schema"] != "device_tree.schema.json" or case["expected"] != "accept":
-                continue
-            path = FIXTURES / case["file"]
-            entries = hardware_schema.load_json(path).get("bindings", [])
-            catalogue = hardware_model.load_catalogue(path, entries, self.hal)
-            project = {b.compatible for b in catalogue.bindings.values() if b.origin == "project"}
-            self.assertEqual(len(entries), len(project), case["file"])
-
-    def test_one_file_named_twice_is_read_once(self) -> None:
-        (self.work / "sub").mkdir()
-        catalogue = hardware_model.load_catalogue(
-            self.work / "sub" / "device_tree.json", ["../led.json", ".././led.json"], self.hal)
-        self.assertEqual(1, sum(b.origin == "project" for b in catalogue.bindings.values()))
-
-    def test_repeated_compatible_fails(self) -> None:
-        self.write("second.json", "test,gpio-output")
-        self.expect(["led.json", "second.json"], "/compatible")
-
-    def test_project_type_cannot_shadow_a_hal_type(self) -> None:
-        self.write("shadow.json", "jaszczurhal,gpio-output")
-        error = self.expect(["shadow.json"], "/compatible")
-        self.assertIn(str(ROOT / "config/hardware/bindings"), error.detail)
-
-    def test_only_relative_single_files_are_accepted(self) -> None:
-        for entry in ("/abs/led.json", "https://example.invalid/led.json", "sub\\led.json",
-                      "*.json", "missing.json"):
-            with self.subTest(entry=entry):
-                self.expect([entry], "/bindings/0")
 
 
 if __name__ == "__main__":

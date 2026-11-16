@@ -157,6 +157,10 @@
                       "maximum": 127
                     },
                     {
+                      "type": "string",
+                      "pattern": "^0x0*([0-7][0-9a-fA-F]|[0-9a-fA-F])(?!\\n)$"
+                    },
+                    {
                       "type": "null"
                     }
                   ]

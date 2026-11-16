@@ -5,21 +5,27 @@
 #include <string.h>
 
 void jh_failure_init(jh_failure_t *failure) {
-  const jh_failure_t empty = {HAL_OK, 0, {0}, {0}, {0}, {0}};
+  const jh_failure_t empty = {.status = HAL_OK};
   *failure = empty;
   // Initialization only checks its arguments, which are valid here.
   (void)jb_string_init(&failure->message, jb_heap_allocator());
   (void)jb_string_init(&failure->code, jb_heap_allocator());
   (void)jb_string_init(&failure->source, jb_heap_allocator());
   (void)jb_string_init(&failure->pointer, jb_heap_allocator());
+  (void)jb_string_init(&failure->detail, jb_heap_allocator());
+  (void)jb_string_init(&failure->related, jb_heap_allocator());
+  (void)jb_string_init(&failure->argument, jb_heap_allocator());
 }
 
 void jh_failure_destroy(jh_failure_t *failure) {
-  const jh_failure_t empty = {HAL_NONE, 0, {0}, {0}, {0}, {0}};
+  const jh_failure_t empty = {.status = HAL_NONE};
   jb_string_destroy(&failure->message);
   jb_string_destroy(&failure->code);
   jb_string_destroy(&failure->source);
   jb_string_destroy(&failure->pointer);
+  jb_string_destroy(&failure->detail);
+  jb_string_destroy(&failure->related);
+  jb_string_destroy(&failure->argument);
   *failure = empty;
 }
 
@@ -41,6 +47,10 @@ hal_status_t jh_fail(jh_failure_t *failure, hal_status_t status, int exit_code,
   jb_string_clear(&failure->code);
   jb_string_clear(&failure->source);
   jb_string_clear(&failure->pointer);
+  jb_string_clear(&failure->detail);
+  jb_string_clear(&failure->related);
+  jb_string_clear(&failure->argument);
+  failure->line = failure->column = 0;
   failure->status = status;
   failure->exit_code = status == HAL_ENOMEM ? 4 : exit_code;
   return status;
@@ -73,6 +83,10 @@ hal_status_t jh_fail_coded(jh_failure_t *failure, hal_status_t status,
     failure->code = name;
     failure->source = place;
     jb_string_clear(&failure->pointer);
+    jb_string_clear(&failure->detail);
+    jb_string_clear(&failure->related);
+    jb_string_clear(&failure->argument);
+    failure->line = failure->column = 0;
     failure->status = status;
     failure->exit_code = status == HAL_ENOMEM ? 4 : exit_code;
     return status;
@@ -100,8 +114,10 @@ hal_status_t jh_fail_pointer(jh_failure_t *failure, const char *code,
   jh_put_span(&next.message, &stored,
               pointer.length == 0 ? jh_span("/") : pointer);
   jh_put(&next.message, &stored, ": ");
-  for (size_t i = 0; i < count; ++i)
+  for (size_t i = 0; i < count; ++i) {
     jh_put_span(&next.message, &stored, parts[i]);
+    jh_put_span(&next.detail, &stored, parts[i]);
+  }
   if (stored != HAL_OK) {
     jh_failure_destroy(&next);
     return jh_fail_storage(failure, stored);
@@ -126,6 +142,10 @@ hal_status_t jh_fail_storage(jh_failure_t *failure, hal_status_t status) {
   jb_string_clear(&failure->code);
   jb_string_clear(&failure->source);
   jb_string_clear(&failure->pointer);
+  jb_string_clear(&failure->detail);
+  jb_string_clear(&failure->related);
+  jb_string_clear(&failure->argument);
+  failure->line = failure->column = 0;
   failure->status = status;
   failure->exit_code = status == HAL_ENOMEM || status == HAL_EOVERFLOW ? 4 : 3;
   return status;

@@ -104,7 +104,7 @@ def locate(text: str, pointer: str) -> tuple[int, int]:
 
 
 def _problem(error: Exception, fallback: Path, assemblies: tuple[str, ...] = ()) -> Problem:
-    from hardware_model import HardwareError
+    from device_tree_project import HardwareError
 
     if not isinstance(error, HardwareError):
         return Problem(fallback, 1, 1, "JH-HW", str(error), assemblies)
@@ -116,7 +116,7 @@ def _problem(error: Exception, fallback: Path, assemblies: tuple[str, ...] = ())
     if isinstance(syntax, json.JSONDecodeError):
         return Problem(path, syntax.lineno, syntax.colno, error.code, syntax.msg, assemblies)
     if error.line is not None:
-        return Problem(path, error.line, 1, error.code, detail, assemblies)
+        return Problem(path, error.line, error.column, error.code, detail, assemblies)
     try:
         line, column = locate(path.read_text(encoding="utf-8"), error.pointer)
     except (OSError, UnicodeDecodeError):
@@ -127,21 +127,21 @@ def _problem(error: Exception, fallback: Path, assemblies: tuple[str, ...] = ())
 def problems(config_dir: Path) -> list[Problem]:
     """The problems of ``config_dir``/device_tree.json: one for a file that
     does not load, else the first error of each assembly."""
-    import hardware_resolver
-    from hardware_model import HardwareError
+    import device_tree_project
+    from device_tree_project import HardwareError
 
     path = Path(config_dir) / DEVICE_TREE
     if not path.is_file():
         return [Problem(path, 1, 1, "JH-HW-SCHEMA", f"{DEVICE_TREE} does not exist")]
     try:
-        data = hardware_resolver.load_device_tree(path)
-        registry = hardware_resolver.load_registry()
+        declared = device_tree_project.assemblies(config_dir)
     except (HardwareError, ValueError) as error:
         return [_problem(error, path)]
     found: dict[tuple, tuple[Exception, list[str]]] = {}
-    for name in sorted(data["assemblies"]):
+    for item in declared:
+        name = item["name"]
         try:
-            hardware_resolver.Resolver(path, registry).resolve(assembly=name)
+            device_tree_project.resolved(config_dir, assembly=name)
         except (HardwareError, ValueError) as error:
             key = (getattr(error, "source", ""), getattr(error, "pointer", ""),
                    getattr(error, "code", ""), str(error))

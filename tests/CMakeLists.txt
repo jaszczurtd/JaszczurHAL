@@ -1354,11 +1354,6 @@ add_test(NAME test_hardware_data
         ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_data.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
-add_test(NAME test_hardware_literals
-    COMMAND ${Python3_EXECUTABLE}
-        ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_literals.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/..
-)
 add_test(NAME test_hardware_config
     COMMAND ${Python3_EXECUTABLE}
         ${CMAKE_CURRENT_SOURCE_DIR}/test_hardware_config.py
@@ -1389,18 +1384,19 @@ add_test(NAME test_device_tree_matrix_build
         ${CMAKE_CURRENT_SOURCE_DIR}/test_device_tree_matrix_build.py
         ${CMAKE_CURRENT_SOURCE_DIR}/..
 )
-# String and float/double literals of hardware_literals.py built as C and C++
+# String and float/double literals of jb_c_literal built as C and C++
 # with the host warning policy as errors (GCC, Clang and MSVC alike); each
 # program checks the bytes and bit patterns its literals hold.
 set(_jh_literal_probe ${CMAKE_CURRENT_BINARY_DIR}/c_literal_probe)
+add_executable(write_c_literal_probe write_c_literal_probe.c)
+target_link_libraries(write_c_literal_probe PRIVATE jb::base)
+jh_enable_host_warnings(write_c_literal_probe ERRORS)
 add_custom_command(
     OUTPUT ${_jh_literal_probe}.c ${_jh_literal_probe}.cpp
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/write_c_literal_probe.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/.. ${_jh_literal_probe}.c ${_jh_literal_probe}.cpp
+    COMMAND ${CMAKE_COMMAND} -DPROGRAM=$<TARGET_FILE:write_c_literal_probe>
+        -DOUTPUT=${_jh_literal_probe} -P ${CMAKE_CURRENT_SOURCE_DIR}/write_c_literal_probe.cmake
     DEPENDS
-        ${CMAKE_CURRENT_SOURCE_DIR}/write_c_literal_probe.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/hardware_literals.py
-        ${CMAKE_CURRENT_SOURCE_DIR}/../scripts/hardware_schema.py
+        write_c_literal_probe ${CMAKE_CURRENT_SOURCE_DIR}/write_c_literal_probe.cmake
     VERBATIM)
 # One target runs the generator; with the Makefile generator a rule listed by
 # two targets would run twice in parallel and race on its outputs.
@@ -1416,11 +1412,10 @@ foreach(_jh_language c cpp)
         COMMAND test_device_defaults_literals_${_jh_language})
 endforeach()
 
-# Device tree examples resolved by generate_hardware_config.py; each probe
+# Device tree examples resolved by jh hardware; each probe
 # fills the HAL types from the generated initializers as C and C++ with the
 # host warning policy as errors and compares them with the pin macros.
 file(GLOB _jh_hardware_inputs CONFIGURE_DEPENDS
-    ${CMAKE_SOURCE_DIR}/scripts/*.py
     ${CMAKE_SOURCE_DIR}/config/hardware/*.json
     ${CMAKE_SOURCE_DIR}/config/hardware/bindings/*.json
     ${CMAKE_SOURCE_DIR}/config/hardware/clocks/*.json
@@ -1430,18 +1425,20 @@ function(jh_hardware_config_probe NAME FIXTURE ASSEMBLY)
     cmake_parse_arguments(PROBE "FINALIZE" "" "DEFINITIONS" ${ARGN})
     set(_dir ${CMAKE_CURRENT_BINARY_DIR}/hardware_config/${NAME})
     set(_config ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/device_tree/hal/${FIXTURE})
-    set(_generator ${Python3_EXECUTABLE} ${CMAKE_SOURCE_DIR}/scripts/generate_hardware_config.py)
+    jh_project_config_tool(_jh_hw_tool "${CMAKE_SOURCE_DIR}" "${_dir}")
+    set(_generator "${_jh_hw_tool}" hardware)
     set(_outputs ${_dir}/jh_hardware.h)
-    set(_commands COMMAND ${_generator} resolve --config-dir ${_config} --assembly ${ASSEMBLY}
+    set(_commands COMMAND ${_generator} resolve --root ${CMAKE_SOURCE_DIR} --config-dir ${_config} --assembly ${ASSEMBLY}
         --output-dir ${_dir} --output-root ${CMAKE_BINARY_DIR})
     if(PROBE_FINALIZE)
         list(APPEND _outputs ${_dir}/jh_board_config.h)
         list(APPEND _commands COMMAND ${_generator} finalize
+            --root ${CMAKE_SOURCE_DIR}
             --hardware ${_dir}/jh_hardware_resolved.json --hardware-header ${_dir}/jh_hardware.h
             --config-dir ${_config} --output-dir ${_dir} --output-root ${CMAKE_BINARY_DIR})
     endif()
     add_custom_command(OUTPUT ${_outputs} ${_commands}
-        DEPENDS ${_config}/device_tree.json ${_jh_hardware_inputs} VERBATIM)
+        DEPENDS ${_config}/device_tree.json ${_jh_hardware_inputs} "${_jh_hw_tool}" VERBATIM)
     # Only this target generates the headers; the probes wait for it.
     add_custom_target(test_hardware_config_${NAME}_headers DEPENDS ${_outputs})
     set(_source ${CMAKE_CURRENT_SOURCE_DIR}/hardware_config/probe_${NAME}.c)

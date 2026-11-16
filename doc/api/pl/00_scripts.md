@@ -811,9 +811,10 @@ i ich cech w `boards/` w postaci sprawdzonej przez `jh board list`, każdy
 rejestr czytany raz na proces, dopóki jego pliki się nie zmienią, oraz pliki
 jednej kompilacji z `jh board config`
 ([README jh](../../../tools/jh/README.pl.md#rejestr-płytek)). `build_outputs()`
-zwraca te pliki dla targetu i płytki; generator konfiguracji sprzętu przekazuje
-płytkę i wartości montażu device tree. `generate()` zapisuje je dla kompilacji
-ESP-IDF. Skrypt nie ma wiersza poleceń: CMake i `scripts/sync_generated.py`
+zwraca te pliki dla targetu i płytki; `generate()` zapisuje je dla kompilacji
+ESP-IDF bez device tree. Buildy z device tree używają bezpośrednio
+`jh hardware resolve` i `finalize`. Skrypt nie ma wiersza poleceń:
+CMake i `scripts/sync_generated.py`
 wołają `jh` bezpośrednio.
 
 ### `scripts/generate_hal_features.py`
@@ -838,7 +839,13 @@ konfigurację projektu jest zgłaszany z diagnostyką `[JH-CFG-MANIFEST]`.
 Wykryte problemy domyślnie kończą polecenie niepowodzeniem; `--report-only`
 jest jawnym, ręcznym trybem diagnostycznym.
 
-`--effective` korzysta z mechanizmu `jh-vscode`, aby ustalić każdą konfigurację, dla której projekt się kompiluje: każdą zadeklarowaną platformę z kompilacją bazową i każdym wariantem, bez par zatrzymanych w nagłówku przez `#error`. Płytki pochodzą z manifestu; lokalny stan płytki ignorowany przez Git nie jest odczytywany. Projekt z `device_tree.json` daje każdy montaż z każdym wariantem, a jego rekordy podają też `assembly`.
+`--effective` wywołuje `jh feature lint --effective`. Implementacja C
+rozwiązuje każdą konfigurację, dla której projekt się kompiluje, współdzieląc
+rejestry funkcji, płytek i sprzętu w jednym procesie. Sprawdza każdy
+zadeklarowany target z kompilacją bazową i każdym wariantem, pomijając pary
+odrzucone przez `#error`. Płytki pochodzą z manifestu; lokalny stan wyboru
+płytki nie jest odczytywany. Projekt z `device_tree.json` daje każdy montaż
+z każdym wariantem, a jego rekordy podają też `assembly`.
 
 Dla każdej konfiguracji sprawdza ograniczenia oraz powtórzone żądania modułów. Plik `.vscode/jaszczurhal.project.json` oznacza projekt.
 
@@ -933,25 +940,18 @@ Udostępnia innym skryptom sprawdzone dane platform i płytek z `boards/`. Korzy
 
 Dwa polecenia służą skryptom budującym biblioteki: `target-facts <target>` wypisuje dane kompilacji jednej platformy jako wiersze `KLUCZ=WARTOŚĆ`, a `list-targets` wypisuje wszystkie platformy, dla których istnieje skrypt budujący bibliotekę, razem ze środowiskiem kompilacji (`provider`) i statusem. Oba wywołuje `build_link_library.sh`.
 
-### `scripts/hardware_schema.py` oraz `scripts/hardware_model.py`
+### Schematy sprzętu i typy komponentów
 
-Moduły do wczytywania danych opisu sprzętu z `config/hardware/`.
-`hardware_schema.py` sprawdza JSON według schematów z tego katalogu i nie
-potrzebuje zewnętrznego pakietu JSON Schema. Zna tylko słowa kluczowe używane
-przez te schematy, a każde inne odrzuca, więc schemat nie zgubi po cichu
-żadnej reguły. Powtórzone klucze i liczby nieskończone kończą się błędem
-jeszcze przed walidacją. Każdy błąd wskazuje JSON Pointer opisany w
-[formacie drzewa urządzeń](../../pl/device_tree_format.md).
+Moduły C w `tools/jh/json` i `tools/jh/hardware` czytają dane sprzętu
+z `config/hardware/`. `jh hardware resolve` sprawdza schemat, typy
+komponentów, zakresy właściwości, połączenia, funkcje, cechy sprzętowe oraz
+rekurencyjne rozwijanie dzieci. Odrzuca powtórzone klucze JSON i liczby
+nieskończone przed walidacją. Diagnostyka używa kodów `JH-HW-*` i wskaźników
+JSON z [formatu drzewa urządzeń](../../pl/device_tree_format.md).
+Katalog łączy bindings HAL z `config/hardware/bindings/` oraz bindings
+projektu wymienione w `device_tree.json`.
 
-`hardware_model.py` wczytuje typy komponentów: typy HAL z
-`config/hardware/bindings/`, w których nazwa pliku odpowiada `compatible`,
-oraz bindings projektu wymienione w `device_tree.json`. Sprawdza to, czego
-schemat nie wyrazi: typy C i zakresy właściwości, typy dzieci i wartości
-ustawiane im przez moduł, połączenia modułu, flagi funkcji, cechy sprzętowe
-oraz rozwijanie dzieci, które zapętliłoby się w nieskończoność. Błędy mają kody
-`JH-HW-*` ze specyfikacji.
-
-### `scripts/generate_hardware_config.py`
+### `jh hardware`
 
 Rozwiązuje `device_tree.json` z katalogu konfiguracji do sprzętu jednego
 montażu, według [formatu drzewa urządzeń](../../pl/device_tree_format.md).
@@ -977,14 +977,12 @@ linkująca zainstalowany pakiet z device tree korzysta z `jh_link_hal_package()`
 z `cmake/jh_hal_package.cmake`, które porównuje skrót konfiguracji pakietu
 z tym, który generuje sama aplikacja.
 
-### `scripts/clock_registry.py`
+### `jh clock`
 
-Udostępnia modułom `hardware_resolver.py` i `generate_hardware_config.py`
-drzewa zegarów z `config/hardware/clocks/<target>.json` tak, jak czyta je
-`jh clock list`: drzewa każdego targetu, komponent płytki stojący za każdym
-drzewem STM32G474 oraz, dla płytki, targetu i drzewa, powody, dla których
-płytka nie może pracować z tym drzewem. Wynik jest czytany raz na proces,
-dopóki nie zmienią się pliki rejestru zegarów albo płytek. Rejestr sprawdza
+`jh clock list` czyta `config/hardware/clocks/<target>.json` i rejestr
+płytek. Wypisuje drzewa zegarów, ich komponenty płytek STM32G474 oraz powody,
+dla których płytka nie może pracować z drzewem. Generator sprzętu korzysta
+z tego samego rejestru C. Rejestr sprawdza
 `jh clock check`: częstotliwości wyjściowe każdego drzewa muszą wynikać z jego
 parametrów, każda płytka musi mieć źródła zegara domyślnego drzewa każdego
 z jej targetów, drzewa muszą zgadzać się z nagłówkami startowymi STM32G474

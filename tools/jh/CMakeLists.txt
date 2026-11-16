@@ -42,14 +42,14 @@ target_include_directories(jh_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/base"
   "${CMAKE_CURRENT_SOURCE_DIR}/json")
 target_link_libraries(jh_core PUBLIC jb::host PRIVATE jb::unicode)
 jh_tool_target(jh_core)
-# The schema validator, C++ behind its C API.
-add_library(jh_schema STATIC json/jh_json_schema.cpp)
+# The schema validator and its caller-owned arenas. C11.
+add_library(jh_schema STATIC json/jh_json_schema.c)
 target_include_directories(jh_schema PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/json")
 target_link_libraries(jh_schema PUBLIC jb::host PRIVATE jh_core pcre2-8-static jb::unicode)
 jh_tool_target(jh_schema)
 # JSON files, VS Code settings, schema documents, the validation failures of
 # the registry readers and generated-artifact publishing. C11.
-add_library(jh_files STATIC json/jh_json_file.c json/jh_json_check.c
+add_library(jh_files STATIC json/jh_json_file.c json/jh_json_check.c base/jh_process_support.c
   src/jh_generated_output.c)
 target_include_directories(jh_files PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(jh_files PUBLIC jh_core jh_schema jb::host)
@@ -62,6 +62,7 @@ target_include_directories(jh_sha256 PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../s
 target_link_libraries(jh_sha256 PUBLIC jb::status)
 jh_tool_target(jh_sha256)
 add_library(jh_registry STATIC config/jh_feature_registry.c config/jh_board_outputs.c
+  json/jh_json_digest.c
   config/jh_feature_lint.c config/jh_board_registry.c config/jh_clock_registry.c
   config/jh_project_build.c config/jh_config_expression.c
   config/jh_project_config.c)
@@ -70,15 +71,37 @@ target_link_libraries(jh_registry PUBLIC jh_files PRIVATE jh_sha256 pcre2-8-stat
 jh_tool_target(jh_registry)
 # The type catalogue and the device defaults generator. C11.
 add_library(jh_host STATIC hardware/jh_type_catalogue.c hardware/jh_catalogue_nodes.c
-  hardware/jh_catalogue_check.c hardware/jh_device_defaults.c)
+  hardware/jh_catalogue_check.c hardware/jh_device_defaults.c
+  hardware/jh_hardware.c hardware/jh_hardware_values.c hardware/jh_hardware_nodes.c
+  hardware/jh_hardware_properties.c hardware/jh_hardware_wiring.c
+  hardware/jh_hardware_transport.c hardware/jh_hardware_model.c
+  hardware/jh_hardware_output.c hardware/jh_hardware_render.c
+  hardware/jh_hardware_header.c hardware/jh_hardware_document.c
+  hardware/jh_hardware_board.c hardware/jh_hardware_abi.c
+  hardware/jh_hardware_program.c hardware/jh_hardware_finalize.c
+  hardware/jh_effective_features.c hardware/jh_effective_project.c)
 target_include_directories(jh_host PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/hardware"
   "${CMAKE_CURRENT_SOURCE_DIR}/config")
-target_link_libraries(jh_host PUBLIC jh_registry jb::host jb::unicode)
+# Keep resolved-document dependencies in step with the bootstrap's external
+# inputs. File names are repository-relative, never build-machine paths.
+include("${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/jh_tool_inputs.cmake")
+set(_jh_tool_inputs "static const char *const jh_tool_input_paths[] = {\n")
+foreach(_jh_input IN LISTS JH_TOOL_INPUTS)
+  string(APPEND _jh_tool_inputs "  \"${_jh_input}\",\n")
+endforeach()
+string(APPEND _jh_tool_inputs "};\n")
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/jh_tool_inputs.h" CONTENT "${_jh_tool_inputs}")
+target_include_directories(jh_host PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
+target_link_libraries(jh_host PUBLIC jh_registry jb::host jb::unicode PRIVATE jh_sha256 pcre2-8-static)
 jh_tool_target(jh_host)
+add_library(jh_device STATIC device/jh_firmware_build.c device/jh_firmware_read.c)
+target_include_directories(jh_device PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/device")
+target_link_libraries(jh_device PUBLIC jh_files PRIVATE jh_sha256)
+jh_tool_target(jh_device)
 add_executable(jh src/main.c src/jh_cli_result.c src/jh_cli_json.c
   src/jh_cli_repository.c src/jh_cli_features.c src/jh_cli_boards.c
-  src/jh_cli_config.c)
-target_link_libraries(jh PRIVATE jh_host)
+  src/jh_cli_config.c src/jh_cli_firmware.c src/jh_cli_hardware.c)
+target_link_libraries(jh PRIVATE jh_host jh_device)
 target_compile_features(jh PRIVATE c_std_11)
 jh_tool_target(jh)
 if(MSVC)
@@ -102,11 +125,16 @@ if(BUILD_TESTING)
     jh_tool_target(jh_cli_memory_launcher)
     set(_jh_test_tool "$<TARGET_FILE:jh_cli_memory_launcher>")
   endif()
-  add_executable(jh_schema_test tests/test_schema.cpp tests/schema_callback.c)
-  target_compile_features(jh_schema_test PRIVATE c_std_11)
-  target_link_libraries(jh_schema_test PRIVATE jh_schema)
-  set_target_properties(jh_schema_test PROPERTIES CXX_STANDARD 17 CXX_STANDARD_REQUIRED ON CXX_EXTENSIONS OFF)
+  add_executable(jh_schema_test tests/test_schema.c tests/schema_callback.c)
+  target_link_libraries(jh_schema_test PRIVATE jh_schema jh_core)
+  jh_tool_target(jh_schema_test)
   add_test(NAME jh_schema COMMAND jh_schema_test)
+  add_executable(jh_firmware_test tests/test_firmware.c)
+  target_link_libraries(jh_firmware_test PRIVATE jh_device jh_sha256)
+  jh_tool_target(jh_firmware_test)
+  add_test(NAME jh_firmware COMMAND jh_firmware_test "${CMAKE_CURRENT_BINARY_DIR}"
+    "$<TARGET_FILE:jh_firmware_test>" "$<TARGET_FILE:jh>")
+  set_tests_properties(jh_firmware PROPERTIES LABELS memcheck TIMEOUT 60)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
   add_test(NAME jh_schema_compat COMMAND "${CMAKE_COMMAND}" -E env
       "JH_TEST_PROGRAM=$<TARGET_FILE:jh>" "JH_SCHEMA_TOOL=${_jh_test_tool}" "${Python3_EXECUTABLE}"
@@ -142,6 +170,15 @@ if(BUILD_TESTING)
   target_link_libraries(jh_c_layer_test PRIVATE jh_host)
   jh_tool_target(jh_c_layer_test)
   add_test(NAME jh_c_layer COMMAND jh_c_layer_test "${CMAKE_CURRENT_BINARY_DIR}")
+  add_executable(jh_hardware_test tests/test_hardware.c)
+  target_link_libraries(jh_hardware_test PRIVATE jh_host)
+  jh_tool_target(jh_hardware_test)
+  add_test(NAME jh_hardware COMMAND jh_hardware_test "${CMAKE_CURRENT_SOURCE_DIR}/../.." "${CMAKE_CURRENT_BINARY_DIR}")
+  set_tests_properties(jh_hardware PROPERTIES LABELS memcheck TIMEOUT 120)
+  if(JH_ENABLE_SANITIZERS)
+    # The complete large-tree cases took 113 s under ASan/UBSan.
+    set_tests_properties(jh_hardware PROPERTIES TIMEOUT 300)
+  endif()
   # The clock tree registry module on edited copies of the registry and on
   # the clock source cases of tests/fixtures/device_tree.
   get_filename_component(_jh_hal_root "${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
@@ -155,22 +192,22 @@ if(BUILD_TESTING)
   get_target_property(_jh_failure_sources jh SOURCES)
   list(REMOVE_ITEM _jh_failure_sources src/main.c)
   add_library(jh_failure_objects OBJECT ${_jh_failure_sources} json/jh_json_file.c)
-  target_link_libraries(jh_failure_objects PRIVATE jh_host)
+  target_link_libraries(jh_failure_objects PRIVATE jh_host jh_device)
   target_compile_definitions(jh_failure_objects PRIVATE
     jb_fs_status=jh_test_fs_status jb_fs_mkdir=jh_test_fs_mkdir
     jh_project_config_read=jh_test_config_read)
   jh_tool_target(jh_failure_objects)
   add_executable(jh_cli_failures_test tests/test_cli_failures.c
     $<TARGET_OBJECTS:jh_failure_objects>)
-  target_link_libraries(jh_cli_failures_test PRIVATE jh_host)
+  target_link_libraries(jh_cli_failures_test PRIVATE jh_host jh_device)
   target_compile_definitions(jh_cli_failures_test PRIVATE JH_TOOL_VERSION="${PROJECT_VERSION}")
   jh_tool_target(jh_cli_failures_test)
   add_test(NAME jh_cli_failures COMMAND jh_cli_failures_test "${_jh_hal_root}"
     "${CMAKE_CURRENT_BINARY_DIR}")
   # The native test programs run under the memory ceiling of the host tests.
   include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_test_memory_limit.cmake")
-  jh_limit_test_memory(jh_schema_test jh_settings_test jh_settings_probe
-    jh_config_test jh_c_layer_test jh_clocks_test jh_cli_failures_test)
+  jh_limit_test_memory(jh_schema_test jh_firmware_test jh_settings_test jh_settings_probe
+    jh_config_test jh_c_layer_test jh_clocks_test jh_cli_failures_test jh_hardware_test)
   set_tests_properties(jh_schema jh_schema_compat jh_device_defaults jh_settings
     jh_settings_compat jh_config jh_c_layer jh_cli_failures PROPERTIES TIMEOUT 120)
   # jh_clocks under Valgrind in the gate took 117.7 s of the former 120 s.
@@ -230,6 +267,9 @@ if(BUILD_TESTING)
       # took 1167 s locally; leave room for slower CI hosts.
       set_tests_properties(jh_cli jh_features jh_boards jh_schema_compat jh_device_defaults
         PROPERTIES TIMEOUT 3600)
+      # The complete hardware suite, including a 2048-node tree, took 1109 s
+      # under Debug Memcheck. Leave room for slower CI hosts.
+      set_tests_properties(jh_hardware PROPERTIES TIMEOUT 2400)
     endif()
     add_test(NAME jh_cli_memory COMMAND "${CMAKE_COMMAND}"
       "-DJH_BUILD=${CMAKE_CURRENT_BINARY_DIR}" "-DJH_CONFIG=$<CONFIG>"

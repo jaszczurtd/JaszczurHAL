@@ -31,8 +31,7 @@ static int number_compare(jh_node_reader_t *r, jb_json_node_t a,
   return order;
 }
 
-static bool json_equal(jh_node_reader_t *r, jb_json_node_t a,
-                       jb_json_node_t b) {
+bool jh_node_equal(jh_node_reader_t *r, jb_json_node_t a, jb_json_node_t b) {
   const jb_json_type_t kind = jh_node_type(r, a);
   if (kind != jh_node_type(r, b) || r->status != HAL_OK)
     return false;
@@ -55,7 +54,7 @@ static bool json_equal(jh_node_reader_t *r, jb_json_node_t a,
     bool more = jh_node_first(r, a, &left);
     (void)jh_node_first(r, b, &right);
     for (; more; more = jh_node_next(r, &left)) {
-      if (!json_equal(r, left, right))
+      if (!jh_node_equal(r, left, right))
         return false;
       (void)jh_node_next(r, &right);
     }
@@ -69,7 +68,7 @@ static bool json_equal(jh_node_reader_t *r, jb_json_node_t a,
          more = jh_node_next(r, &left)) {
       jb_json_node_t right = {0};
       const char *key = jh_node_text(r, left, true);
-      if (!jh_node_find(r, b, key, &right) || !json_equal(r, left, right))
+      if (!jh_node_find(r, b, key, &right) || !jh_node_equal(r, left, right))
         return false;
     }
     return r->status == HAL_OK;
@@ -233,7 +232,7 @@ static void property_value(jh_node_reader_t *r, jb_json_node_t definition,
     jb_json_node_t member = {0};
     for (bool more = jh_node_first(r, members, &member); more;
          more = jh_node_next(r, &member))
-      if (json_equal(r, value, member)) {
+      if (jh_node_equal(r, value, member)) {
         listed = true;
         break;
       }
@@ -258,6 +257,19 @@ static void property_value(jh_node_reader_t *r, jb_json_node_t definition,
       number_compare(r, value, bound) > 0)
     jh_catalogue_fail(r, property_code, source, pointer,
                       JH_PARTS(jh_span("at most "), jh_node_raw(r, bound)));
+}
+
+hal_status_t jh_catalogue_property(jb_json_node_t definition,
+                                   jb_json_node_t value, const char *source,
+                                   const char *pointer, jh_failure_t *failure) {
+  if (source == NULL || pointer == NULL || failure == NULL)
+    return jh_fail_arguments(failure);
+  jh_node_reader_t reader;
+  jh_node_reader_init(&reader, failure);
+  property_value(&reader, definition, value, pointer, source);
+  const hal_status_t status = reader.status;
+  jh_node_reader_destroy(&reader);
+  return status;
 }
 
 static void properties(jh_node_reader_t *r, const jh_binding_t *entry) {

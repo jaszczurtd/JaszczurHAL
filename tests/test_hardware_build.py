@@ -18,9 +18,11 @@ import unittest
 from repo_root import repo_root  # noqa: E402
 
 ROOT = repo_root(sys.argv, __file__)
+sys.path.insert(0, str(ROOT / "scripts"))
+from project_config import jh_executable  # noqa: E402
 WORK = ROOT / ".build" / "tests" / "hardware build"
 FIXTURE = ROOT / "tests" / "fixtures" / "device_tree" / "hal" / "nucleo-canhat"
-GENERATOR = ROOT / "scripts" / "generate_hardware_config.py"
+GENERATOR = jh_executable()
 TOOLCHAIN = ROOT / "link_libraries" / "stm32_lib" / "toolchain_stm32g474.cmake"
 # The application names its build mode in a symbol of its own object file.
 APP = """#include <JaszczurHAL.h>
@@ -89,7 +91,7 @@ class FirmwareBuild(unittest.TestCase):
     def identity(self) -> str:
         # The firmware signs with the ABI of its compile flags.
         flags = ["-mcpu=cortex-m4", "-mthumb", "-mfpu=fpv4-sp-d16", "-mfloat-abi=hard"]
-        result = run(sys.executable, GENERATOR, "identity", "--config-dir", self.project, "--assembly", "canhat",
+        result = run(GENERATOR, "hardware", "identity", "--root", ROOT, "--config-dir", self.project, "--assembly", "canhat",
                      "--compiler", "arm-none-eabi-gcc", *(f"--compiler-flag={flag}" for flag in flags))
         self.assertEqual(0, result.returncode, result.stderr)
         return json.loads(result.stdout)["configSha256"]

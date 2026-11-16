@@ -44,6 +44,11 @@ typedef struct {
 void jh_project_build_init(jh_project_build_t *build);
 /** Release all result data, including a partially evaluated result. */
 void jh_project_build_destroy(jh_project_build_t *build);
+/** Append set(name [=[value]=]) without a trailing line ending. name must
+ * be a valid CMake identifier. The bracket fence grows when value contains
+ * its closing delimiter, preserving all value bytes literally. */
+hal_status_t jh_cmake_assignment(jb_string_t *out, jb_json_span_t name,
+                                 jb_json_span_t value);
 /** Publish CMake bytes atomically, retaining an identical file and existing
  * POSIX permissions. A new POSIX file uses 0666 restricted by process umask,
  * as Path.write_text() did. Call from the single-threaded CLI: POSIX umask

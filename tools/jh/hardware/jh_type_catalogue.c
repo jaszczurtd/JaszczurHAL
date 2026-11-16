@@ -62,9 +62,30 @@ void jh_catalogue_destroy(jh_catalogue_t *types) {
   if (types == NULL)
     return;
   jb_map_destroy(&types->index);
-  for (size_t i = 0; i < jb_vector_size(&types->bindings); ++i)
+  for (size_t i = types->borrowed_count; i < jb_vector_size(&types->bindings);
+       ++i)
     binding_destroy(*(jh_binding_t **)jb_vector_at(&types->bindings, i));
   jb_vector_destroy(&types->bindings);
+  types->borrowed_count = 0;
+}
+
+hal_status_t jh_catalogue_borrow(jh_catalogue_t *types,
+                                 const jh_catalogue_t *base) {
+  if (types == NULL || base == NULL || types == base ||
+      jb_vector_size(&types->bindings) != 0)
+    return HAL_EINVAL;
+  hal_status_t status = HAL_OK;
+  for (size_t i = 0; status == HAL_OK && i < jb_vector_size(&base->bindings);
+       ++i) {
+    const jh_binding_t *entry = jh_catalogue_at(base, i);
+    const jb_json_span_t key = jh_string_span(&entry->compatible);
+    status = jb_vector_append(&types->bindings, &entry, 1);
+    if (status == HAL_OK) {
+      ++types->borrowed_count;
+      status = jb_map_insert(&types->index, &key, &i);
+    }
+  }
+  return status;
 }
 
 const jh_binding_t *jh_catalogue_at(const jh_catalogue_t *types, size_t index) {
@@ -145,6 +166,10 @@ static hal_status_t read_binding(jh_node_reader_t *reader,
     status = jh_fail_pointer(
         reader->failure, "JH-HW-SCHEMA", jh_span(path), jh_span(""),
         JH_PARTS(jh_string_span(&reader->failure->message)));
+  if (status != HAL_OK && schemas->where->located) {
+    reader->failure->line = schemas->where->line;
+    reader->failure->column = schemas->where->column;
+  }
   if (status == HAL_OK) {
     status =
         jh_schema_files_validate(schemas, &entry->document, reader->failure);
@@ -176,6 +201,26 @@ static hal_status_t read_binding(jh_node_reader_t *reader,
   else
     *out = entry;
   return status;
+}
+
+/* Take ownership even when validation or insertion fails. */
+static void catalogue_add(jh_catalogue_t *types, jh_node_reader_t *reader,
+                          jh_binding_t *entry) {
+  const jb_json_span_t compatible = jh_string_span(&entry->compatible);
+  const jh_binding_t *existing = jh_catalogue_find(types, compatible);
+  if (existing != NULL)
+    jh_catalogue_fail(reader, "JH-HW-BINDING", jb_string_data(&entry->path),
+                      "/compatible",
+                      JH_PARTS(compatible, jh_span(" is already defined by "),
+                               jh_string_span(&existing->path)));
+  const size_t index = jb_vector_size(&types->bindings);
+  if (reader->status == HAL_OK)
+    jh_node_storage(reader, jb_vector_append(&types->bindings, &entry, 1));
+  if (reader->status != HAL_OK) {
+    binding_destroy(entry);
+    return;
+  }
+  jh_node_storage(reader, jb_map_insert(&types->index, &compatible, &index));
 }
 
 hal_status_t jh_catalogue_load(jh_catalogue_t *types, jh_json_location_t *where,
@@ -228,22 +273,7 @@ hal_status_t jh_catalogue_load(jh_catalogue_t *types, jh_json_location_t *where,
                         "/compatible",
                         JH_PARTS(jh_span("HAL type file must be named "),
                                  jh_string_span(&expected)));
-    const jb_json_span_t compatible = jh_string_span(&entry->compatible);
-    const jh_binding_t *existing = jh_catalogue_find(types, compatible);
-    if (existing != NULL)
-      jh_catalogue_fail(&reader, "JH-HW-BINDING", jb_string_data(&path),
-                        "/compatible",
-                        JH_PARTS(compatible, jh_span(" is already defined by "),
-                                 jh_string_span(&existing->path)));
-    const size_t index = jb_vector_size(&types->bindings);
-    if (reader.status == HAL_OK)
-      jh_node_storage(&reader, jb_vector_append(&types->bindings, &entry, 1));
-    if (reader.status != HAL_OK) {
-      binding_destroy(entry);
-      break;
-    }
-    /* The vector owns entry now, including when the index cannot grow. */
-    jh_node_storage(&reader, jb_map_insert(&types->index, &compatible, &index));
+    catalogue_add(types, &reader, entry);
   }
   const hal_status_t status = reader.status;
   jh_list_destroy(&names);
@@ -251,6 +281,104 @@ hal_status_t jh_catalogue_load(jh_catalogue_t *types, jh_json_location_t *where,
   jb_string_destroy(&path);
   jh_node_reader_destroy(&reader);
   jh_schema_files_destroy(&schemas);
+  return status;
+}
+
+static bool uri_prefix(const char *path) {
+  if (!jh_ascii_is_upper(*path) && !jh_ascii_is_lower(*path))
+    return false;
+  for (++path; *path != '\0'; ++path) {
+    if (*path == ':')
+      return true;
+    if (!jh_ascii_is_upper(*path) && !jh_ascii_is_lower(*path) &&
+        !jh_ascii_is_digit(*path) && strchr("+.-", *path) == NULL)
+      break;
+  }
+  return false;
+}
+
+hal_status_t
+jh_catalogue_load_project(jh_catalogue_t *types, jh_json_location_t *where,
+                          const char *schema_dir, const char *config_dir,
+                          const char *source, jb_json_node_t entries,
+                          size_t max_bytes, jh_failure_t *failure) {
+  if (types == NULL || where == NULL || schema_dir == NULL ||
+      config_dir == NULL || source == NULL || failure == NULL)
+    return jh_fail_arguments(failure);
+  jh_node_reader_t reader;
+  jh_node_reader_init(&reader, failure);
+  jh_schema_files_t schemas;
+  jh_schema_files_init(&schemas, where, max_bytes);
+  jb_string_t path = {0}, real = {0};
+  jb_vector_t seen = {0}, paths = {0};
+  (void)jb_string_init(&path, jb_heap_allocator());
+  (void)jb_string_init(&real, jb_heap_allocator());
+  jh_node_storage(&reader, jh_list_init(&seen));
+  jh_node_storage(&reader, jh_list_init(&paths));
+  if (reader.status == HAL_OK)
+    reader.status =
+        jh_absolute_path("binding.schema.json", schema_dir, &path, failure);
+  if (reader.status == HAL_OK)
+    reader.status =
+        jh_schema_files_root(&schemas, jb_string_data(&path), NULL, failure);
+  jb_json_node_t value = {0};
+  size_t index = 0;
+  for (bool more = jh_node_first(&reader, entries, &value); more;
+       more = jh_node_next(&reader, &value), ++index) {
+    const jb_json_span_t entry = jh_node_string(&reader, value, false);
+    const char *at =
+        jh_node_join(&reader, JH_PARTS(jh_span("/bindings/"),
+                                       jh_span(jh_node_index(&reader, index))));
+    if (entry.length != strlen(entry.data) || strchr(entry.data, '\\') ||
+        *entry.data == '/' || uri_prefix(entry.data))
+      jh_catalogue_fail(
+          &reader, "JH-HW-BINDING", source, at,
+          JH_PARTS(jh_span("a relative path with forward slashes")));
+    if (strpbrk(entry.data, "*?[") != NULL)
+      jh_catalogue_fail(&reader, "JH-HW-BINDING", source, at,
+                        JH_PARTS(jh_span("a single file, not a pattern")));
+    if (reader.status == HAL_OK)
+      reader.status = jh_absolute_path(entry.data, config_dir, &path, failure);
+    jb_fs_info_t info = {0};
+    if (reader.status == HAL_OK) {
+      const hal_status_t status =
+          jb_fs_status(jb_string_data(&path), true, &info);
+      if (status == HAL_ENOMEM || status == HAL_EOVERFLOW)
+        jh_node_storage(&reader, status);
+      else if (status != HAL_OK || info.kind != JB_FS_REGULAR)
+        jh_catalogue_fail(&reader, "JH-HW-BINDING", source, at,
+                          JH_PARTS(entry, jh_span(" does not exist")));
+    }
+    if (reader.status == HAL_OK)
+      reader.status =
+          jh_python_resolve(jb_string_data(&path), NULL, &real, failure);
+    if (reader.status != HAL_OK)
+      break;
+    if (jh_list_contains(&seen, jh_string_span(&real)))
+      continue;
+    jh_node_storage(&reader, jh_list_push(&seen, jh_string_span(&real)));
+    jh_node_storage(&reader, jh_list_push(&paths, jh_string_span(&path)));
+  }
+  /* Resolve every entry before reading any binding, as project_binding_paths
+   * did: a missing later path precedes an invalid earlier file. */
+  for (size_t i = 0; reader.status == HAL_OK && i < jb_vector_size(&paths);
+       ++i) {
+    jh_binding_t *binding = NULL;
+    if (reader.status == HAL_OK)
+      reader.status = read_binding(
+          &reader, &schemas, jb_string_data(jh_list_at(&paths, i)), &binding);
+    if (reader.status == HAL_OK) {
+      binding->origin = "project";
+      catalogue_add(types, &reader, binding);
+    }
+  }
+  const hal_status_t status = reader.status;
+  jh_list_destroy(&paths);
+  jh_list_destroy(&seen);
+  jb_string_destroy(&real);
+  jb_string_destroy(&path);
+  jh_schema_files_destroy(&schemas);
+  jh_node_reader_destroy(&reader);
   return status;
 }
 

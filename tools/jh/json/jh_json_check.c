@@ -272,3 +272,44 @@ hal_status_t jh_json_path_index(jb_string_t *out, jb_json_span_t base,
   return status == HAL_OK ? jb_string_append(out, number, (size_t)written)
                           : status;
 }
+/* hardware_schema.pointer_key: tokens of digits by number before other
+ * tokens in code point order, a shorter pointer first. */
+int jh_json_pointer_compare(jb_json_span_t a, jb_json_span_t b) {
+  size_t at_a = 0, at_b = 0;
+  while (at_a < a.length && at_b < b.length) {
+    size_t end_a = at_a + 1, end_b = at_b + 1;
+    while (end_a < a.length && a.data[end_a] != '/')
+      ++end_a;
+    while (end_b < b.length && b.data[end_b] != '/')
+      ++end_b;
+    const jb_json_span_t ta = {a.data + at_a + 1, end_a - at_a - 1};
+    const jb_json_span_t tb = {b.data + at_b + 1, end_b - at_b - 1};
+    bool da = ta.length != 0, db = tb.length != 0;
+    for (size_t i = 0; da && i < ta.length; ++i)
+      da = ta.data[i] >= '0' && ta.data[i] <= '9';
+    for (size_t i = 0; db && i < tb.length; ++i)
+      db = tb.data[i] >= '0' && tb.data[i] <= '9';
+    int order = 0;
+    if (da != db) {
+      order = da ? -1 : 1;
+    } else if (da) {
+      /* int(token): compare without leading zeros, then by length. */
+      size_t za = 0, zb = 0;
+      while (za + 1 < ta.length && ta.data[za] == '0')
+        ++za;
+      while (zb + 1 < tb.length && tb.data[zb] == '0')
+        ++zb;
+      const jb_json_span_t na = {ta.data + za, ta.length - za};
+      const jb_json_span_t nb = {tb.data + zb, tb.length - zb};
+      order = na.length != nb.length ? (na.length < nb.length ? -1 : 1)
+                                     : jh_span_compare(na, nb);
+    } else {
+      order = jh_span_compare(ta, tb);
+    }
+    if (order != 0)
+      return order;
+    at_a = end_a;
+    at_b = end_b;
+  }
+  return at_a < a.length ? 1 : (at_b < b.length ? -1 : 0);
+}

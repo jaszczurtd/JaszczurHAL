@@ -652,48 +652,6 @@ size_t jh_clock_registry_tree_count(const jh_clock_registry_t *registry) {
   return count;
 }
 
-/* hardware_schema.pointer_key: tokens of digits by number before other
- * tokens in code point order, a shorter pointer first. */
-static int pointer_compare(jb_json_span_t a, jb_json_span_t b) {
-  size_t at_a = 0, at_b = 0;
-  while (at_a < a.length && at_b < b.length) {
-    size_t end_a = at_a + 1, end_b = at_b + 1;
-    while (end_a < a.length && a.data[end_a] != '/')
-      ++end_a;
-    while (end_b < b.length && b.data[end_b] != '/')
-      ++end_b;
-    const jb_json_span_t ta = {a.data + at_a + 1, end_a - at_a - 1};
-    const jb_json_span_t tb = {b.data + at_b + 1, end_b - at_b - 1};
-    bool da = ta.length != 0, db = tb.length != 0;
-    for (size_t i = 0; da && i < ta.length; ++i)
-      da = ta.data[i] >= '0' && ta.data[i] <= '9';
-    for (size_t i = 0; db && i < tb.length; ++i)
-      db = tb.data[i] >= '0' && tb.data[i] <= '9';
-    int order = 0;
-    if (da != db) {
-      order = da ? -1 : 1;
-    } else if (da) {
-      /* int(token): compare without leading zeros, then by length. */
-      size_t za = 0, zb = 0;
-      while (za + 1 < ta.length && ta.data[za] == '0')
-        ++za;
-      while (zb + 1 < tb.length && tb.data[zb] == '0')
-        ++zb;
-      const jb_json_span_t na = {ta.data + za, ta.length - za};
-      const jb_json_span_t nb = {tb.data + zb, tb.length - zb};
-      order = na.length != nb.length ? (na.length < nb.length ? -1 : 1)
-                                     : jh_span_compare(na, nb);
-    } else {
-      order = jh_span_compare(ta, tb);
-    }
-    if (order != 0)
-      return order;
-    at_a = end_a;
-    at_b = end_b;
-  }
-  return at_a < a.length ? 1 : (at_b < b.length ? -1 : 0);
-}
-
 /* "[JH-HW-SCHEMA] <path>:<pointer>: <message>" of the failure with the
  * smallest pointer, as SchemaSet.first_error picks it. */
 static hal_status_t fail_schema(jh_failure_t *failure, jb_json_span_t path,
@@ -701,8 +659,8 @@ static hal_status_t fail_schema(jh_failure_t *failure, jb_json_span_t path,
   const jh_schema_report_t *first = jh_schema_files_report(files, 0);
   for (size_t i = 1; i < jh_schema_files_report_count(files); ++i) {
     const jh_schema_report_t *report = jh_schema_files_report(files, i);
-    if (pointer_compare(jh_string_span(&report->pointer),
-                        jh_string_span(&first->pointer)) < 0)
+    if (jh_json_pointer_compare(jh_string_span(&report->pointer),
+                                jh_string_span(&first->pointer)) < 0)
       first = report;
   }
   jb_string_t message = {0};

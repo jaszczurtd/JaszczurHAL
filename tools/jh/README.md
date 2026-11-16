@@ -17,6 +17,7 @@ registry and the features one build requests, resolved; `jh feature lint`
 checks the feature requests of project headers and manifests. `jh board`
 validates and lists the board registry and writes the configuration of one
 build, and `jh clock` checks and lists the clock tree registry.
+`jh firmware read` backs up a selected device's complete flash for reflashing.
 
 Prepare the pinned host dependencies explicitly before configuring:
 
@@ -142,6 +143,10 @@ Decoded values are limited to 16 KiB and patterns to 4096 bytes. Regex has a
 depth 128. Exhaustion returns `HAL_EOVERFLOW` before publishing any error prefix.
 The internal C API in [jh_json_schema.h](json/jh_json_schema.h) accepts caller-owned
 scratch, custom limits and optional document/report callbacks.
+Hardware resolution adds one root-schema scan per nesting level and instance
+token to the work budget, up to 4294967295 units on both 32- and 64-bit hosts.
+This accommodates larger device trees while keeping a finite validation budget. Exhaustion carries
+the `JH-HW-SCHEMA` diagnostic code and exit code 4.
 
 `jh_json_read_settings` in [jh_json_file.h](json/jh_json_file.h) reads VS Code files and project
 manifests the way `load_json_file` of the Python tools does.
@@ -177,6 +182,132 @@ Clients may pass `--json --json-version 1`. An unsupported major gives
 supported result envelope. Omitting the option selects major 1. Within a
 major, clients must ignore unknown fields; existing field meanings and types
 are stable. A breaking change requires a new major.
+
+## Hardware configuration
+
+`jh hardware` reads a project's `device_tree.json` with the shared board,
+clock, feature and type registries. All commands take `--root HAL_ROOT` and
+`--config-dir PROJECT`; paths are relative to the invocation directory.
+
+```sh
+scripts/jh hardware list --root . --config-dir examples/01_core_runtime
+scripts/jh hardware resolve --root . --config-dir PROJECT \
+  --assembly ASSEMBLY --output-dir .build/project/generated
+scripts/jh hardware finalize --root . --config-dir PROJECT \
+  --hardware .build/project/generated/jh_hardware_resolved.json \
+  --hardware-header .build/project/generated/jh_hardware.h \
+  --output-dir .build/project/generated
+```
+
+`list` returns sorted assembly names, boards and targets. `select` applies
+`--target` and `--assembly` without resolving bindings. `resolve` writes the
+early header and the model, including input digests and a final newline in
+the JSON file. `resolve --json` can
+return the document and header without files; `--include-board` also returns
+the selected board, definitions, components and pin numbers. `finalize`
+checks the model, header and input digests, then evaluates the program with
+`--variant` and repeated `--define NAME[=VALUE]`. It writes the late board
+header, build/package CMake records, final JSON, link signature and depfile.
+`--compiler CC` with repeated `--compiler-flag=FLAG` records compiler ABI and
+structure layout. `identity` accepts the same selection and software options
+and returns both digests without retaining outputs.
+
+Outputs must be below `.build`, or the explicit `--output-root`. A failed
+generation removes its stale outputs. Diagnostics retain `JH-HW-*` codes,
+source paths, JSON Pointers and related locations; `--json` exposes these
+fields. CMake builds use `cmake/jh_hardware_config.cmake`, including
+`jh_resolve_hardware_header()` for the early header in host mock builds.
+The [device tree specification](../../doc/en/device_tree_format.md) describes
+selection, generated interfaces and identity inputs.
+
+## Full flash backup
+
+`jh firmware read` saves the complete reprogrammable flash as a raw binary:
+bootloader, application, OTA slots, partitions, EEPROM/KV, filesystems and
+unused bytes. Select a completed build and the device explicitly:
+
+```sh
+jh firmware read --project path/to/project --assembly assembly-name \
+  --serial DEVICE_OR_PROBE_SERIAL --output backup.bin --json > backup.json
+```
+
+RP2040/RP2350 use picotool and its USB serial number. STM32G474 uses OpenOCD
+and the probe's serial number. ESP32-S3 uses the selected ESP-IDF Python's
+esptool; replace `--serial` with `--port PORT`. Prefer a stable `/dev/serial/by-id/`
+path on Linux. The command never chooses the first connected device.
+
+Automatic build discovery searches below `project/.build`. Use `--build-dir`
+for builds stored elsewhere or when several builds match, and `--variant`
+for a named variant. The native build must match the project and assembly;
+the ESP build also checks its recorded project source hashes. Do not rebuild
+or change the selected device while reading it. `--tool` overrides the reader
+executable (ESP: the ESP-IDF Python executable). Otherwise the command uses
+the build cache, resolving a bare executable name through absolute PATH entries.
+
+The physical range comes from the selected build. RP builds expose
+`__jh_flash_device_start` and `__jh_flash_device_size` in `firmware.map`,
+including flash reserved outside the application's region; rebuild older
+RP firmware before using this command. STM combines its contiguous flash
+regions, including EEPROM and LittleFS. ESP uses the build's explicit flash
+capacity and validates its partition table. OpenOCD and esptool read the whole
+detected flash; a length different from the build fails before publication.
+The command does not use picotool's content-based flash-size guess.
+
+`--address NUMBER --size NUMBER` selects a partial range within that physical
+map. Both numbers accept decimal or `0x` notation. A dump is limited to 64 MiB;
+metadata files to 16 MiB. Discovery stops after 512 directories or eight
+levels and asks for `--build-dir`. An ESP build of another assembly is skipped
+before reading its variant or artifacts.
+
+The automatic timeout is at least 120000 ms. ESP gets 60000 ms plus the time
+for 20 serial bits per requested byte at the selected baud rate, accounting
+for UART framing and escaping. `--baud NUMBER` selects ESP baud (default
+115200); native USB uses the same conservative budget. `--timeout-ms NUMBER`
+overrides the automatic budget, and `--timeout-ms 0` waits indefinitely.
+Ctrl+C cancels the reader. Tool output goes to stderr.
+
+Before starting the reader, the command opens a temporary output file in
+the destination directory and creates missing parents. It checks the exact
+dump length before atomic publication. Reader failures preserve the previous
+output. If publication fails after a complete read, the dump remains below
+the selected build directory; the error names both the output and the
+retained file. Copy that file before cleaning the build directory. Staging
+files use mode 0600 on POSIX; Windows grants access to the current user.
+
+Devices must be accessible to the selected reader. `--reset` permits picotool
+to enter BOOTSEL through its reset interface, STM to reset before halting, and
+ESP to enter its ROM loader and reset to the application afterward. RP
+applications that only support a CDC 1200-bps touch must enter BOOTSEL first,
+using that interface or the board's BOOTSEL button. Without `--reset`, RP and
+ESP must already be in a readable bootloader state. STM halts briefly and
+resumes. The JSON `deviceState` reports `bootsel`, `bootloader`, `running`,
+`unchanged` or `unknown` after a failed/interrupted tool; it is not a live
+application health check. A successful RP read leaves BOOTSEL.
+
+Keep the JSON beside the binary. It includes `address`, `size`, `sha256`,
+`flashAddress`, `flashSize`, `completeFlash`, `format: "bin"`, `restoreTool`
+and `restoreAddress`. Only `completeFlash: true` denotes a complete flash
+backup. Verify the size and SHA-256 before restoring. Restore with the named
+tool, the recorded address and an explicit device selector:
+
+| Target | Restore operation |
+| --- | --- |
+| RP | `picotool load backup.bin -t bin -o ADDRESS --ignore-partitions --verify --ser SERIAL`, then `picotool reboot --ser SERIAL` |
+| STM | OpenOCD with the same interface/target files and `adapter serial SERIAL`; `init; reset halt; flash write_image erase backup.bin ADDRESS bin; verify_image backup.bin ADDRESS bin; reset run; shutdown` |
+| ESP | ESP-IDF Python `-m esptool --chip esp32s3 --port PORT --after hard-reset write-flash --flash-mode keep --flash-freq keep --flash-size keep ADDRESS backup.bin` |
+
+These restore operations write flash; `firmware read` itself only reads it.
+The binary excludes RAM/PSRAM, ROM, OTP/eFuses and option bytes. It preserves
+flash contents for restoration with the same device configuration; it does
+not clone hardware identity, encryption keys or protection settings. Read
+protection may prohibit a backup, and encrypted flash may only be usable on
+the original device. The command does not unlock, erase or bypass protection.
+
+Hardware verification is a separate, explicit procedure: select the device,
+read the full flash, compare a second independent read and any known installed
+image at its recorded offset, then restore the application's running state.
+Host tests use small synthetic builds and reader substitutes; default CTest
+and the gate do not access devices or hardware-test artifacts.
 
 ## Project configuration
 
@@ -375,6 +506,16 @@ with `--report-only`; these failures are not lint findings. The reader's
 message, diagnostic code (including `JH-CFG-SCOPE`) and source (with a line
 when available) are kept in stderr and the JSON error result.
 
+`jh feature lint --root <checkout> --effective` also resolves each declared
+target or assembly with its base
+configuration and variants, excluding combinations rejected by `#error`.
+The native batch shares the feature, board and hardware registries; it reads
+project manifests and settings without loading local board-selection state.
+`--resolution-output <path>` writes the deterministic configuration matrix,
+including requested/resolved features, provenance and its digest. With
+`--json`, `effectiveReport` and `effectiveFindings` carry these results.
+The Python lint adapter delegates the same operation to this command.
+
 `jh config manifest --file <path> [--label <text>]` reports the project
 configuration a manifest carries although it belongs in
 `hal_project_config.h`: the fields `variants` and `example`, and in
@@ -550,9 +691,7 @@ the `errors` with the `pointer` into the board's `clockSources` and the
 `message`. The listing reads the trees and the board profiles and targets
 the way `json.loads` reads them, without checking them: `jh clock check` and
 `jh board validate` do.
-`scripts/clock_registry.py` gives `hardware_resolver.py` and
-`generate_hardware_config.py` this listing, read once per process until its
-files change.
+`jh hardware` uses this registry directly through the shared C modules.
 
 A check that fails has exit code 1 and the message of
 `scripts/clock_registry.py` before the port, printed as `jh: <message>
@@ -707,6 +846,18 @@ signed 64-bit arithmetic are in
 that result, collects its feature requests and renders its CMake file.
 [jh_type_catalogue.h](hardware/jh_type_catalogue.h) loads and checks the HAL
 types, and [jh_device_defaults.h](hardware/jh_device_defaults.h) renders their
-default values and enum positions as C macros. These modules and the CLI in
+default values and enum positions as C macros.
+[jh_hardware.h](hardware/jh_hardware.h) resolves hardware, and
+[jh_hardware_build.h](hardware/jh_hardware_build.h) finalizes its compiler ABI
+and build artifacts. [jh_effective_features.h](hardware/jh_effective_features.h)
+checks effective feature configurations using the same registries.
+These modules and the CLI in
 [src/](src/) are C11, with explicit status returns and resource ownership.
-The schema validator remains C++ behind [its C API](json/jh_json_schema.h).
+The [schema validator](json/jh_json_schema.h) and its tests are also C11.
+Its temporary strings use jhbase containers with an arena allocator. Each
+evaluation restores its scratch position, while reports retain their text
+until reporting finishes. Validation and PCRE2 use only caller-owned scratch.
+`const` and `enum` diagnostics reserve their measured length once, avoiding
+abandoned growth buffers in the arena. Measuring preserves the work budget.
+The [device reader](device/jh_firmware_read.h) selects the build's physical
+flash map and delegates device access to the managed programmer.

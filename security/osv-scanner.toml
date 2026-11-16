@@ -60,3 +60,8 @@ reason = "2026-11-04: MTP device class, absent from the pinned TinyUSB 0.18.0; n
 [[IgnoredVulns]]
 id = "CVE-2026-61497"
 reason = "2026-11-04: HID host report descriptor parser, compiled on no target; not_affected"
+
+# littlefs 2.11.3 (6cb4e86): lfs_migrate() and its v1 traversal exist only with LFS_MIGRATE.
+[[IgnoredVulns]]
+id = "CVE-2026-129490"
+reason = "2026-11-16: v1 image migration, LFS_MIGRATE set on no target; not_affected"

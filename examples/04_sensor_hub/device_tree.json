@@ -21,7 +21,7 @@
         }
       },
       "nodes": {
-        "bh1750": { "present": true, "bus": "i2c", "address": 35 },
+        "bh1750": { "present": true, "bus": "i2c", "address": "0x23" },
         "dht": { "present": true, "pins": { "data": 14 } },
         "ds18b20": { "present": true, "pins": { "data": 16 } }
       }
@@ -40,7 +40,7 @@
         }
       },
       "nodes": {
-        "bh1750": { "present": true, "bus": "i2c", "address": 35 },
+        "bh1750": { "present": true, "bus": "i2c", "address": "0x23" },
         "dht": { "present": true, "pins": { "data": 14 } },
         "ds18b20": { "present": true, "pins": { "data": 16 } }
       }
@@ -59,7 +59,7 @@
         }
       },
       "nodes": {
-        "bh1750": { "present": true, "bus": "i2c", "address": 35 },
+        "bh1750": { "present": true, "bus": "i2c", "address": "0x23" },
         "dht": { "present": true, "pins": { "data": 14 } },
         "ds18b20": { "present": true, "pins": { "data": 16 } }
       }
@@ -78,7 +78,7 @@
         }
       },
       "nodes": {
-        "bh1750": { "present": true, "bus": "i2c", "address": 35 },
+        "bh1750": { "present": true, "bus": "i2c", "address": "0x23" },
         "dht": { "present": true, "pins": { "data": "PA8" } },
         "ds18b20": { "present": true, "pins": { "data": "PB0" } }
       }
@@ -97,7 +97,7 @@
         }
       },
       "nodes": {
-        "bh1750": { "present": true, "bus": "i2c", "address": 35 },
+        "bh1750": { "present": true, "bus": "i2c", "address": "0x23" },
         "dht": { "present": true, "pins": { "data": 8 } },
         "ds18b20": { "present": true, "pins": { "data": 16 } }
       }

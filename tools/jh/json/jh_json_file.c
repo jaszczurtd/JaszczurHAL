@@ -507,8 +507,10 @@ hal_status_t jh_working_directory(jb_string_t *out, jh_failure_t *failure) {
 /* path joined to base, or to the working directory when base is NULL: on
  * POSIX as written, as pathlib joins; on Windows normalized lexically, as
  * ntpath.realpath does before it resolves anything. */
-static hal_status_t joined_path(const char *path, const char *base,
+hal_status_t jh_unresolved_path(const char *path, const char *base,
                                 jb_string_t *out, jh_failure_t *failure) {
+  if (path == NULL || out == NULL)
+    return jh_fail_arguments(failure);
   jb_string_t cwd = {0};
   hal_status_t status = HAL_OK;
   if (base == NULL) {
@@ -723,7 +725,7 @@ hal_status_t jh_python_resolve(const char *path, const char *base,
     status = jh_fail_storage(failure,
                              jb_string_init(&resolved, jb_heap_allocator()));
   if (status == HAL_OK)
-    status = joined_path(path, base, &joined, failure);
+    status = jh_unresolved_path(path, base, &joined, failure);
 #ifdef _WIN32
   if (status == HAL_OK) {
     const hal_status_t real =
@@ -1149,9 +1151,9 @@ static const jh_json_schema_limits_t schema_limits = {
     .regex_depth_limit = 128,
     .regex_heap_limit_kib = 1024};
 
-hal_status_t jh_schema_files_validate(jh_schema_files_t *files,
-                                      const jh_json_document_t *instance,
-                                      jh_failure_t *failure) {
+static hal_status_t validate_files(jh_schema_files_t *files,
+                                   const jh_json_document_t *instance,
+                                   bool scale_work, jh_failure_t *failure) {
   if (files == NULL || instance == NULL)
     return jh_fail_arguments(failure);
   if (jb_vector_size(&files->documents) == 0)
@@ -1168,9 +1170,23 @@ hal_status_t jh_schema_files_validate(jh_schema_files_t *files,
   }
   clear_reports(files);
   const jh_json_schema_source_t source = source_of(document_at(files, 0));
+  jh_json_schema_limits_t limits = schema_limits;
+  if (scale_work) {
+    /* Pointer resolution charges a scan of the root schema per reference.
+     * Allow one scan per nesting level for each instance token, with the same
+     * finite ceiling on 32- and 64-bit hosts. Other limits stay fixed. */
+    const uint64_t unit =
+        ((uint64_t)source.doc->input.length + source.doc->token_count) *
+        limits.max_ref_depth;
+    const uint64_t available = UINT32_MAX - limits.max_work;
+    const uint64_t tokens = instance->doc.token_count;
+    limits.max_work +=
+        (size_t)(unit != 0 && tokens > available / unit ? available
+                                                        : tokens * unit);
+  }
   const hal_status_t status = jh_json_schema_validate(
       &instance->doc, &source, load_schema, files, collect_report, files,
-      workspace_of(&files->scratch), &schema_limits);
+      workspace_of(&files->scratch), &limits);
   if (status == HAL_OK || status == HAL_ECONFIG)
     return status;
   const bool file_error =
@@ -1178,6 +1194,18 @@ hal_status_t jh_schema_files_validate(jh_schema_files_t *files,
   return jh_fail_text(failure, status,
                       exit_code_for(status, file_error ? 3 : 2),
                       "cannot validate schema or validation limit exceeded");
+}
+
+hal_status_t jh_schema_files_validate(jh_schema_files_t *files,
+                                      const jh_json_document_t *instance,
+                                      jh_failure_t *failure) {
+  return validate_files(files, instance, false, failure);
+}
+
+hal_status_t jh_schema_files_validate_sized(jh_schema_files_t *files,
+                                            const jh_json_document_t *instance,
+                                            jh_failure_t *failure) {
+  return validate_files(files, instance, true, failure);
 }
 
 hal_status_t jh_json_write_tree(jb_json_writer_t *writer,

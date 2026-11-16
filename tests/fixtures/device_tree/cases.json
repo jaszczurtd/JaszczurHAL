@@ -549,6 +549,25 @@
       }
     }
   ],
+  "i2cAddressCases": [
+    {"literal": "81", "normalized": 81},
+    {"literal": "\"0x51\"", "normalized": 81},
+    {"literal": "\"0x051\"", "normalized": 81},
+    {"literal": "81.0", "normalized": 81},
+    {"literal": "81e0", "normalized": 81},
+    {"literal": "\"0x3c\"", "normalized": 60},
+    {"literal": "\"0x3C\"", "normalized": 60},
+    {"literal": "\"0x7f\"", "normalized": 127},
+    {"literal": "\"0x00\"", "normalized": 0},
+    {"literal": "\"0x\"", "normalized": -1},
+    {"literal": "\"0x5g\"", "normalized": -1},
+    {"literal": "\"0X51\"", "normalized": -1},
+    {"literal": "\"0x80\"", "normalized": -1},
+    {"literal": "\"0x080\"", "normalized": -1},
+    {"literal": "\"0x51\\n\"", "normalized": -1},
+    {"literal": "\"0x51\"", "normalized": 81, "collision": true},
+    {"literal": "\"0x051\"", "normalized": 81, "collision": true}
+  ],
   "selectionCases": [
     {
       "file": "valid/project/device_tree.json",

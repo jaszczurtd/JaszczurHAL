@@ -71,11 +71,24 @@ hal_status_t jh_board_registry_load(jh_board_registry_t *registry,
                                     const char *boards_root, size_t limit,
                                     jh_failure_t *failure);
 
+/** Load boards while reusing the caller's feature registry. features must
+ * be initialized: an empty registry is loaded lazily from checkout_root,
+ * while an already loaded registry is borrowed without alteration. The
+ * caller retains ownership and destroys it even when board loading fails. */
+hal_status_t jh_board_registry_load_with_features(
+    jh_board_registry_t *registry, const char *checkout_root,
+    const char *boards_root, size_t limit, jh_feature_registry_t *features,
+    jh_failure_t *failure);
+
 /** The descriptor with id among the jh_board_descriptor_t elements of
  * descriptors, or NULL.
  */
 const jh_board_descriptor_t *
 jh_board_registry_find(const jb_vector_t *descriptors, jb_json_span_t id);
+
+/** Replace out with board.<id in kebab case>, the owner of a board device's
+ * GPIO reservation. id is a schema-validated device ID. */
+hal_status_t jh_board_device_owner(jb_json_span_t id, jb_string_t *out);
 
 /** source_problems of clock_registry.py: problem receives the first reason
  * the clock source object source (kind, pins) cannot drive the clock input
@@ -166,6 +179,8 @@ typedef struct {
 const jh_board_role_t *jh_board_roles(size_t *count);
 /** The CAN controller with id, or NULL. */
 const jh_board_can_controller_t *jh_board_can_controller(jb_json_span_t id);
+/** Sum of CAN controller instances available on target. */
+int64_t jh_board_can_controller_count(jb_json_span_t target);
 /** The device kind of multi-pin bus devices ("bus-device"). */
 const char *jh_board_bus_device_kind(void);
 

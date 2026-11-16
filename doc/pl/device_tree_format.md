@@ -1,6 +1,6 @@
 # Format device tree, wersja 1
 
-Ta specyfikacja określa wejścia i wynik generatora sprzętu projektu. `scripts/generate_hardware_config.py` rozwiązuje montaż i zapisuje oba nagłówki. Projekt firmware, a także biblioteka statyczna z `device_tree.json` w katalogu konfiguracji, budują się z tego pliku; bez niego build pozostaje przy ścieżce płytki.
+Ta specyfikacja określa wejścia i wynik generatora sprzętu projektu. `scripts/jh hardware` rozwiązuje montaż i zapisuje oba nagłówki. Projekt firmware, a także biblioteka statyczna z `device_tree.json` w katalogu konfiguracji, budują się z tego pliku; bez niego build pozostaje przy ścieżce płytki.
 
 ## Pliki i walidacja
 
@@ -18,7 +18,7 @@ Jedna aplikacja firmware, również podprojekt, ma własny `device_tree.json`. S
 
 Schematy używają JSON Schema 2020-12. Wejście to JSON w UTF-8, z unikalnymi kluczami obiektów, skończonymi liczbami, `schemaVersion: 1` i bez nieznanych pól. Niezerowa liczba dziesiętna, która w binary64 stałaby się nieskończonością albo zerem, kończy odczyt błędem. Wartość boolowska nie jest liczbą całkowitą. `$schema` jest opcjonalną informacją dla edytora, nie pobieraną zależnością. Inna wersja kończy się błędem zamiast przejścia na build bez JSON-a.
 
-Walidacja schematu sprawdza strukturę. Resolver, `scripts/hardware_resolver.py`, sprawdza dodatkowo odwołania, typy bindings, zgodność płytki z targetem, właścicieli, zajęcie zasobów i obsługiwane zegary. Przykład `semantic` w indeksie celowo przechodzi sprawdzanie struktury i określa błąd zgłaszany przez resolver.
+Walidacja schematu sprawdza strukturę. Resolver, `jh hardware resolve`, sprawdza dodatkowo odwołania, typy bindings, zgodność płytki z targetem, właścicieli, zajęcie zasobów i obsługiwane zegary. Przykład `semantic` w indeksie celowo przechodzi sprawdzanie struktury i określa błąd zgłaszany przez resolver.
 
 ## Węzły i montaże
 
@@ -172,9 +172,11 @@ Dla wybranego targetu jeden montaż jest automatyczny, kilka wymaga jawnego kluc
 
 Przy JSON-ie każda projektowa definicja `JH_PROJECT_TARGETS` jest odrzucana, również w nieaktywnej gałęzi warunkowej. Targety wynikają z montaży. Deklaracje wariantów muszą być niezależne od targetu, montażu i `JH_HW_*`, żeby listowanie działało przed buildem. Warunki konfiguracji programu wybranego wariantu mogą nadal sprawdzać sprzęt.
 
-Generator to `scripts/generate_hardware_config.py`. `list --config-dir DIR` odczytuje montaże bez generowania wyników. `resolve --config-dir DIR [--target ID] [--assembly ID] --output-dir DIR` rozwiązuje sprzęt i zapisuje `jh_hardware.h` oraz `jh_hardware_resolved.json`. `finalize --hardware FILE --hardware-header FILE --config-dir DIR [--variant ID] [--define NAME[=VALUE]] --output-dir DIR` odczytuje ten sam model, przekazuje jego dokładny nagłówek przed konfiguracją projektu, rozwiązuje funkcje i tunables oraz emituje późniejsze dane buildu. `identity` przyjmuje wybór, wariant i definicje poleceń `resolve` i `finalize`, bez katalogów wyjściowych, i wypisuje w JSON-ie wybór, `hardwareSha256` i `configSha256`.
+Generator to `scripts/jh hardware`. `list --config-dir DIR` odczytuje montaże bez generowania wyników. `resolve --config-dir DIR [--target ID] [--assembly ID] --output-dir DIR` rozwiązuje sprzęt i zapisuje `jh_hardware.h` oraz `jh_hardware_resolved.json`. `finalize --hardware FILE --hardware-header FILE --config-dir DIR [--variant ID] [--define NAME[=VALUE]] --output-dir DIR` odczytuje ten sam model, przekazuje jego dokładny nagłówek przed konfiguracją projektu, rozwiązuje funkcje i tunables oraz emituje późniejsze dane buildu. `identity` przyjmuje wybór, wariant i definicje poleceń `resolve` i `finalize`, bez katalogów wyjściowych, i wypisuje w JSON-ie wybór, `hardwareSha256` i `configSha256`.
 
 CMake wywołuje te polecenia przez `cmake/jh_hardware_config.cmake`. `jh_generate_hardware_config()` uruchamia `resolve`, odczytuje konfigurację projektu z wygenerowanym nagłówkiem, uruchamia `finalize` i wczytuje dane CMake. Build, który poznaje kompilator dopiero po `project()`, podaje `ABI_LATER`: dane CMake bierze wtedy ze wstępnego `finalize` w `pre-project/`, a po `project()` wywołuje `jh_finalize_hardware_abi()`. Dopiero to wywołanie zapisuje pliki kompilowane przez build, więc ponowna konfiguracja bez zmian niczego nie nadpisuje. Projekt firmware wybiera montaż przez `JH_ASSEMBLY`, `JH_VARIANT` i, jako filtr, `JH_TARGET`; biblioteka statyczna czyta te same selektory obok `HAL_PROJECT_CONFIG_DIR`. `jh-vscode`, dispatcher przykładów i obsługa bibliotek w VS Code wybierają montaż według zasad z części [projekty z device_tree.json](FwProjectWorkflow.md#projekty-z-device-tree). Oba buildy generują pliki w swoim katalogu buildu i dopisują każdy odczytany plik do zależności ponownej konfiguracji, więc zmiana opisu, bindingu, rejestru albo opisu płytki odświeża nagłówki przy następnym buildzie.
+
+Buildy hostowe z płytką mock mogą wywołać `jh_resolve_hardware_header(OUT ROOT HAL_ROOT CONFIG_DIR CONFIG OUTPUT_DIR OUTPUT)` z tego samego modułu CMake. Funkcja zwraca wczesny nagłówek w `OUT`, model w `JH_HARDWARE_RESOLVED_FILE` i śledzi ich wejścia. Późniejszą konfigurację płytki pozostawia wywołującemu.
 
 Końcowy krok dodaje konfigurację programu do istniejącego rozwiązanego modelu; nie rozwiązuje osobno sprzętu ani nie zmienia wczesnych faktów. Zapisuje `jh_board_config.h`, `jh_hardware_config.cmake`, przenośne dane pakietu `jh_hardware_package.cmake`, `jh_hardware_config.json`, obecne nagłówki i źródła sygnatury linkowania oraz `generation.d`. Pliki są zapisywane atomowo; build używa ich po udanej generacji. Skróty zawartości zależności chronią przed końcową generacją z nieaktualnego modelu. Oba kroki zależą od wybranego JSON-a, wszystkich bindings, danych płytki i targetu, rejestru zegarów oraz wejść generatora i schematu.
 

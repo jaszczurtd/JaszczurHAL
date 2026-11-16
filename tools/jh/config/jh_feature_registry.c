@@ -2,6 +2,7 @@
 #include "hal/security/jh_sha256.h"
 #include "jh_generated_output.h"
 #include "jh_json_check.h"
+#include "jh_json_digest.h"
 #include "jh_json_file.h"
 #include "jh_python_repr.h"
 #include <jb/array.h>
@@ -753,36 +754,6 @@ static hal_status_t check_conflicts(const jh_feature_registry_t *registry,
 /* ---- Digests: SHA-256 of json.dumps(sort_keys=True, separators=(",", ":"),
  * ensure_ascii=True) ---- */
 
-static hal_status_t sha_sink(void *user, const char *data, size_t length) {
-  jh_sha256_update(user, (const uint8_t *)data, length);
-  return HAL_OK;
-}
-
-static void hex_digest(const uint8_t digest[JH_SHA256_DIGEST_BYTES],
-                       char out[65]) {
-  static const char hex[] = "0123456789abcdef";
-  for (size_t i = 0; i < JH_SHA256_DIGEST_BYTES; ++i) {
-    out[2 * i] = hex[digest[i] >> 4];
-    out[2 * i + 1] = hex[digest[i] & 15];
-  }
-  out[64] = '\0';
-}
-
-/* The digest of a tree value: compact, sorted keys, ASCII escapes. */
-static hal_status_t tree_digest(jb_json_tree_view_t value, char out[65]) {
-  jh_sha256_context_t context;
-  jh_sha256_init(&context);
-  const jb_json_tree_format_t format = {SIZE_MAX, 0, true, true};
-  size_t written = 0;
-  const hal_status_t status =
-      jb_json_tree_format(value, &format, sha_sink, &context, &written);
-  uint8_t digest[JH_SHA256_DIGEST_BYTES];
-  jh_sha256_final(&context, digest);
-  if (status == HAL_OK)
-    hex_digest(digest, out);
-  return status;
-}
-
 static hal_status_t write_list(jb_json_writer_t *writer, const char *key,
                                const jb_vector_t *list) {
   hal_status_t status = jb_json_writer_key(writer, jh_span(key));
@@ -891,7 +862,7 @@ static hal_status_t registry_digest(const jb_vector_t *features, char out[65]) {
   if (status == HAL_OK)
     status = jb_json_tree_root(tree, &root);
   if (status == HAL_OK)
-    status = tree_digest(root, out);
+    status = jh_json_digest(root, true, out);
   if (tree != NULL)
     jb_json_tree_destroy(tree);
   jb_string_destroy(&text);
@@ -1071,8 +1042,8 @@ hal_status_t jh_feature_registry_load(jh_feature_registry_t *registry,
     status = jh_fail_storage(
         failure, registry_digest(&registry->features, registry->digest));
   if (status == HAL_OK)
-    status = jh_fail_storage(failure,
-                             tree_digest(schema_root, registry->schema_digest));
+    status = jh_fail_storage(
+        failure, jh_json_digest(schema_root, true, registry->schema_digest));
   if (status == HAL_OK)
     status = check_conflicts(registry, failure);
   if (schema != NULL)
@@ -1359,7 +1330,7 @@ static hal_status_t resolve_requests(const jh_feature_registry_t *registry,
     }
     uint8_t digest[JH_SHA256_DIGEST_BYTES];
     jh_sha256_final(&digest_context, digest);
-    hex_digest(digest, resolution->digest);
+    jh_sha256_hex(digest, resolution->digest);
   }
   jb_vector_destroy(&implied);
   jb_vector_destroy(&marks);

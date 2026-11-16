@@ -125,3 +125,41 @@ execute_process(COMMAND "${CMAKE_COMMAND}" --build "${_build}"
 if(NOT _result EQUAL 0 OR NOT "${_stdout}${_stderr}" MATCHES "Configuring done")
     message(FATAL_ERROR "a new jh source did not reconfigure the build:\n${_stdout}${_stderr}")
 endif()
+
+# The early hardware resolver and finalize must spell a binding outside the
+# project directory identically. Otherwise Ninja sees two rules for one file.
+set(_hardware "${_fixture}/hardware-project")
+set(_hardware_build "${_hardware}/.build/probe")
+set(_binding "${_fixture}/shared/gpio-output.json")
+file(MAKE_DIRECTORY "${_hardware}" "${_fixture}/shared")
+file(COPY_FILE "${JH_ROOT}/tests/fixtures/device_tree/bindings/gpio-output.json" "${_binding}")
+file(WRITE "${_hardware}/device_tree.json" [=[
+{"schemaVersion":1,"bindings":["../shared/gpio-output.json"],
+ "nodes":{"indicator":{"compatible":"test,gpio-output"}},
+ "assemblies":{"pico":{"target":"rp2040","board":"pico",
+ "clock":{"tree":"default"},"statusLed":{"node":"board.statusLed"},
+ "nodes":{"indicator":{"present":true,"pins":{"out":2}}}}}}
+]=])
+file(WRITE "${_hardware}/hal_project_config.h" "#pragma once\n")
+file(WRITE "${_hardware}/CMakeLists.txt"
+    "cmake_minimum_required(VERSION 3.22)\n"
+    "project(hardware_config_dependencies NONE)\n"
+    "include(\"${JH_ROOT}/cmake/jh_hardware_config.cmake\")\n"
+    "jh_generate_hardware_config(ROOT \"${JH_ROOT}\"\n"
+    "    CONFIG_DIR \"\${CMAKE_CURRENT_SOURCE_DIR}\"\n"
+    "    OUTPUT_ROOT \"\${CMAKE_CURRENT_SOURCE_DIR}/.build\"\n"
+    "    OUTPUT_DIR \"\${CMAKE_BINARY_DIR}/generated\")\n"
+    "add_custom_target(probe ALL COMMAND \"\${CMAKE_COMMAND}\" -E true)\n")
+set(ENV{JH_EXECUTABLE} "${_jh_tool}")
+set(ENV{JH_EXECUTABLE_ROOT} "${JH_ROOT}")
+run_step(hardware-configure TRUE "" "${CMAKE_COMMAND}" -S "${_hardware}" -B "${_hardware_build}" ${_generator})
+run_step(hardware-build TRUE "" "${CMAKE_COMMAND}" --build "${_hardware_build}")
+file(READ "${_binding}" _binding_original)
+string(REPLACE "\"default\": false" "\"default\": 1" _binding_broken "${_binding_original}")
+if(_binding_broken STREQUAL _binding_original)
+    message(FATAL_ERROR "hardware binding fixture has no boolean default")
+endif()
+file(WRITE "${_binding}" "${_binding_broken}")
+run_step(hardware-binding-edited FALSE "JH-HW-BINDING" "${CMAKE_COMMAND}" --build "${_hardware_build}")
+file(WRITE "${_binding}" "${_binding_original}")
+run_step(hardware-binding-restored TRUE "" "${CMAKE_COMMAND}" --build "${_hardware_build}")

@@ -692,6 +692,17 @@ const jh_board_can_controller_t *jh_board_can_controller(jb_json_span_t id) {
 
 const char *jh_board_bus_device_kind(void) { return bus_device_kind; }
 
+int64_t jh_board_can_controller_count(jb_json_span_t target) {
+  int64_t count = 0;
+  for (size_t i = 0; i < COUNTOF(can_controllers); ++i)
+    for (size_t j = 0; j < can_controllers[i].target_count; ++j)
+      if (jh_span_equal(target, jh_span(can_controllers[i].targets[j]))) {
+        count += can_controllers[i].instances;
+        break;
+      }
+  return count;
+}
+
 /* ---- Component registry: config/tooling/board_components.json ---- */
 
 static void component_destroy(jh_board_component_t *component) {
@@ -1145,7 +1156,7 @@ static hal_status_t require_hard_owner(const check_t *c, jb_json_span_t at,
 }
 
 /* board_device_owner: board.<device id in kebab case>. */
-static hal_status_t device_owner(jb_json_span_t id, jb_string_t *out) {
+hal_status_t jh_board_device_owner(jb_json_span_t id, jb_string_t *out) {
   jb_string_clear(out);
   hal_status_t status = jh_append(out, "board.");
   for (size_t i = 0; status == HAL_OK && i < id.length; ++i) {
@@ -1958,7 +1969,7 @@ typedef struct {
   size_t limit;
   jh_failure_t *failure;
   bool features_loaded;
-  jh_feature_registry_t features;
+  jh_feature_registry_t *features;
   jh_json_location_t schema_where;
   jh_schema_files_t inputs_schema, sources_schema;
   bool inputs_loaded, sources_loaded;
@@ -1974,7 +1985,7 @@ static hal_status_t loaded_features(loader_t *l) {
   if (status == HAL_OK)
     status = jh_absolute_path("config", l->checkout_root, &config, l->failure);
   if (status == HAL_OK)
-    status = jh_feature_registry_load(&l->features, jb_string_data(&config),
+    status = jh_feature_registry_load(l->features, jb_string_data(&config),
                                       l->limit, l->failure);
   l->features_loaded = status == HAL_OK;
   jb_string_destroy(&config);
@@ -2273,7 +2284,7 @@ static hal_status_t resolve_features(loader_t *l, jb_json_tree_view_t target,
   jh_feature_resolution_init(&resolution);
   hal_status_t status = loaded_features(l);
   if (status == HAL_OK)
-    status = jh_board_resolve_features(&l->features, target, normalized,
+    status = jh_board_resolve_features(l->features, target, normalized,
                                        &resolution, l->failure);
   for (size_t i = 0; status == HAL_OK && resolved != NULL &&
                      i < jb_vector_size(&resolution.resolved);
@@ -2743,7 +2754,7 @@ static hal_status_t validate_target_features(loader_t *l, const check_t *c,
          status == HAL_OK && i < jb_vector_size(&supported_symbols); ++i) {
       const jb_json_span_t symbol =
           jh_string_span(jh_list_at(&supported_symbols, i));
-      if (find_feature(&l->features, symbol) == NULL)
+      if (find_feature(l->features, symbol) == NULL)
         status = storage(c, jh_list_push(&lacking, symbol));
     }
     if (status == HAL_OK && jb_vector_size(&lacking) != 0)
@@ -2752,8 +2763,7 @@ static hal_status_t validate_target_features(loader_t *l, const check_t *c,
     for (size_t i = 0; status == HAL_OK && i < jb_vector_size(&supported);
          ++i) {
       const jb_string_t *entry = jh_list_at(&supported, i);
-      const jh_feature_t *feature =
-          find_feature(&l->features, symbol_of(entry));
+      const jh_feature_t *feature = find_feature(l->features, symbol_of(entry));
       if (!feature->derived)
         status = storage(c, jh_list_push(&requestable, jh_string_span(entry)));
     }
@@ -3410,7 +3420,7 @@ static hal_status_t validate_board_devices(const check_t *c,
       status = fail_text_with(c, jh_string_span(&at), id,
                               JH_PARTS(jh_span("a camelCase device ID")));
     if (status == HAL_OK)
-      status = storage(c, device_owner(id, &owner));
+      status = storage(c, jh_board_device_owner(id, &owner));
     if (status == HAL_OK)
       status = validate_device(c, jh_string_span(&at), device, pins,
                                jh_string_span(&owner));
@@ -4015,14 +4025,28 @@ hal_status_t jh_board_registry_load(jh_board_registry_t *registry,
                                     const char *checkout_root,
                                     const char *boards_root, size_t limit,
                                     jh_failure_t *failure) {
-  if (registry == NULL || checkout_root == NULL || boards_root == NULL)
+  jh_feature_registry_t features;
+  jh_feature_registry_init(&features);
+  const hal_status_t status = jh_board_registry_load_with_features(
+      registry, checkout_root, boards_root, limit, &features, failure);
+  jh_feature_registry_destroy(&features);
+  return status;
+}
+
+hal_status_t jh_board_registry_load_with_features(
+    jh_board_registry_t *registry, const char *checkout_root,
+    const char *boards_root, size_t limit, jh_feature_registry_t *features,
+    jh_failure_t *failure) {
+  if (registry == NULL || checkout_root == NULL || boards_root == NULL ||
+      features == NULL)
     return jh_fail_arguments(failure);
   loader_t l = {0};
   l.registry = registry;
   l.checkout_root = checkout_root;
   l.limit = limit;
   l.failure = failure;
-  jh_feature_registry_init(&l.features);
+  l.features = features;
+  l.features_loaded = features->digest[0] != '\0';
   jh_json_location_init(&l.schema_where);
   jh_schema_files_init(&l.inputs_schema, &l.schema_where, limit);
   jh_schema_files_init(&l.sources_schema, &l.schema_where, limit);
@@ -4071,7 +4095,6 @@ hal_status_t jh_board_registry_load(jh_board_registry_t *registry,
   jh_schema_files_destroy(&l.sources_schema);
   jh_schema_files_destroy(&l.inputs_schema);
   jh_json_location_destroy(&l.schema_where);
-  jh_feature_registry_destroy(&l.features);
   return status;
 }
 

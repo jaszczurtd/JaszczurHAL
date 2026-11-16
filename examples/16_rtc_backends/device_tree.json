@@ -24,8 +24,8 @@
         }
       },
       "nodes": {
-        "pcf8563": { "present": true, "bus": "i2c", "address": 81 },
-        "ds3231": { "present": true, "bus": "i2c", "address": 104 },
+        "pcf8563": { "present": true, "bus": "i2c", "address": "0x51" },
+        "ds3231": { "present": true, "bus": "i2c", "address": "0x68" },
         "display": { "present": false }
       }
     },
@@ -43,8 +43,8 @@
         }
       },
       "nodes": {
-        "pcf8563": { "present": true, "bus": "i2c", "address": 81 },
-        "ds3231": { "present": true, "bus": "i2c", "address": 104 },
+        "pcf8563": { "present": true, "bus": "i2c", "address": "0x51" },
+        "ds3231": { "present": true, "bus": "i2c", "address": "0x68" },
         "display": { "present": false }
       }
     },
@@ -62,8 +62,8 @@
         }
       },
       "nodes": {
-        "pcf8563": { "present": true, "bus": "i2c", "address": 81 },
-        "ds3231": { "present": true, "bus": "i2c", "address": 104 },
+        "pcf8563": { "present": true, "bus": "i2c", "address": "0x51" },
+        "ds3231": { "present": true, "bus": "i2c", "address": "0x68" },
         "display": { "present": false }
       }
     },
@@ -87,8 +87,8 @@
         }
       },
       "nodes": {
-        "pcf8563": { "present": true, "bus": "i2c", "address": 81 },
-        "ds3231": { "present": true, "bus": "i2c", "address": 104 },
+        "pcf8563": { "present": true, "bus": "i2c", "address": "0x51" },
+        "ds3231": { "present": true, "bus": "i2c", "address": "0x68" },
         "display": {
           "present": true,
           "bus": "spi",
