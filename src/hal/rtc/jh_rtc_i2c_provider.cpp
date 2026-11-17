@@ -227,8 +227,9 @@ static hal_status_t pcf_initialize(void *context,
   pcf->device.i2c_bus = config->bus.i2c.i2c_bus;
   pcf->device.i2c_addr = config->bus.i2c.i2c_addr;
   if (!pcf8563_probe(&pcf->device)) {
-    hal_derr("hal_rtc_init: PCF8563 probe failed (bus=%u addr=0x%02X)",
-             (unsigned)pcf->device.i2c_bus, (unsigned)pcf->device.i2c_addr);
+    hal_derr_limited(
+        "rtc", "hal_rtc_init: PCF8563 probe failed (bus=%u addr=0x%02X)",
+        (unsigned)pcf->device.i2c_bus, (unsigned)pcf->device.i2c_addr);
     return HAL_EIO;
   }
   return HAL_OK;
@@ -607,8 +608,9 @@ static hal_status_t ds_initialize(void *context,
 
   const hal_rtc_i2c_cfg_t *i2c = &config->bus.i2c;
   if (!ds_probe(i2c->i2c_bus, i2c->i2c_addr)) {
-    hal_derr("hal_rtc_init: DS3231 probe failed (bus=%u addr=0x%02X)",
-             (unsigned)i2c->i2c_bus, (unsigned)i2c->i2c_addr);
+    hal_derr_limited("rtc",
+                     "hal_rtc_init: DS3231 probe failed (bus=%u addr=0x%02X)",
+                     (unsigned)i2c->i2c_bus, (unsigned)i2c->i2c_addr);
     return HAL_EIO;
   }
 

@@ -1,6 +1,7 @@
 #include "hal/i2c/hal_i2c.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/rtc/jh_rtc_provider.h"
+#include "hal/serial/hal_serial.h"
 #include "utils/unity.h"
 
 #include <cstddef>
@@ -193,6 +194,44 @@ void test_ds3231_provider_propagates_i2c_failures(void) {
   provider->deinitialize(s_context);
 }
 
+/* Applications retry hal_rtc_init() while the RTC is missing; the probe
+ * failure must not flood the log on every retry. */
+void test_missing_rtc_probe_failures_are_rate_limited(void) {
+  static const struct {
+    hal_rtc_chip_t chip;
+    uint8_t address;
+    const char *message;
+  } chips[] = {
+      {HAL_RTC_CHIP_PCF8563, (uint8_t)HAL_RTC_PCF8563_DEFAULT_I2C_ADDR,
+       "PCF8563 probe failed"},
+      {HAL_RTC_CHIP_DS3231, (uint8_t)HAL_RTC_DS3231_DEFAULT_I2C_ADDR,
+       "DS3231 probe failed"},
+  };
+  const hal_debug_rate_limit_t limit = {1u, 1000u, 30000u};
+
+  for (size_t i = 0; i < COUNTOF(chips); ++i) {
+    hal_debug_init(115200u, &limit);
+    hal_mock_serial_reset();
+    hal_mock_i2c_set_busy(true); /* no device answers */
+    const jh_rtc_provider_ops_t *provider =
+        jh_rtc_i2c_provider_get_ops(chips[i].chip);
+    hal_rtc_config_t config = config_for(chips[i].chip, chips[i].address);
+
+    TEST_ASSERT_EQUAL_INT(HAL_EIO, provider->initialize(s_context, &config));
+    TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(), "[rtc]"));
+    TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(), chips[i].message));
+
+    TEST_ASSERT_EQUAL_INT(HAL_EIO, provider->initialize(s_context, &config));
+    TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(),
+                                "repeated errors are being suppressed"));
+
+    hal_mock_serial_reset();
+    TEST_ASSERT_EQUAL_INT(HAL_EIO, provider->initialize(s_context, &config));
+    TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
+    hal_mock_i2c_set_busy(false);
+  }
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_provider_selection_reports_chip_metadata);
@@ -200,5 +239,6 @@ int main(void) {
   RUN_TEST(test_pcf8563_provider_tells_invalid_contents_from_bus_errors);
   RUN_TEST(test_ds3231_provider_translates_datetime_and_capabilities);
   RUN_TEST(test_ds3231_provider_propagates_i2c_failures);
+  RUN_TEST(test_missing_rtc_probe_failures_are_rate_limited);
   return UNITY_END();
 }

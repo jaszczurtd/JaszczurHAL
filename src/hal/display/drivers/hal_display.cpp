@@ -425,7 +425,7 @@ static bool ensure_display_ready(const char *fn) {
   if (has_active_display()) {
     return true;
   }
-  hal_derr("%s: display backend is not initialized", fn);
+  hal_derr_limited("display", "%s: display backend is not initialized", fn);
   return false;
 }
 

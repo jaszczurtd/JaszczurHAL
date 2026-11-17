@@ -170,7 +170,8 @@ hal_status_t hal_rtc_init_ex(const hal_rtc_config_t *config,
 
   const jh_rtc_provider_ops_t *provider = jh_rtc_provider_get_ops(config->chip);
   if (!rtc_provider_valid(provider)) {
-    hal_derr("hal_rtc_init: unsupported RTC backend %d", (int)config->chip);
+    hal_derr_limited("rtc", "hal_rtc_init: unsupported RTC backend %d",
+                     (int)config->chip);
     return HAL_EUNSUPPORTED;
   }
 
@@ -209,8 +210,9 @@ hal_status_t hal_rtc_init_ex(const hal_rtc_config_t *config,
         i2c->clock_hz == 0u ||
         (provider->fixed_i2c_addr &&
          i2c->i2c_addr != provider->default_i2c_addr)) {
-      hal_derr("hal_rtc_init: invalid I2C config (addr=0x%02X, clock=%lu)",
-               (unsigned)i2c->i2c_addr, (unsigned long)i2c->clock_hz);
+      hal_derr_limited(
+          "rtc", "hal_rtc_init: invalid I2C config (addr=0x%02X, clock=%lu)",
+          (unsigned)i2c->i2c_addr, (unsigned long)i2c->clock_hz);
       rtc_discard_handle(handle);
       return HAL_EINVAL;
     }

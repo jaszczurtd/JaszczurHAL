@@ -2287,7 +2287,7 @@
       "supplier": {
         "name": "jaszczurtd"
       },
-      "purl": "pkg:github/jaszczurtd/jhbase@b63874f317879f68274aec13a8b1bad9d7992cc8",
+      "purl": "pkg:github/jaszczurtd/jhbase@1203d785ed85b7799fa4e8003a4c26683f9be1e5",
       "externalReferences": [
         {
           "type": "website",
@@ -2307,7 +2307,7 @@
       "properties": [
         {
           "name": "jaszczurhal:commit",
-          "value": "b63874f317879f68274aec13a8b1bad9d7992cc8"
+          "value": "1203d785ed85b7799fa4e8003a4c26683f9be1e5"
         },
         {
           "name": "jaszczurhal:notes",
@@ -2510,5 +2510,5 @@
       ]
     }
   ],
-  "serialNumber": "urn:uuid:ba00ed3c-3270-b98c-349c-7c1ca4857ec2"
+  "serialNumber": "urn:uuid:90fc5d5d-cb99-759c-b9aa-85cea7ba1f10"
 }

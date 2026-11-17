@@ -972,6 +972,10 @@ niepoprawną datę, na przykład po utracie zasilania PCF8563, zwraca `HAL_EPROT
 to odróżnić nieustawiony zegar, który aplikacja może ustawić, od błędu magistrali,
 który warto ponowić.
 
+Nieudane wykrycie układu i błędną konfigurację `hal_rtc_init()` zgłasza przez
+`hal_derr_limited("rtc", ...)`. Aplikacja może więc ponawiać inicjalizację, gdy RTC
+nie odpowiada, bez zalewania portu szeregowego komunikatami.
+
 ```c
 hal_rtc_t rtc = NULL;
 hal_status_t st = hal_rtc_init_ex(&cfg, &rtc);

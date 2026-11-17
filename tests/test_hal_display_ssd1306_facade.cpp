@@ -1,8 +1,10 @@
 #include "hal/display/hal_display.h"
 #include "hal/i2c/hal_i2c.h"
+#include "hal/serial/hal_serial.h"
 #include "support/ssd1306_panel.h"
 #include "utils/unity.h"
 
+#include <cstring>
 #include <vector>
 
 static Ssd1306Panel panel;
@@ -17,6 +19,10 @@ extern "C" void *__wrap_malloc(size_t size) {
   return __real_malloc(size);
 }
 #endif
+/* hal_mock.h needs the mock target, while this test compiles the facade for
+ * RP2040; only the serial capture of hal_mock is used. */
+const char *hal_mock_serial_last_line(void);
+void hal_mock_serial_reset(void);
 extern "C" {
 hal_status_t hal_i2c_set_clock_bus(uint8_t, uint32_t) { return HAL_OK; }
 void hal_i2c_begin_transmission_bus(uint8_t, hal_i2c_address_t) { tx.clear(); }
@@ -52,6 +58,27 @@ static const hal_display_mono_font_t font = {glyph, sizeof(glyph), 'A', 'A', 3};
 static hal_status_t text(int x = 4, int y = 8, uint8_t scale = 2) {
   return hal_display_draw_mono_text_ex(x, y, "AA", &font, scale,
                                        HAL_COLOR_WHITE, HAL_COLOR_BLACK);
+}
+
+/* Runs first, before any test initializes a backend: an application that
+ * keeps drawing after a failed display init must not flood the log. */
+void test_calls_without_backend_log_rate_limited_errors(void) {
+  const hal_debug_rate_limit_t limit = {1u, 1000u, 30000u};
+  hal_debug_init(115200u, &limit);
+  hal_mock_serial_reset();
+
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_display_flush_ex());
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(), "[display]"));
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(),
+                              "display backend is not initialized"));
+
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_display_flush_ex());
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(),
+                              "repeated errors are being suppressed"));
+
+  hal_mock_serial_reset();
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_display_flush_ex());
+  TEST_ASSERT_EQUAL_STRING("", hal_mock_serial_last_line());
 }
 
 void test_direct_matches_buffered_pixels_and_uses_no_heap(void) {
@@ -172,6 +199,7 @@ void test_text_validation_clipping_background_and_raw_pages(void) {
 
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_calls_without_backend_log_rate_limited_errors);
   RUN_TEST(test_direct_matches_buffered_pixels_and_uses_no_heap);
   RUN_TEST(test_profile_overrides_zero_values_and_defaults_are_preserved);
   RUN_TEST(test_direct_failure_repositions_and_retry_repairs_cell);

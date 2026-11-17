@@ -1066,6 +1066,10 @@ The backend can report `HAL_EINVAL`, `HAL_EUNINIT`, `HAL_EUNSUPPORTED`,
 `HAL_ESTATE`, `HAL_EBUSY`, `HAL_EOVERFLOW` and `HAL_EIO` without collapsing
 them through a legacy boolean result.
 
+A drawing or flush call without an initialized backend returns `HAL_EUNINIT`
+and logs through `hal_derr_limited("display", ...)`, so a loop that keeps
+drawing after a failed init does not flood the serial output.
+
 ```c
 // Configure + draw with typed diagnostics
 hal_status_t st = hal_display_configure_ex(240, 320, 0, false, false);

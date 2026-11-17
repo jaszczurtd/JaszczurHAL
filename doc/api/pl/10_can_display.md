@@ -1117,6 +1117,10 @@ Backend może zwrócić `HAL_EINVAL`, `HAL_EUNINIT`, `HAL_EUNSUPPORTED`, `HAL_ES
 `HAL_EBUSY`, `HAL_EOVERFLOW` lub `HAL_EIO` bez sprowadzania tych informacji do dawnego
 wyniku typu `bool`.
 
+Rysowanie albo `flush` bez zainicjalizowanego backendu zwraca `HAL_EUNINIT`, a błąd
+trafia do logu przez `hal_derr_limited("display", ...)`. Pętla, która rysuje dalej po
+nieudanej inicjalizacji, nie zalewa więc portu szeregowego komunikatami.
+
 ```c
 // Konfiguracja + rysowanie z typowaną diagnostyką
 hal_status_t st = hal_display_configure_ex(240, 320, 0, false, false);

@@ -944,6 +944,10 @@ finds registers holding no valid date, for example after a PCF8563 supply loss,
 returns `HAL_EPROTO`. This tells an unset clock, which the application may set,
 from a bus failure worth retrying.
 
+`hal_rtc_init()` reports a failed probe and an invalid configuration through
+`hal_derr_limited("rtc", ...)`. An application can retry the init while the RTC
+is missing without flooding the serial output.
+
 ```c
 hal_rtc_t rtc = NULL;
 hal_status_t st = hal_rtc_init_ex(&cfg, &rtc);
