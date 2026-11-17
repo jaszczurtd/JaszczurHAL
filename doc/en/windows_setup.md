@@ -149,7 +149,9 @@ firmware.
 HTTPS downloads on Windows use the operating system's `curl.exe` and Schannel
 trust store with HTTPS-only redirects and TLS 1.2 or newer. This supports
 managed enterprise TLS inspection without disabling certificate validation.
-Every downloaded archive must still match its pinned SHA-256 before extraction.
+A download that ends with a timeout or HTTP 408, 429, 500, 502, 503 or 504 is
+retried up to three times, five seconds apart. Every downloaded archive must
+still match its pinned SHA-256 before extraction.
 
 <a id="firmware-build-layout"></a>
 

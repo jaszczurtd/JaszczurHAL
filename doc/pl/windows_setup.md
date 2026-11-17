@@ -168,8 +168,10 @@ Skrypt inicjalizacyjny JaszczurHAL nie modyfikuje firmware'u sondy.
 Pobieranie przez HTTPS w Windows korzysta z systemowego `curl.exe` oraz
 magazynu zaufania Schannel, dopuszcza wyłącznie przekierowania HTTPS i wymaga
 TLS 1.2 lub nowszego. Dzięki temu firmowe mechanizmy inspekcji TLS mogą działać
-bez wyłączania walidacji certyfikatów. Przed wypakowaniem każde pobrane
-archiwum musi nadal odpowiadać przypisanemu do niego skrótowi SHA-256.
+bez wyłączania walidacji certyfikatów. Pobranie zakończone timeoutem albo
+statusem HTTP 408, 429, 500, 502, 503 lub 504 jest ponawiane do trzech razy,
+co pięć sekund. Przed wypakowaniem każde pobrane archiwum musi nadal
+odpowiadać przypisanemu do niego skrótowi SHA-256.
 
 <a id="układ-buildu-firmware"></a>
 

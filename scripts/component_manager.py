@@ -776,9 +776,13 @@ def _download_windows_https(url: str, destination: Path) -> str:
         raise ComponentError(
             "Windows system curl.exe is required for authenticated HTTPS downloads."
         )
+    # Transient failures (timeouts, HTTP 408, 429, 500, 502, 503, 504) are retried,
+    # so a mirror that is busy for a moment does not end the setup; the SHA-256
+    # check of the result stays as it is.
     command = (
         str(curl), "--fail", "--location", "--silent", "--show-error",
         "--proto", "=https", "--proto-redir", "=https", "--tlsv1.2",
+        "--retry", "3", "--retry-delay", "5",
         "--output", str(destination), url,
     )
     result = subprocess.run(command, capture_output=True, text=True)

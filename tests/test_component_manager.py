@@ -432,6 +432,8 @@ class ArchiveManagerTests(unittest.TestCase):
             self.assertIn("--location", observed)
             self.assertIn("--tlsv1.2", observed)
             self.assertIn("=https", observed)
+            self.assertEqual("3", observed[observed.index("--retry") + 1])
+            self.assertEqual("5", observed[observed.index("--retry-delay") + 1])
 
     def test_pmd_archive_is_version_checked_and_resolved(self) -> None:
         self.assertIn("pmd", manager.SOURCE_COMPONENT_ORDER)
