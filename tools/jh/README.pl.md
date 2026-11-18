@@ -854,9 +854,8 @@ i dokumenty schematów wczytywane podczas walidacji,
 w Pythonie, a [jh_generated_output.h](src/jh_generated_output.h) publikuje
 i sprawdza generowane artefakty. [jh_feature_registry.h](config/jh_feature_registry.h)
 wczytuje rejestr funkcji HAL, renderuje jego artefakty i rozwiązuje żądania
-funkcji; digesty liczy rdzeń SHA-256 HAL z
-[jh_sha256.h](../../src/hal/security/jh_sha256.h), który narzędzie kompiluje
-samodzielnie. [jh_feature_lint.h](config/jh_feature_lint.h) wyszukuje wejścia
+funkcji; digesty liczy rdzeń SHA-256 z jhbase (`jb/sha256.h`), ten sam,
+którego używa `hal_sha256_*`. [jh_feature_lint.h](config/jh_feature_lint.h) wyszukuje wejścia
 lintu funkcji i sprawdza manifesty projektów.
 [jh_board_registry.h](config/jh_board_registry.h) wczytuje i sprawdza rejestr
 płytek, a [jh_clock_registry.h](config/jh_clock_registry.h) rejestr drzew

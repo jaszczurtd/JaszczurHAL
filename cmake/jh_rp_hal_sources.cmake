@@ -1,6 +1,7 @@
 include_guard(GLOBAL)
 include("${CMAKE_CURRENT_LIST_DIR}/jh_project_features.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/jh_project_config.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/jh_jhbase.cmake")
 
 # Report whether a macro is enabled for the RP build: a HAL feature when the
 # registry-resolved closure contains it, any other macro when the project
@@ -64,11 +65,13 @@ function(jh_collect_rp_hal_sources OUT_VAR SRC_DIR)
         "${SRC_DIR}/utils/draw7Segment.cpp"
         "${SRC_DIR}/utils/pidController.cpp"
     )
+    jh_jhbase_sha256_sources(_jhbase_sha256_sources)
     set(${OUT_VAR}
         ${_rp_impl_sources}
         ${_driver_sources}
         ${_common_sources}
         ${_utility_sources}
+        ${_jhbase_sha256_sources}
         PARENT_SCOPE
     )
 endfunction()

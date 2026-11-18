@@ -74,7 +74,7 @@ bool hal_chacha20_poly1305_decrypt(
     uint8_t *plaintext);
 
 // SHA-256 / HMAC-SHA256 (FIPS 180-4 + RFC 2104)
-typedef jh_sha256_context_t hal_sha256_context_t; // hal/security/jh_sha256.h
+typedef jb_sha256_context_t hal_sha256_context_t; // jhbase jb/sha256.h
 
 hal_status_t hal_sha256_init_ex(hal_sha256_context_t *context);
 hal_status_t hal_sha256_update_ex(hal_sha256_context_t *context,
@@ -105,8 +105,11 @@ bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
 - `hal_hmac_sha256(...)` follows RFC 2104 - keys longer than the block size (64 B) are pre-hashed; shorter keys are zero-padded.
 - The `_ex` SHA-256 API supports bounded-memory streaming. `final_ex`
   invalidates the context; update/final calls before initialization or after
-  finalization return `HAL_ESTATE`.
-- SHA-256 / HMAC-SHA256 are validated against FIPS 180-2 and RFC 4231 vectors and stay bit-stable with companion host-side mirror implementations (for example `sc_sha256.c`).
+  finalization return `HAL_EINVAL`, like NULL arguments.
+- SHA-256 / HMAC-SHA256 are validated against FIPS 180-2 and RFC 4231 vectors.
+- The SHA-256 core comes from jhbase (`jb/sha256.h`). Every HAL library
+  compiles it, and the host `jh` tools use the same core, so firmware and
+  tools compute identical digests.
 
 **Security:** MD5 is retained for legacy checksums and identifiers that do not require collision resistance. Do not use it where collision resistance is needed. Use SHA-256 and HMAC-SHA256 for new integrity and authentication mechanisms, respectively.
 

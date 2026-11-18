@@ -35,9 +35,10 @@ function(jh_tool_target target)
       $<$<COMPILE_LANGUAGE:CXX>:-fno-rtti>)
   endif()
 endfunction()
-# The failure record of the C modules and repr() of Python strings, which
-# every command quotes in its diagnostics. C11.
-add_library(jh_core STATIC base/jh_failure.c json/jh_python_repr.c)
+# The failure record of the C modules, repr() of Python strings, which every
+# command quotes in its diagnostics, and SHA-256 digests in hex through the
+# jhbase core (jb/sha256.h), which hal_sha256_* also calls. C11.
+add_library(jh_core STATIC base/jh_failure.c json/jh_python_repr.c json/jh_json_digest.c)
 target_include_directories(jh_core PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/base"
   "${CMAKE_CURRENT_SOURCE_DIR}/json")
 target_link_libraries(jh_core PUBLIC jb::host PRIVATE jb::unicode)
@@ -54,20 +55,13 @@ add_library(jh_files STATIC json/jh_json_file.c json/jh_json_check.c base/jh_pro
 target_include_directories(jh_files PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/src")
 target_link_libraries(jh_files PUBLIC jh_core jh_schema jb::host)
 jh_tool_target(jh_files)
-# The SHA-256 core of HAL (hal_sha256_* delegates to it), which needs no HAL
-# configuration, and the feature registry generator. C11.
-add_library(jh_sha256 STATIC "${CMAKE_CURRENT_SOURCE_DIR}/../../src/hal/security/jh_sha256.c")
-target_include_directories(jh_sha256 PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../src")
-# hal/core/hal_layout_check.h, which the header includes, needs jb/abi.h.
-target_link_libraries(jh_sha256 PUBLIC jb::status)
-jh_tool_target(jh_sha256)
+# The feature registry generator. C11.
 add_library(jh_registry STATIC config/jh_feature_registry.c config/jh_board_outputs.c
-  json/jh_json_digest.c
   config/jh_feature_lint.c config/jh_board_registry.c config/jh_clock_registry.c
   config/jh_project_build.c config/jh_config_expression.c
   config/jh_project_config.c)
 target_include_directories(jh_registry PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/config")
-target_link_libraries(jh_registry PUBLIC jh_files PRIVATE jh_sha256 pcre2-8-static jb::unicode)
+target_link_libraries(jh_registry PUBLIC jh_files PRIVATE pcre2-8-static jb::unicode)
 jh_tool_target(jh_registry)
 # The type catalogue and the device defaults generator. C11.
 add_library(jh_host STATIC hardware/jh_type_catalogue.c hardware/jh_catalogue_nodes.c
@@ -92,11 +86,17 @@ endforeach()
 string(APPEND _jh_tool_inputs "};\n")
 file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/jh_tool_inputs.h" CONTENT "${_jh_tool_inputs}")
 target_include_directories(jh_host PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
-target_link_libraries(jh_host PUBLIC jh_registry jb::host jb::unicode PRIVATE jh_sha256 pcre2-8-static)
+target_link_libraries(jh_host PUBLIC jh_registry jb::host jb::unicode PRIVATE pcre2-8-static)
 jh_tool_target(jh_host)
 add_library(jh_device STATIC device/jh_firmware_build.c device/jh_firmware_read.c)
 target_include_directories(jh_device PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/device")
-target_link_libraries(jh_device PUBLIC jh_files PRIVATE jh_sha256)
+# The firmware tools and their test read integers through HAL's
+# hal/core/jh_endian.h, an alias header of jb/endian.h. Only these targets see
+# the HAL source root: its wrappers of system headers (unistd.h) must not
+# reach the other tool sources.
+set(_jh_hal_source_root "${CMAKE_CURRENT_SOURCE_DIR}/../../src")
+target_include_directories(jh_device PRIVATE "${_jh_hal_source_root}")
+target_link_libraries(jh_device PUBLIC jh_files)
 jh_tool_target(jh_device)
 add_executable(jh src/main.c src/jh_cli_result.c src/jh_cli_json.c
   src/jh_cli_repository.c src/jh_cli_features.c src/jh_cli_boards.c
@@ -130,7 +130,8 @@ if(BUILD_TESTING)
   jh_tool_target(jh_schema_test)
   add_test(NAME jh_schema COMMAND jh_schema_test)
   add_executable(jh_firmware_test tests/test_firmware.c)
-  target_link_libraries(jh_firmware_test PRIVATE jh_device jh_sha256)
+  target_link_libraries(jh_firmware_test PRIVATE jh_device)
+  target_include_directories(jh_firmware_test PRIVATE "${_jh_hal_source_root}")
   jh_tool_target(jh_firmware_test)
   add_test(NAME jh_firmware COMMAND jh_firmware_test "${CMAKE_CURRENT_BINARY_DIR}"
     "$<TARGET_FILE:jh_firmware_test>" "$<TARGET_FILE:jh>")

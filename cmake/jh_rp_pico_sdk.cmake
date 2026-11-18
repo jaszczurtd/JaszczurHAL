@@ -377,12 +377,13 @@ elseif(_jh_pico_board_has_cyw43)
 endif()
 
 function(jh_add_rp_ota_boot_target BOOT_TARGET)
+    jh_jhbase_sha256_sources(_jh_boot_sha256_sources)
     add_executable("${BOOT_TARGET}"
         "${SRC}/hal/impl/rp2040/ota/rp_ota_boot.cpp"
         "${SRC}/hal/network/ota/jh_ota_image.cpp"
         "${SRC}/hal/network/ota/jh_ota_swap_engine.cpp"
         "${SRC}/hal/security/hal_crypto.cpp"
-        "${SRC}/hal/security/jh_sha256.c"
+        ${_jh_boot_sha256_sources}
         "${SRC}/hal/security/hal_crc.cpp")
     target_include_directories("${BOOT_TARGET}" PRIVATE
         "${SRC}"

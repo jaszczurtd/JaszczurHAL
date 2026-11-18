@@ -263,6 +263,8 @@ Choosing a header:
 | Calendar and elapsed time | `hal/time/hal_time.h` | `hal_time_*`, `hal_get_seconds()` |
 | Periodically refreshed random values | `hal/system/hal_periodic_random.h` | `hal_periodic_random_*` |
 
+The `jh_*` byte-order helpers are aliases of the jhbase functions in `jb/endian.h`, which define them once for HAL, its tools and jhbase. Loads and stores accept buffers at any address, give the same result on every host byte order and do not check pointers.
+
 The `_ex` variants return `hal_status_t`, validate arguments, and use explicitly supplied buffers and state. `hal_adc_average_config_t` selects ADC sample count, dummy-read behavior, delay, and characteristic correction rather than hidden project-wide settings.
 
 `HAL_MATH_ROLLING_AVERAGE_DEFAULT_SIZE` from `<hal/core/hal_math.h>` sets

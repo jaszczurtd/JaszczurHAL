@@ -166,7 +166,7 @@ share/JaszczurHAL/generated/
   jh_board_resolved.json
 ```
 
-Pozostałe nagłówki publiczne HAL są instalowane w `include/`. W `include/jb/` leżą nagłówki statusów jhbase, które dołączają `hal_status.h` i `hal_array.h`, a `lib/cmake/jhbase/` zapisuje rewizję jhbase i profil ABI. Traktuj całe drzewo instalacji jako jeden pakiet. Przy bezpośrednim wywołaniu kompilatora dodaj `include/` i `include/generated/` do ścieżek nagłówków, a do definicji - makro platformy i żądane funkcje zapisane w `jh_board_resolved.json`. Skompiluj także `share/JaszczurHAL/generated/jh_link_contract_reference.c` i zlinkuj otrzymany plik obiektowy z `lib/libJaszczurHAL.a`. Przykładowy układ poleceń:
+Pozostałe nagłówki publiczne HAL są instalowane w `include/`. W `include/jb/` leżą nagłówki jhbase, które dołączają nagłówki HAL (kody statusów, `COUNTOF`, funkcje kolejności bajtów i rdzeń SHA-256; kod rdzenia jest częścią `libJaszczurHAL.a`), a `lib/cmake/jhbase/` zapisuje rewizję jhbase i profil ABI. Traktuj całe drzewo instalacji jako jeden pakiet. Przy bezpośrednim wywołaniu kompilatora dodaj `include/` i `include/generated/` do ścieżek nagłówków, a do definicji - makro platformy i żądane funkcje zapisane w `jh_board_resolved.json`. Skompiluj także `share/JaszczurHAL/generated/jh_link_contract_reference.c` i zlinkuj otrzymany plik obiektowy z `lib/libJaszczurHAL.a`. Przykładowy układ poleceń:
 
 Szablon - przed uruchomieniem zastąp wartości w `<...>`:
 

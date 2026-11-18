@@ -829,9 +829,8 @@ quotes text as Python's `repr()` does, and
 [jh_generated_output.h](src/jh_generated_output.h) publishes and checks
 generated artifacts. [jh_feature_registry.h](config/jh_feature_registry.h)
 loads the HAL feature registry, renders its artifacts and resolves feature
-requests; its digests use the SHA-256 core of HAL in
-[jh_sha256.h](../../src/hal/security/jh_sha256.h), which the tool compiles on
-its own. [jh_feature_lint.h](config/jh_feature_lint.h) finds the inputs of the
+requests; its digests use the SHA-256 core of jhbase (`jb/sha256.h`), the
+same core that `hal_sha256_*` calls. [jh_feature_lint.h](config/jh_feature_lint.h) finds the inputs of the
 feature lint and checks project manifests.
 [jh_board_registry.h](config/jh_board_registry.h) loads and validates the board
 registry, and [jh_clock_registry.h](config/jh_clock_registry.h) the clock tree

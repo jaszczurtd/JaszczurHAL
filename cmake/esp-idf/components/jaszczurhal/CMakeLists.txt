@@ -45,9 +45,12 @@ foreach(_framework_dir ${JH_ESP_IDF_COMPONENT_INCLUDE_DIRS})
 endforeach()
 
 # hal_status.h and hal_array.h include jhbase; the same module as the CMake
-# builds selects the checkout and stops when it is missing.
+# builds selects the checkout and stops when it is missing. Like every HAL
+# library, the component compiles the jhbase SHA-256 core.
 include("${JH_ROOT}/cmake/jh_jhbase.cmake")
 jh_jhbase_include_dir(_jh_jhbase_include)
+jh_jhbase_sha256_sources(_jh_jhbase_sha256_sources)
+list(APPEND _jh_sources ${_jh_jhbase_sha256_sources})
 
 idf_component_register(
     SRCS ${_jh_sources}

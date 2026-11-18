@@ -39,6 +39,7 @@ jh_managed_framework_configure_sources()
 jh_littlefs_source_manifest(JH_LITTLEFS_TEST_SOURCES
     JH_LITTLEFS_TEST_INCLUDE_DIRS)
 jh_sx126x_source_manifest(JH_SX126X_SOURCES JH_SX126X_INCLUDE_DIRS)
+jh_jhbase_sha256_sources(JH_JHBASE_SHA256_SOURCES)
 
 option(JH_ENABLE_FREERTOS_POSIX_TESTS
     "Build host FreeRTOS POSIX scheduler regression tests"
@@ -156,7 +157,7 @@ set(UTIL_SOURCES
     ${SRC}/hal/can/mcp2515/hal_can_mcp2515_config.cpp
     ${SRC}/hal/can/mcp251xfd/mcp251xfd_driver.cpp
     ${SRC}/hal/security/hal_crypto.cpp
-    ${SRC}/hal/security/jh_sha256.c
+    ${JH_JHBASE_SHA256_SOURCES}
     ${SRC}/hal/security/hal_crc.cpp
     ${SRC}/hal/audio/hal_pga2311.cpp
     ${SRC}/hal/network/wireguard/core/crypto/blake2s.c

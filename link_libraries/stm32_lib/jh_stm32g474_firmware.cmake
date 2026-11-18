@@ -113,11 +113,13 @@ function(jh_add_stm32g474_firmware TARGET)
     list(FILTER _hal_common EXCLUDE REGEX "/hal/impl/")
     list(FILTER _hal_common EXCLUDE REGEX "/network/mqtt/PubSubClient/")
     list(FILTER _hal_common EXCLUDE REGEX "/bluetooth/")
+    jh_jhbase_sha256_sources(_jh_jhbase_sha256_sources)
     list(APPEND _hal_common
         "${_jh_src}/hal/bluetooth/hal_ble.cpp"
         "${_jh_src}/hal/bluetooth/hal_ble_commands.cpp"
         "${_jh_src}/hal/bluetooth/hal_ble_stream.cpp"
         ${_jh_build_effects_PORTABLE_SOURCES}
+        ${_jh_jhbase_sha256_sources}
         "${_jh_src}/hal_app_entry.cpp"
     )
     list(REMOVE_DUPLICATES _hal_common)

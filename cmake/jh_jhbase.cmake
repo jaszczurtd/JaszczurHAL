@@ -57,6 +57,22 @@ function(jh_jhbase_include_dir OUT_INCLUDE)
     set(${OUT_INCLUDE} "${_jh_jb_dir}/include" PARENT_SCOPE)
 endfunction()
 
+# jh_jhbase_sha256_sources(<out>): the sources of the jhbase SHA-256 core,
+# listed by jhbase in cmake/sources.cmake. hal_sha256_* and HMAC delegate to
+# the core, and every HAL library compiles these files into its own archive,
+# also ESP-IDF components without jhbase targets; firmware links no jhbase
+# library.
+function(jh_jhbase_sha256_sources OUT_SOURCES)
+    jh_jhbase_dir(_jh_jb_dir)
+    if(NOT EXISTS "${_jh_jb_dir}/cmake/sources.cmake")
+        message(FATAL_ERROR
+            "jhbase at ${_jh_jb_dir} has no cmake/sources.cmake: "
+            "JHBASE_REF must name a jhbase commit with the SHA-256 core")
+    endif()
+    include("${_jh_jb_dir}/cmake/sources.cmake")
+    set(${OUT_SOURCES} ${JHBASE_SHA256_SOURCES} PARENT_SCOPE)
+endfunction()
+
 # jh_add_jhbase(): adds the jhbase project once per build, giving jb::status
 # and jb::base. The library builds only when linked; installing the build
 # writes the status headers and the jhbase package with the recorded revision

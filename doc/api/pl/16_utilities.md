@@ -282,6 +282,8 @@ Wybór nagłówka:
 | Kalendarz i upływ czasu | `hal/time/hal_time.h` | `hal_time_*`, `hal_get_seconds()` |
 | Okresowo odświeżane wartości losowe | `hal/system/hal_periodic_random.h` | `hal_periodic_random_*` |
 
+Funkcje kolejności bajtów `jh_*` są aliasami funkcji jhbase z `jb/endian.h`, zdefiniowanych raz dla HAL, jego narzędzi i jhbase. Odczyt i zapis działają na buforach pod dowolnym adresem, dają ten sam wynik niezależnie od kolejności bajtów hosta i nie sprawdzają wskaźników.
+
 Warianty `_ex` zwracają `hal_status_t`, sprawdzają argumenty i korzystają z buforów oraz stanu przekazanych jawnie. Liczbę próbek ADC, pusty odczyt, opóźnienie i korekcję charakterystyki wybiera `hal_adc_average_config_t`; nie zależą one od ukrytych ustawień całego projektu.
 
 `HAL_MATH_ROLLING_AVERAGE_DEFAULT_SIZE` z `<hal/core/hal_math.h>` wybiera

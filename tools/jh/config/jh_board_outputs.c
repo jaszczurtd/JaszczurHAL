@@ -1,5 +1,4 @@
 #include "jh_board_outputs.h"
-#include "hal/security/jh_sha256.h"
 #include "jh_generated_output.h"
 #include "jh_json_check.h"
 #include "jh_json_file.h"
@@ -9,6 +8,7 @@
 #include <jb/filesystem.h>
 #include <jb/json_tree.h>
 #include <jb/json_writer.h>
+#include <jb/sha256.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1988,12 +1988,12 @@ static hal_status_t resolved_json(const resolved_record_t *record,
 }
 
 static void put_sha256_hex(emit_t *e, jb_json_span_t text, size_t digits) {
-  jh_sha256_context_t context;
-  uint8_t digest[JH_SHA256_DIGEST_BYTES];
-  jh_sha256_init(&context);
-  jh_sha256_update(&context, (const uint8_t *)text.data, text.length);
-  jh_sha256_final(&context, digest);
-  for (size_t i = 0; i < JH_SHA256_DIGEST_BYTES && i * 2 < digits; ++i)
+  jb_sha256_context_t context;
+  uint8_t digest[JB_SHA256_DIGEST_BYTES];
+  jb_sha256_init(&context);
+  jb_sha256_update(&context, (const uint8_t *)text.data, text.length);
+  jb_sha256_final(&context, digest);
+  for (size_t i = 0; i < JB_SHA256_DIGEST_BYTES && i * 2 < digits; ++i)
     put_hex(e, digest[i], 2);
 }
 

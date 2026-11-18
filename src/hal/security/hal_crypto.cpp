@@ -492,7 +492,7 @@ hal_status_t hal_sha256_init_ex(hal_sha256_context_t *context) {
   if (context == nullptr) {
     return HAL_EINVAL;
   }
-  jh_sha256_init(context);
+  jb_sha256_init(context);
   return HAL_OK;
 }
 
@@ -502,7 +502,7 @@ hal_status_t hal_sha256_update_ex(hal_sha256_context_t *context,
       (input == nullptr && input_len > 0u)) {
     return HAL_EINVAL;
   }
-  jh_sha256_update(context, input, input_len);
+  jb_sha256_update(context, input, input_len);
   return HAL_OK;
 }
 
@@ -511,7 +511,7 @@ hal_status_t hal_sha256_final_ex(hal_sha256_context_t *context,
   if (context == nullptr || !context->initialized || out_digest == nullptr) {
     return HAL_EINVAL;
   }
-  jh_sha256_final(context, out_digest);
+  jb_sha256_final(context, out_digest);
   return HAL_OK;
 }
 
@@ -572,17 +572,17 @@ bool hal_hmac_sha256(const uint8_t *key, size_t key_len, const uint8_t *message,
   }
 
   hal_sha256_context_t inner_ctx;
-  jh_sha256_init(&inner_ctx);
-  jh_sha256_update(&inner_ctx, inner_pad, sizeof(inner_pad));
-  jh_sha256_update(&inner_ctx, message, message_len);
+  jb_sha256_init(&inner_ctx);
+  jb_sha256_update(&inner_ctx, inner_pad, sizeof(inner_pad));
+  jb_sha256_update(&inner_ctx, message, message_len);
   uint8_t inner_digest[HAL_SHA256_DIGEST_BYTES];
-  jh_sha256_final(&inner_ctx, inner_digest);
+  jb_sha256_final(&inner_ctx, inner_digest);
 
   hal_sha256_context_t outer_ctx;
-  jh_sha256_init(&outer_ctx);
-  jh_sha256_update(&outer_ctx, outer_pad, sizeof(outer_pad));
-  jh_sha256_update(&outer_ctx, inner_digest, sizeof(inner_digest));
-  jh_sha256_final(&outer_ctx, out_mac);
+  jb_sha256_init(&outer_ctx);
+  jb_sha256_update(&outer_ctx, outer_pad, sizeof(outer_pad));
+  jb_sha256_update(&outer_ctx, inner_digest, sizeof(inner_digest));
+  jb_sha256_final(&outer_ctx, out_mac);
   return true;
 }
 

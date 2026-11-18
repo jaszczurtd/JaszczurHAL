@@ -260,7 +260,7 @@ class CommandLine(unittest.TestCase):
                          "hal:boards/profiles/nucleo-g474re.json", "hal:boards/targets/stm32g474.json",
                          "hal:config/hardware/clocks/stm32g474.json",
                          "hal:config/hardware/bindings/jaszczurhal-gpio-output.json",
-                         "hal:tools/jh/hardware/jh_hardware.c", "hal:src/hal/security/jh_sha256.c",
+                         "hal:tools/jh/hardware/jh_hardware.c", "hal:src/hal/core/jh_endian.h",
                          "hal:scripts/jh_tool_inputs.cmake"):
             self.assertIn(expected, names)
 

@@ -516,6 +516,13 @@ jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
     stale_installed_registry.write_text(
         "stale installed registry\n", encoding="utf-8"
     )
+    # A header removed from the sources: an update of an older installation
+    # must not leave its declarations next to the new archive.
+    stale_installed_sha256 = install_prefix / "include/hal/security/jh_sha256.h"
+    stale_installed_sha256.parent.mkdir(parents=True)
+    stale_installed_sha256.write_text(
+        "void jh_sha256_init(void *context);\n", encoding="utf-8"
+    )
     install_package(board_package, install_prefix)
     installed_paths = (
         install_prefix / "include/hal/generated/jh_hal_features.h",
@@ -536,6 +543,11 @@ jh_target_enable_cyw43_feature_stack(probe GAMEPAD TRUE)
     require(
         not stale_installed_registry.exists(),
         "STM32 package installed a second board registry",
+    )
+    require(
+        not stale_installed_sha256.exists()
+        and (install_prefix / "include/hal/security/hal_crypto.h").is_file(),
+        "STM32 package update kept the removed jh_sha256.h",
     )
 
     installed_resolution = json.loads(installed_paths[-2].read_text(encoding="utf-8"))

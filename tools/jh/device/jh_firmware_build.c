@@ -1,6 +1,6 @@
 #include "hal/core/jh_endian.h"
-#include "hal/security/jh_sha256.h"
 #include "jh_firmware_internal.h"
+#include "jh_json_digest.h"
 #include "jh_process_support.h"
 #include <jb/filesystem.h>
 #include <stdlib.h>
@@ -45,20 +45,6 @@ const char *jh_firmware_path(jh_firmware_plan_t *p, const char *base,
                         : "";
   jb_string_destroy(&path);
   return out;
-}
-
-void jh_firmware_sha256(const void *data, size_t length, char out[65]) {
-  jh_sha256_context_t context;
-  uint8_t digest[JH_SHA256_DIGEST_BYTES];
-  static const char hex[] = "0123456789abcdef";
-  jh_sha256_init(&context);
-  jh_sha256_update(&context, data, length);
-  jh_sha256_final(&context, digest);
-  for (size_t i = 0; i < COUNTOF(digest); ++i) {
-    out[2 * i] = hex[digest[i] >> 4];
-    out[2 * i + 1] = hex[digest[i] & 15];
-  }
-  out[64] = '\0';
 }
 
 static bool read_file(jh_firmware_plan_t *p, const char *path,
@@ -317,7 +303,7 @@ static void verify_source(jh_firmware_plan_t *p, const char *path,
   jb_file_data_t data = {0};
   if (read_file(p, jh_firmware_path(p, p->options->project, path), &data)) {
     char digest[65];
-    jh_firmware_sha256(data.data, data.length, digest);
+    jh_sha256_data_hex(data.data, data.length, digest);
     (void)require(p, strcmp(digest, expected) == 0 ? HAL_OK : HAL_ECONFIG,
                   "ESP build does not match project sources; rebuild or select "
                   "another build");
@@ -379,7 +365,7 @@ static void esp_map(jh_firmware_plan_t *p, jb_json_tree_view_t manifest) {
                 jh_firmware_path(p, p->directory, json_text(p, table, "path")),
                 &bytes)) {
     char digest[65];
-    jh_firmware_sha256(bytes.data, bytes.length, digest);
+    jh_sha256_data_hex(bytes.data, bytes.length, digest);
     (void)require(p,
                   strcmp(digest, json_text(p, table, "sha256")) == 0
                       ? HAL_OK

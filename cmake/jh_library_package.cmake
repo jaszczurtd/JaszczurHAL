@@ -34,10 +34,14 @@ function(jh_add_library_package LIBRARY SOURCE_DIR)
         configure_file("${_jh_lp_header}" "${_jh_lp_copy}/${_jh_lp_name}" COPYONLY)
     endforeach()
 
+    # The list also holds HAL headers removed from the sources, so an update
+    # of an older installation does not keep their declarations.
+    # jh_sha256.h: the SHA-256 core moved to jhbase (jb/sha256.h).
     install(CODE [[
         foreach(_jh_lp_stale
                 include/generated/jh_board_registry.h
                 include/generated/jh_hardware.h
+                include/hal/security/jh_sha256.h
                 share/JaszczurHAL/generated/jh_board_resolved.json
                 share/JaszczurHAL/generated/jh_hardware_resolved.json
                 share/JaszczurHAL/generated/jh_hardware_config.json

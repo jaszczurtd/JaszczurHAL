@@ -25,5 +25,4 @@ hal_status_t jh_firmware_prepare(jh_firmware_plan_t *plan);
 const char *jh_firmware_text(jh_firmware_plan_t *plan, jb_json_span_t value);
 const char *jh_firmware_path(jh_firmware_plan_t *plan, const char *base,
                              const char *name);
-void jh_firmware_sha256(const void *data, size_t length, char out[65]);
 #endif

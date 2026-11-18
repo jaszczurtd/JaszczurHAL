@@ -74,7 +74,7 @@ bool hal_chacha20_poly1305_decrypt(
     uint8_t *plaintext);
 
 // SHA-256 / HMAC-SHA256 (FIPS 180-4 + RFC 2104)
-typedef jh_sha256_context_t hal_sha256_context_t; // hal/security/jh_sha256.h
+typedef jb_sha256_context_t hal_sha256_context_t; // jhbase jb/sha256.h
 
 hal_status_t hal_sha256_init_ex(hal_sha256_context_t *context);
 hal_status_t hal_sha256_update_ex(hal_sha256_context_t *context,
@@ -114,10 +114,12 @@ bool hal_hmac_sha256_hex(const uint8_t *key, size_t key_len,
 - API `_ex` dla SHA-256 pozwala przetwarzać dane strumieniowo przy ograniczonym
   zużyciu pamięci. `final_ex` unieważnia kontekst. Wywołanie `update_ex` lub
   `final_ex` przed inicjalizacją albo po zakończeniu obliczeń zwraca
-  `HAL_ESTATE`.
+  `HAL_EINVAL`, tak jak argument NULL.
 - Wyniki SHA-256 / HMAC-SHA256 są sprawdzane przy użyciu wektorów testowych
-  FIPS 180-2 i RFC 4231. Są również identyczne bitowo z wynikami odpowiadających
-  im implementacji hostowych, na przykład `sc_sha256.c`.
+  FIPS 180-2 i RFC 4231.
+- Rdzeń SHA-256 pochodzi z jhbase (`jb/sha256.h`). Kompiluje go każda
+  biblioteka HAL i z tego samego rdzenia korzystają hostowe narzędzia `jh`,
+  więc firmware i narzędzia liczą identyczne skróty.
 
 **Bezpieczeństwo:** MD5 pozostaje dostępny dla starszych sum kontrolnych i identyfikatorów, które nie wymagają odporności na kolizje. Nie używaj go tam, gdzie ta właściwość jest potrzebna. W nowych mechanizmach integralności i uwierzytelniania stosuj odpowiednio SHA-256 i HMAC-SHA256.
 

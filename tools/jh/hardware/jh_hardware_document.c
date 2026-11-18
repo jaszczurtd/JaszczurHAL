@@ -1,4 +1,3 @@
-#include "hal/security/jh_sha256.h"
 #include "jh_hardware_internal.h"
 #include "jh_json_digest.h"
 #include "jh_tool_inputs.h"
@@ -20,12 +19,7 @@ void jh_hw_file_digest(jh_hw_t *h, const char *path, char out[65]) {
   jb_file_data_t data = {0};
   h->memory.status = jb_file_read(path, h->registry->max_bytes, &data);
   if (h->memory.status == HAL_OK) {
-    jh_sha256_context_t sha;
-    uint8_t bytes[JH_SHA256_DIGEST_BYTES];
-    jh_sha256_init(&sha);
-    jh_sha256_update(&sha, data.data, data.length);
-    jh_sha256_final(&sha, bytes);
-    jh_sha256_hex(bytes, out);
+    jh_sha256_data_hex(data.data, data.length, out);
   } else {
     (void)jh_fail(h->failure, h->memory.status, 3,
                   JH_PARTS(jh_span(path), jh_span(": cannot read input: "),

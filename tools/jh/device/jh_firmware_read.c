@@ -1,4 +1,5 @@
 #include "jh_firmware_internal.h"
+#include "jh_json_digest.h"
 #include <inttypes.h>
 #include <jb/filesystem.h>
 #include <stdio.h>
@@ -256,7 +257,7 @@ hal_status_t jh_firmware_read(const jh_firmware_options_t *o,
     goto done;
   }
   complete_read = true;
-  jh_firmware_sha256(bytes.data, bytes.length, r->sha256);
+  jh_sha256_data_hex(bytes.data, bytes.length, r->sha256);
   /* Remove private tool state before publishing. A cleanup error must not
    * report failure after silently replacing the caller's previous dump. */
   status = jb_temp_dir_remove(&staging);

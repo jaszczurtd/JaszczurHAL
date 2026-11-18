@@ -7,5 +7,4 @@ set(JH_TOOL_INPUTS
   third_party/jhbase_version.conf
   third_party/pcre2_version.conf config/tooling/managed_components.json
   scripts/jh_bootstrap.cmake scripts/jh_msvc_environment.cmake scripts/jh_tool_inputs.cmake
-  src/hal/security/jh_sha256.c src/hal/security/jh_sha256.h src/hal/core/jh_endian.h
-  src/hal/core/hal_layout_check.h)
+  src/hal/core/jh_endian.h)

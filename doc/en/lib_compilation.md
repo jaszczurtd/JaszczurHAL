@@ -166,7 +166,7 @@ share/JaszczurHAL/generated/
   jh_board_resolved.json
 ```
 
-Other public HAL headers are installed under `include/`. `include/jb/` holds the jhbase status headers that `hal_status.h` and `hal_array.h` include, and `lib/cmake/jhbase/` records the jhbase revision and ABI profile. Treat the entire installation as one package. For direct compiler use, add `include/` and `include/generated/` to the include paths and define the target selector and requested features recorded in `jh_board_resolved.json`. Also compile `share/JaszczurHAL/generated/jh_link_contract_reference.c` and link the resulting object with `lib/libJaszczurHAL.a`. For example:
+Other public HAL headers are installed under `include/`. `include/jb/` holds the jhbase headers that HAL headers include (status codes, `COUNTOF`, endian helpers and the SHA-256 core; the core's code is part of `libJaszczurHAL.a`), and `lib/cmake/jhbase/` records the jhbase revision and ABI profile. Treat the entire installation as one package. For direct compiler use, add `include/` and `include/generated/` to the include paths and define the target selector and requested features recorded in `jh_board_resolved.json`. Also compile `share/JaszczurHAL/generated/jh_link_contract_reference.c` and link the resulting object with `lib/libJaszczurHAL.a`. For example:
 
 Template - replace the values in `<...>` before running:
 

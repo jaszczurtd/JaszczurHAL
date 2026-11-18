@@ -153,10 +153,12 @@ list(APPEND STM32_SHARED_SOURCES
     ${SRC}/hal/bluetooth/hal_ble_stream.cpp
 )
 list(APPEND STM32_IMPL_SOURCES ${STM32_SHARED_SOURCES})
+jh_jhbase_sha256_sources(_jh_stm32_jhbase_sha256_sources)
 list(APPEND STM32_IMPL_SOURCES
     ${_jh_stm32_build_effects_FEATURE_SOURCES}
     ${_jh_stm32_build_effects_PORTABLE_SOURCES}
-    ${_jh_stm32_build_effects_DEPENDENCY_SOURCES})
+    ${_jh_stm32_build_effects_DEPENDENCY_SOURCES}
+    ${_jh_stm32_jhbase_sha256_sources})
 list(REMOVE_DUPLICATES STM32_IMPL_SOURCES)
 
 # ── Common entry source ─────────────────────────────────────────────────────

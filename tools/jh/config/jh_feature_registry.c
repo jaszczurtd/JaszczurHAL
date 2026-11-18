@@ -1,5 +1,4 @@
 #include "jh_feature_registry.h"
-#include "hal/security/jh_sha256.h"
 #include "jh_generated_output.h"
 #include "jh_json_check.h"
 #include "jh_json_digest.h"
@@ -9,6 +8,7 @@
 #include <jb/filesystem.h>
 #include <jb/json_tree.h>
 #include <jb/json_writer.h>
+#include <jb/sha256.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -1319,17 +1319,17 @@ static hal_status_t resolve_requests(const jh_feature_registry_t *registry,
   if (status == HAL_OK)
     status = check_resolved(features, marked, context, resolution);
   if (status == HAL_OK) {
-    jh_sha256_context_t digest_context;
-    jh_sha256_init(&digest_context);
+    jb_sha256_context_t digest_context;
+    jb_sha256_init(&digest_context);
     for (size_t i = 0; i < jb_vector_size(&resolution->resolved); ++i) {
       const jb_string_t *name = jh_list_at(&resolution->resolved, i);
       if (i != 0)
-        jh_sha256_update(&digest_context, (const uint8_t *)"\n", 1);
-      jh_sha256_update(&digest_context, (const uint8_t *)jb_string_data(name),
+        jb_sha256_update(&digest_context, (const uint8_t *)"\n", 1);
+      jb_sha256_update(&digest_context, (const uint8_t *)jb_string_data(name),
                        jb_string_size(name));
     }
-    uint8_t digest[JH_SHA256_DIGEST_BYTES];
-    jh_sha256_final(&digest_context, digest);
+    uint8_t digest[JB_SHA256_DIGEST_BYTES];
+    jb_sha256_final(&digest_context, digest);
     jh_sha256_hex(digest, resolution->digest);
   }
   jb_vector_destroy(&implied);
