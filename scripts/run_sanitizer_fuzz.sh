@@ -165,7 +165,7 @@ SANITIZER_ENV=(
     "UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=1"
 )
 cmake -E env "${SANITIZER_ENV[@]}" \
-    ctest --test-dir "${BUILD_DIR}" --output-on-failure
+    ctest --test-dir "${BUILD_DIR}" --output-on-failure --parallel "${JOBS}"
 
 for target in fuzz_http_server fuzz_websocket fuzz_http_multipart; do
     cmake -E env "${SANITIZER_ENV[@]}" \
@@ -183,8 +183,8 @@ cmake -E env "CC=${CLANG_CC}" "CXX=${CLANG_CXX}" \
         -DJH_ENABLE_SANITIZERS=ON
 cmake --build "${JH_BUILD_DIR}" --parallel "${JOBS}"
 cmake -E env "${SANITIZER_ENV[@]}" \
-    ctest --test-dir "${JH_BUILD_DIR}" --output-on-failure -L '^memcheck$'
-cmake -E env "${SANITIZER_ENV[@]}" \
+    ctest --test-dir "${JH_BUILD_DIR}" --output-on-failure --parallel "${JOBS}" -L '^memcheck$'
+cmake -E env "${SANITIZER_ENV[@]}" "CTEST_PARALLEL_LEVEL=${JOBS}" \
     ctest --test-dir "${JH_BUILD_DIR}" --output-on-failure --no-tests=error -R '^jh_cli_memory$'
 
 # ThreadSanitizer cannot share a build with ASan. It covers the native tests;

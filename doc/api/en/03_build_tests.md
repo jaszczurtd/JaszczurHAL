@@ -203,6 +203,13 @@ Valgrind thread scheduling keeps the native FreeRTOS POSIX scheduler tests in
 the selection. Live CTest/Valgrind progress is streamed to the terminal and
 `.build/gate/logs/jh_memcheck.log` (`jh_cli_memcheck.log` for the jh host CLI).
 
+The `host`, `sanitizer-fuzz` and `memcheck` stages run CTest with as many jobs
+as the gate builds with (`-j`, by default every processor). Tests that use one
+shared place in the repository take a common `RESOURCE_LOCK` in
+`tests/CMakeLists.txt`, so CTest never runs them at the same time. A new test
+that writes outside its own directory below `.build/`, or reads a place that
+another test writes, needs such a lock too.
+
 All build and test outputs go in the ignored `.build/` directory. CMake compiler probes run in script mode use `.build/tests/` and do not leave `.o` files in the repository root.
 
 The clang-tidy stage creates a separate compilation database for each profile, with one entry per source file. This avoids repeated analysis of a shared driver that API tests compile with several feature sets. Normal target builds still compile every configured variant.

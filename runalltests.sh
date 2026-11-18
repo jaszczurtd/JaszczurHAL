@@ -408,8 +408,9 @@ stage_repository() {
 stage_host() {
     rm -rf "${HOST_BUILD}"
     ensure_host_build
-    info "Running tests..."
-    with_minimum_cmake ctest --test-dir "${HOST_BUILD}" --output-on-failure
+    info "Running tests with ${JOBS} jobs..."
+    with_minimum_cmake ctest --test-dir "${HOST_BUILD}" --output-on-failure \
+        --parallel "${JOBS}"
 
     # The jh host CLI is its own CMake project on the pinned jhbase.
     local jh_build="${GATE_BUILD_ROOT}/jh"
@@ -417,7 +418,8 @@ stage_host() {
     info "Building and testing the jh host CLI..."
     with_minimum_cmake ensure_cmake_build "${jh_build}" -S tools/jh \
         -DCMAKE_BUILD_TYPE=Release
-    with_minimum_cmake ctest --test-dir "${jh_build}" --output-on-failure
+    with_minimum_cmake ctest --test-dir "${jh_build}" --output-on-failure \
+        --parallel "${JOBS}"
 }
 
 stage_sanitizer_fuzz() {
@@ -481,9 +483,9 @@ run_memcheck() {
         exit 1
     fi
 
-    info "Running all ${memcheck_count} native C/C++ tests under Valgrind..."
+    info "Running all ${memcheck_count} native C/C++ tests under Valgrind with ${JOBS} jobs..."
     if ! with_minimum_cmake ctest --test-dir "${build}" -T memcheck \
-        -L '^memcheck$' --output-on-failure 2>&1 \
+        -L '^memcheck$' --output-on-failure --parallel "${JOBS}" 2>&1 \
         | tee "${log}"; then
         fail "Valgrind memcheck execution failed; see ${log}"
         exit 1
@@ -512,7 +514,8 @@ stage_memcheck() {
         "${JH_MEMCHECK_REQUIRED_TESTS[@]}"
     # The CMake/Python suites launch jh as a subprocess; their runner checks
     # each CLI report, including commands expected to return an error.
-    with_minimum_cmake ctest --test-dir "${jh_build}" --output-on-failure \
+    with_minimum_cmake cmake -E env "CTEST_PARALLEL_LEVEL=${JOBS}" \
+        ctest --test-dir "${jh_build}" --output-on-failure \
         --no-tests=error -R '^jh_cli_memory$' 2>&1 \
         | tee "${LOG_ROOT}/jh_cli_subprocess_memcheck.log"
 }

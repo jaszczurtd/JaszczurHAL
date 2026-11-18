@@ -814,6 +814,8 @@ report fails the suite. CMake and Python run the assertions outside Valgrind.
 
 Configure `tools/jh` with `-DJH_TEST_VALGRIND=ON` to register this check,
 then run `ctest --test-dir <build> -R '^jh_cli_memory$' --output-on-failure`.
+It runs two suites at a time; `CTEST_PARALLEL_LEVEL` raises that, and the
+gate passes its `-j` this way.
 The `sanitizer-fuzz` gate runs the same suites with ASan/UBSan and leak
 detection. It also checks their report files, so an expected command failure
 cannot hide a memory error. Both modes use the Unix test launcher.

@@ -839,6 +839,8 @@ asercje poza Valgrindem.
 
 Skonfiguruj `tools/jh` z `-DJH_TEST_VALGRIND=ON`, potem uruchom
 `ctest --test-dir <build> -R '^jh_cli_memory$' --output-on-failure`.
+Test uruchamia dwa zestawy naraz; `CTEST_PARALLEL_LEVEL` zwiększa tę liczbę,
+a bramka przekazuje w ten sposób swoje `-j`.
 Etap `sanitizer-fuzz` uruchamia te same zestawy z ASan/UBSan i wykrywaniem
 wycieków. Sprawdza też pliki raportów, więc oczekiwany błąd polecenia nie
 ukryje błędu pamięci. Oba tryby korzystają z launchera testowego dla Unix.

@@ -1890,6 +1890,11 @@ add_test(NAME test_build_dir_guard
         -DJH_ROOT=${CMAKE_SOURCE_DIR}
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_build_dir_guard.cmake
 )
+# The gate runs CTest in parallel. The guard test configures briefly into
+# jh-build-guard-probe/ in the repository root, which the artifact layout
+# test reports as a CMake build tree outside .build/.
+set_tests_properties(test_build_dir_guard test_build_artifact_layout
+    PROPERTIES RESOURCE_LOCK repository_root)
 
 set(JH_CW43_FIXTURE_SETUP_SCRIPT "" CACHE FILEPATH
     "Optional external CW43 hardware-fixture setup script, set locally via -DJH_CW43_FIXTURE_SETUP_SCRIPT=/path/to/script.sh")

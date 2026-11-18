@@ -210,6 +210,13 @@ wątków Valgrind pozwala uruchamiać natywne testy schedulera FreeRTOS POSIX be
 ich zawieszania. Postęp CTest/Valgrind jest na bieżąco zapisywany w terminalu i w
 `.build/gate/logs/jh_memcheck.log` (`jh_cli_memcheck.log` dla CLI jh).
 
+Etapy `host`, `sanitizer-fuzz` i `memcheck` uruchamiają CTest z tą samą liczbą
+zadań, z którą bramka kompiluje (`-j`, domyślnie wszystkie procesory). Testy
+korzystające z jednego wspólnego miejsca w repozytorium mają wspólny
+`RESOURCE_LOCK` w `tests/CMakeLists.txt`, więc CTest nigdy nie uruchamia ich
+jednocześnie. Nowy test, który zapisuje poza własnym katalogiem w `.build/`
+albo czyta miejsce zapisywane przez inny test, też potrzebuje takiej blokady.
+
 Pliki wynikowe kompilacji i testów trafiają do ignorowanego przez Git katalogu `.build/`. Testy kompilatora uruchamiane przez CMake w trybie skryptowym używają `.build/tests/`; nie zapisują plików `.o` w katalogu głównym repozytorium.
 
 Etap clang-tidy tworzy dla każdego profilu osobną bazę poleceń kompilacji, z jednym wpisem na plik źródłowy. Dzięki temu nie analizuje wielokrotnie tego samego wspólnego sterownika, nawet gdy testy API kompilują go z różnymi zestawami modułów. Zwykła kompilacja nadal obejmuje wszystkie skonfigurowane warianty.

@@ -34,9 +34,14 @@ else()
   set(ENV{UBSAN_OPTIONS} "$ENV{UBSAN_OPTIONS}:halt_on_error=1:log_path=${JH_REPORTS}/ubsan")
 endif()
 # Suites own separate fixtures; PID-specific reports can be written together.
-# Limit concurrency to two CLI invocations with the test memory ceilings.
+# Each CLI invocation keeps its test memory ceiling, so the suites run two at
+# a time unless CTEST_PARALLEL_LEVEL (the gate passes its -j) allows more.
+set(jobs 2)
+if("$ENV{CTEST_PARALLEL_LEVEL}" MATCHES "^[1-9][0-9]*$")
+  set(jobs "$ENV{CTEST_PARALLEL_LEVEL}")
+endif()
 execute_process(COMMAND "${JH_CTEST}" --test-dir "${JH_BUILD}" -C "${JH_CONFIG}"
-    --output-on-failure --no-tests=error -L "^cli$" --parallel 2
+    --output-on-failure --no-tests=error -L "^cli$" --parallel "${jobs}"
   RESULT_VARIABLE result TIMEOUT 7200)
 file(GLOB markers "${JH_REPORTS}/run.*")
 list(LENGTH markers executions)
