@@ -130,7 +130,12 @@ public:
    */
   void setOutputLimits(float min, float max);
 
-  /** @brief Clear integral, derivative and history; restart timing now. */
+  /**
+   * @brief Clear integral, derivative and history; restart timing now.
+   *
+   * Also clears the consecutive-sample counters of isErrorStable(), so the
+   * next stability check starts a new run.
+   */
   void reset();
 
   /**
@@ -145,6 +150,9 @@ public:
    * @param tolerance          Maximum allowed |error| for stability.
    * @param stabilityThreshold Number of consecutive stable samples required.
    * @return true if the error has been within tolerance for the required count.
+   *
+   * Each call counts one sample; an error outside the tolerance restarts the
+   * count and reset() clears it.
    */
   bool isErrorStable(float error, float tolerance, int stabilityThreshold);
 

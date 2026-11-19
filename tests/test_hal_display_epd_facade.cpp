@@ -5,6 +5,7 @@ void hal_mock_spi_reset(void);
 size_t hal_mock_spi_get_tx(uint8_t bus, uint8_t *out, size_t max_len);
 bool hal_mock_spi_transaction_active(uint8_t bus);
 int hal_mock_spi_get_lock_depth(uint8_t bus);
+void hal_mock_spi_fail_next_write(uint8_t bus, bool fail);
 
 void setUp(void) { hal_mock_spi_reset(); }
 void tearDown(void) {}
@@ -211,11 +212,43 @@ void test_uc81xx_padded_pitch_preserves_profiles_windows_and_refresh(void) {
   }
 }
 
+/* Audit F10: a failed re-initialisation left the old size in the getters. */
+static void assert_size_forgotten(hal_status_t reinit_status) {
+  TEST_ASSERT_TRUE(hal_status_is_error(reinit_status));
+  int width = -1;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_display_get_width_ex(&width));
+  TEST_ASSERT_EQUAL_INT(0, width);
+  TEST_ASSERT_EQUAL_INT(0, hal_display_get_height());
+}
+
+void test_epd_failed_reinit_forgets_size(void) {
+  hal_display_ssd16xx_config_t ssd = {};
+  ssd.controller = HAL_DISPLAY_SSD16XX_SSD1680;
+  ssd.transport = epd_transport();
+  ssd.width = 16u;
+  ssd.height = 16u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_ssd16xx_ex(&ssd));
+  TEST_ASSERT_EQUAL_INT(16, hal_display_get_width());
+  hal_mock_spi_fail_next_write(0u, true);
+  assert_size_forgotten(hal_display_init_ssd16xx_ex(&ssd));
+
+  hal_display_uc81xx_config_t uc = {};
+  uc.controller = HAL_DISPLAY_UC81XX_UC8175;
+  uc.transport = epd_transport();
+  uc.width = 16u;
+  uc.height = 16u;
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_uc81xx_ex(&uc));
+  TEST_ASSERT_EQUAL_INT(16, hal_display_get_width());
+  hal_mock_spi_fail_next_write(0u, true);
+  assert_size_forgotten(hal_display_init_uc81xx_ex(&uc));
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_ssd16xx_facade_reports_epd_layout_and_flushes);
   RUN_TEST(test_ssd16xx_padded_pitch_all_rotations_and_refresh_modes);
   RUN_TEST(test_uc81xx_facade_reports_horizontal_packing);
   RUN_TEST(test_uc81xx_padded_pitch_preserves_profiles_windows_and_refresh);
+  RUN_TEST(test_epd_failed_reinit_forgets_size);
   return UNITY_END();
 }

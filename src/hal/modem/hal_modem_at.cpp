@@ -68,6 +68,18 @@ struct hal_modem_at_impl_s {
   const char *const *secrets; /* not owned                              */
   size_t secret_count;
   const char *cmd_secret; /* masked while send_masked() runs, not owned */
+  /* Running transaction, see start_transaction(). */
+  const char *line_expected; /* `expected` of the running send, not owned */
+  int line_result;           /* final result seen on a line: 1, -1 or 0  */
+  bool line_fresh;           /* current line started inside the transaction */
+  bool rx_overflow;          /* a byte did not fit into rx_buf            */
+  bool resync_pending;       /* last command timed out, see wait_quiet()  */
+  /* Binary block announced by a URC, see hal_modem_at_read_raw(). */
+  size_t raw_remaining;
+  hal_modem_at_raw_cb_t raw_cb;
+  void *raw_user;
+  bool raw_skip_lf; /* drop the LF that ends the announcing line      */
+  uint8_t line_end; /* byte that completed the last assembled line    */
   bool in_use;
 };
 
@@ -85,11 +97,16 @@ static inline void engine_poll_sleep(hal_modem_at_impl_t *h) {
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 
-static void reset_rx(hal_modem_at_impl_t *h) {
+static void clear_rx_buf(hal_modem_at_impl_t *h) {
   h->rx_len = 0;
+  h->rx_overflow = false;
   if (h->cfg.rx_buf && h->cfg.rx_buf_size > 0) {
     h->cfg.rx_buf[0] = '\0';
   }
+}
+
+static void reset_rx(hal_modem_at_impl_t *h) {
+  clear_rx_buf(h);
   h->line_len = 0;
   h->line_buf[0] = '\0';
 }
@@ -127,21 +144,58 @@ static void dispatch_line(hal_modem_at_impl_t *h, const char *line) {
   }
 }
 
+/* Remember the first final result code on a complete line. The line
+   assembler sees every byte, so the result survives an rx_buf overflow. */
+static void note_result_line(hal_modem_at_impl_t *h, const char *line) {
+  if (h->line_result != 0)
+    return;
+  if (strcmp(line, "ERROR") == 0 || strncmp(line, "+CME ERROR", 10) == 0 ||
+      strncmp(line, "+CMS ERROR", 10) == 0) {
+    h->line_result = -1;
+  } else if (h->line_expected ? strstr(line, h->line_expected) != NULL
+                              : strcmp(line, "OK") == 0) {
+    h->line_result = 1;
+  }
+}
+
 /* Append one byte to rx_buf + line assembler. On line termination dispatch
    URC handlers (after which the line stays in rx_buf for last_response). */
 static void absorb_byte(hal_modem_at_impl_t *h, uint8_t b) {
+  if (h->raw_remaining > 0u) {
+    /* Announced binary data: not a line, not part of a command response. */
+    if (h->raw_skip_lf) {
+      h->raw_skip_lf = false;
+      if (b == '\n') {
+        return;
+      }
+    }
+    h->raw_remaining--;
+    if (h->raw_cb) {
+      h->raw_cb(&b, 1u, h->raw_user);
+    }
+    return;
+  }
   if (h->rx_len + 1 < h->cfg.rx_buf_size) {
     h->cfg.rx_buf[h->rx_len++] = (char)b;
     h->cfg.rx_buf[h->rx_len] = '\0';
+  } else {
+    h->rx_overflow = true;
   }
   if (b == '\r' || b == '\n') {
     if (h->line_len > 0) {
       h->line_buf[h->line_len] = '\0';
+      if (h->line_fresh) {
+        note_result_line(h, h->line_buf);
+      }
+      h->line_end = b;
       dispatch_line(h, h->line_buf);
       h->line_len = 0;
       h->line_buf[0] = '\0';
     }
   } else {
+    if (h->line_len == 0) {
+      h->line_fresh = true;
+    }
     if (h->line_len + 1 < sizeof(h->line_buf)) {
       h->line_buf[h->line_len++] = (char)b;
       h->line_buf[h->line_len] = '\0';
@@ -196,7 +250,57 @@ static int response_terminated(const hal_modem_at_impl_t *h,
     return -1;
   if (buf_contains(h->cfg.rx_buf, h->rx_len, "+CMS ERROR"))
     return -1;
-  return 0;
+  /* Bytes past a full rx_buf: only the line assembler saw them. */
+  return h->line_result;
+}
+
+/* After a timeout the reply of that command may still be on its way. Wait
+   until the line has been quiet for quiet_window_ms (at most
+   default_timeout_ms) so that reply cannot complete the next command. */
+static void wait_quiet(hal_modem_at_impl_t *h) {
+  const uint32_t start = hal_millis();
+  uint32_t last_byte_ms = start;
+  for (;;) {
+    const uint32_t now = hal_millis();
+    if (drain_uart(h) > 0) {
+      last_byte_ms = now;
+    } else if (hal_elapsed_u32(now, last_byte_ms, h->cfg.quiet_window_ms)) {
+      break;
+    }
+    if (hal_elapsed_u32(now, start, h->cfg.default_timeout_ms)) {
+      break;
+    }
+    engine_poll_sleep(h);
+  }
+}
+
+/* Begin a command: URCs that arrived earlier go to their handlers, while
+   stale replies are dropped so they cannot answer this command. A line that
+   is still arriving stays in the assembler (a split URC must not break), but
+   it cannot carry this command's result. */
+static void start_transaction(hal_modem_at_impl_t *h, const char *expected) {
+  if (h->resync_pending) {
+    wait_quiet(h);
+    h->resync_pending = false;
+  }
+  (void)drain_uart(h);
+  clear_rx_buf(h);
+  h->line_expected = expected;
+  h->line_result = 0;
+  h->line_fresh = h->line_len == 0;
+}
+
+/* End of the wait for a final result: an OK whose response did not fit into
+   rx_buf becomes HAL_MODEM_AT_OVERFLOW; a timeout arms wait_quiet(). */
+static hal_modem_at_result_t finish_wait(hal_modem_at_impl_t *h,
+                                         hal_modem_at_result_t res) {
+  if (res == HAL_MODEM_AT_OK && h->rx_overflow) {
+    res = HAL_MODEM_AT_OVERFLOW;
+  }
+  if (res == HAL_MODEM_AT_TIMEOUT || res == HAL_MODEM_AT_NO_PROMPT) {
+    h->resync_pending = true;
+  }
+  return res;
 }
 
 /* Replace every occurrence of `s` in the NUL-terminated `buf` with "***". */
@@ -281,6 +385,15 @@ hal_modem_at_t hal_modem_at_create(const hal_modem_at_config_t *cfg) {
   h->secrets = NULL;
   h->secret_count = 0;
   h->cmd_secret = NULL;
+  h->line_expected = NULL;
+  h->line_result = 0;
+  h->line_fresh = false;
+  h->resync_pending = false;
+  h->raw_remaining = 0;
+  h->raw_cb = NULL;
+  h->raw_user = NULL;
+  h->raw_skip_lf = false;
+  h->line_end = 0;
   h->cfg = *cfg;
   if (h->cfg.default_timeout_ms == 0)
     h->cfg.default_timeout_ms = 1000u;
@@ -333,12 +446,7 @@ hal_modem_at_result_t hal_modem_at_send_masked(hal_modem_at_t h,
   hal_mutex_lock(h->mutex);
   h->cmd_secret = secret;
 
-  /* Drain stale bytes (URCs etc.) before issuing a fresh command. Any
-     complete URC lines are dispatched by absorb_byte(); whatever stays
-     in rx_buf is harmless prefix - the OK/ERROR matcher is anchored on
-     \r\n and won't false-match. */
-  reset_rx(h);
-  (void)drain_uart(h);
+  start_transaction(h, expected);
 
   log_filtered(h, "TX", cmd);
   (void)hal_uart_println(h->cfg.uart, cmd);
@@ -360,6 +468,7 @@ hal_modem_at_result_t hal_modem_at_send_masked(hal_modem_at_t h,
       break;
     engine_poll_sleep(h);
   }
+  res = finish_wait(h, res);
 
   /* Tail-drain after an `expected` substring matched.
 
@@ -375,7 +484,7 @@ hal_modem_at_result_t hal_modem_at_send_masked(hal_modem_at_t h,
      briefly until "\r\nOK\r\n" / "\r\nERROR\r\n" appears, capped at a
      short grace window. The result code is NOT downgraded if grace
      expires without OK - `expected` was already matched. */
-  if (res == HAL_MODEM_AT_OK && expected) {
+  if ((res == HAL_MODEM_AT_OK || res == HAL_MODEM_AT_OVERFLOW) && expected) {
     const uint32_t TAIL_GRACE_MS = 200u;
     uint32_t tail_start = hal_millis();
     while (!hal_millis_deadline_expired(tail_start, TAIL_GRACE_MS)) {
@@ -394,6 +503,7 @@ hal_modem_at_result_t hal_modem_at_send_masked(hal_modem_at_t h,
     log_filtered(h, "RX", h->cfg.rx_buf);
   }
   h->cmd_secret = NULL;
+  h->line_expected = NULL;
   hal_mutex_unlock(h->mutex);
   return res;
 }
@@ -412,8 +522,7 @@ hal_modem_at_result_t hal_modem_at_send_with_data(
 
   hal_mutex_lock(h->mutex);
 
-  reset_rx(h);
-  (void)drain_uart(h);
+  start_transaction(h, NULL);
 
   log_filtered(h, "TX", cmd);
   (void)hal_uart_println(h->cfg.uart, cmd);
@@ -430,8 +539,10 @@ hal_modem_at_result_t hal_modem_at_send_with_data(
       int b = hal_uart_read(h->cfg.uart);
       if (b < 0)
         break;
+      /* A '>' inside an announced binary block is data, not the prompt. */
+      const bool raw = h->raw_remaining > 0u;
       absorb_byte(h, (uint8_t)b);
-      if (b == '>') {
+      if (b == '>' && !raw) {
         got_prompt = true;
         break;
       }
@@ -441,8 +552,9 @@ hal_modem_at_result_t hal_modem_at_send_with_data(
     engine_poll_sleep(h);
   }
   if (!got_prompt) {
+    const hal_modem_at_result_t res = finish_wait(h, HAL_MODEM_AT_NO_PROMPT);
     hal_mutex_unlock(h->mutex);
-    return HAL_MODEM_AT_NO_PROMPT;
+    return res;
   }
 
   /* Phase 3: write payload. No CR/LF appended. */
@@ -468,6 +580,7 @@ hal_modem_at_result_t hal_modem_at_send_with_data(
       break;
     engine_poll_sleep(h);
   }
+  res = finish_wait(h, res);
 
   if (h->rx_len > 0) {
     log_filtered(h, "RX", h->cfg.rx_buf);
@@ -514,9 +627,9 @@ listen_until_quiet(hal_modem_at_t h, hal_modem_at_ready_cb_t ready, void *user,
       res = HAL_MODEM_AT_OK;
       break;
     }
-    const uint32_t quiet_reference = preserve_buffer ? last_byte_ms : start;
+    /* "Settled" means no byte for a full quiet window. */
     if (!ready && consumed == 0 &&
-        hal_elapsed_u32(now, quiet_reference, h->cfg.quiet_window_ms)) {
+        hal_elapsed_u32(now, last_byte_ms, h->cfg.quiet_window_ms)) {
       res = HAL_MODEM_AT_OK;
       break;
     }
@@ -639,6 +752,18 @@ void hal_modem_at_set_line_observer(hal_modem_at_t h, hal_modem_at_urc_cb_t cb,
   h->line_observer = cb;
   h->line_observer_user = user;
   hal_mutex_unlock(h->mutex);
+}
+
+bool hal_modem_at_read_raw(hal_modem_at_t h, size_t len,
+                           hal_modem_at_raw_cb_t cb, void *user) {
+  if (!h || !h->in_use || !cb)
+    return false;
+  /* Runs inside a URC handler with the engine mutex already held. */
+  h->raw_cb = cb;
+  h->raw_user = user;
+  h->raw_remaining = len;
+  h->raw_skip_lf = len > 0u && h->line_end == '\r';
+  return true;
 }
 
 void hal_modem_at_set_tick_callback(hal_modem_at_t h, hal_modem_at_tick_cb_t cb,

@@ -26,13 +26,17 @@ extern void hal_delay_ms(uint32_t ms);
 #define HAL_SIMCOM_A76XX_MAX_INSTANCES 1
 #endif
 
-#ifndef HAL_SIMCOM_A76XX_TOPIC_MAX
-#define HAL_SIMCOM_A76XX_TOPIC_MAX 128
-#endif
+JB_STATIC_ASSERT(HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH >= 1 &&
+                     HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH <= 255,
+                 "HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH must be 1..255");
 
-#ifndef HAL_SIMCOM_A76XX_PAYLOAD_MAX
-#define HAL_SIMCOM_A76XX_PAYLOAD_MAX 512
-#endif
+typedef struct {
+  int client_index;
+  char topic[HAL_SIMCOM_A76XX_TOPIC_MAX]; /* NUL-terminated */
+  size_t topic_len;
+  uint8_t payload[HAL_SIMCOM_A76XX_PAYLOAD_MAX + 1]; /* NUL after the data */
+  size_t payload_len;
+} rx_message_t;
 
 /* ── Internal state ──────────────────────────────────────────────────── */
 
@@ -44,36 +48,29 @@ struct hal_simcom_a76xx_impl_s {
   int mqtt_active_client;
   int mqtt_last_connect_result[2];
 
-  /* MQTT-RX URC reassembly. The CMQTTRX* family delivers a single
-     message as a four-URC sequence:
-       +CMQTTRXSTART: <idx>,<topic_len>,<payload_len>
-       <topic>
-       +CMQTTRXTOPIC: <idx>,<topic_len>
-       <topic_string>                 (variant-dependent)
-       +CMQTTRXPAYLOAD: <idx>,<payload_len>
-       <payload_bytes>
-       +CMQTTRXEND: <idx>
-     The exact line ordering varies between firmware revisions; we
-     handle the common case by capturing the next non-URC line after
-     RXTOPIC as the topic, and the next non-URC line after RXPAYLOAD
-     as the payload. */
+  /* MQTT-RX reassembly. A message arrives as +CMQTTRXSTART, one or more
+     +CMQTTRXTOPIC: <idx>,<len> each followed by <len> raw topic bytes,
+     one or more +CMQTTRXPAYLOAD: <idx>,<len> with <len> raw payload bytes,
+     and +CMQTTRXEND. The raw bytes are read by count (they may contain
+     CR, LF, NUL or '+') into the slot after the queued messages; RXEND
+     queues it. Producers are URC handlers (inside AT commands), the
+     consumer is mqtt_poll(); both run under op_lock. */
   struct {
-    bool in_progress;
-    int client_index;
-    size_t topic_len_announced;
-    size_t payload_len_announced;
-    char topic[HAL_SIMCOM_A76XX_TOPIC_MAX];
-    size_t topic_len;
-    uint8_t payload[HAL_SIMCOM_A76XX_PAYLOAD_MAX];
-    size_t payload_len;
-    bool expect_topic_line;
-    bool expect_payload_line;
-    bool complete;
+    rx_message_t slots[HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH];
+    uint8_t head;     /* oldest queued message                     */
+    uint8_t count;    /* queued messages                           */
+    bool assembling;  /* slot (head + count) receives a message    */
+    bool discard;     /* current message will be dropped at RXEND  */
+    bool delivering;  /* mqtt_poll() runs the callback on head     */
+    uint32_t dropped; /* messages lost to a full queue or size     */
   } rx;
 
   hal_simcom_a76xx_mqtt_message_cb_t msg_cb;
   void *msg_cb_user;
-  int dispatched_in_poll;
+
+  /* Held for one whole public operation: its AT commands and the parsing
+     of their responses do not interleave with another thread. */
+  hal_mutex_t op_lock;
 
   bool cell_prev_fix_valid;
   float cell_prev_lat;
@@ -88,6 +85,21 @@ struct hal_simcom_a76xx_impl_s {
 };
 
 static hal_simcom_a76xx_impl_t s_pool[HAL_SIMCOM_A76XX_MAX_INSTANCES];
+
+namespace {
+class OpLock {
+public:
+  explicit OpLock(hal_simcom_a76xx_impl_t *h) : h_(h) {
+    hal_mutex_lock(h_->op_lock);
+  }
+  ~OpLock() { hal_mutex_unlock(h_->op_lock); }
+  OpLock(const OpLock &) = delete;
+  OpLock &operator=(const OpLock &) = delete;
+
+private:
+  hal_simcom_a76xx_impl_t *h_;
+};
+} // namespace
 
 /* ── Helpers ─────────────────────────────────────────────────────────── */
 
@@ -105,6 +117,8 @@ static hal_simcom_a76xx_result_t map_at(hal_modem_at_result_t r) {
     return HAL_SIMCOM_A76XX_INVALID_ARG;
   case HAL_MODEM_AT_BUSY:
     return HAL_SIMCOM_A76XX_NOT_READY;
+  case HAL_MODEM_AT_OVERFLOW:
+    return HAL_SIMCOM_A76XX_PARSE;
   default:
     return HAL_SIMCOM_A76XX_ERROR;
   }
@@ -701,95 +715,103 @@ gnss_parse_response(const char *response,
 /* ── MQTT-RX URC handlers ────────────────────────────────────────────── */
 
 static void rx_reset(hal_simcom_a76xx_impl_t *h) {
-  h->rx.in_progress = false;
-  h->rx.client_index = -1;
-  h->rx.topic_len_announced = 0;
-  h->rx.payload_len_announced = 0;
-  h->rx.topic_len = 0;
-  h->rx.payload_len = 0;
-  h->rx.topic[0] = '\0';
-  h->rx.expect_topic_line = false;
-  h->rx.expect_payload_line = false;
-  h->rx.complete = false;
+  memset(&h->rx, 0, sizeof(h->rx));
+}
+
+static rx_message_t *rx_current(hal_simcom_a76xx_impl_t *h) {
+  if (!h->rx.assembling || h->rx.discard)
+    return NULL;
+  return &h->rx.slots[(h->rx.head + h->rx.count) %
+                      HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH];
+}
+
+/* Length field after the client index, e.g. "+CMQTTRXTOPIC: 0,12". */
+static size_t parse_rx_length(const char *line, const char *format) {
+  int idx = 0;
+  int len = 0;
+  if (sscanf(line, format, &idx, &len) != 2 || len < 0)
+    return 0u;
+  return (size_t)len;
+}
+
+static void on_rx_topic_bytes(const uint8_t *data, size_t len, void *user) {
+  hal_simcom_a76xx_impl_t *h = (hal_simcom_a76xx_impl_t *)user;
+  rx_message_t *m = rx_current(h);
+  if (!m)
+    return;
+  if (m->topic_len + len >= sizeof(m->topic)) {
+    h->rx.discard = true;
+    return;
+  }
+  memcpy(m->topic + m->topic_len, data, len);
+  m->topic_len += len;
+  m->topic[m->topic_len] = '\0';
+}
+
+static void on_rx_payload_bytes(const uint8_t *data, size_t len, void *user) {
+  hal_simcom_a76xx_impl_t *h = (hal_simcom_a76xx_impl_t *)user;
+  rx_message_t *m = rx_current(h);
+  if (!m)
+    return;
+  if (m->payload_len + len > HAL_SIMCOM_A76XX_PAYLOAD_MAX) {
+    h->rx.discard = true;
+    return;
+  }
+  memcpy(m->payload + m->payload_len, data, len);
+  m->payload_len += len;
+  m->payload[m->payload_len] = 0u;
 }
 
 static void on_urc_rxstart(const char *line, void *user) {
   hal_simcom_a76xx_impl_t *h = (hal_simcom_a76xx_impl_t *)user;
   /* +CMQTTRXSTART: <idx>,<topic_len>,<payload_len> */
   int idx = 0, tl = 0, pl = 0;
-  if (sscanf(line, "+CMQTTRXSTART: %d,%d,%d", &idx, &tl, &pl) >= 1) {
-    rx_reset(h);
-    h->rx.in_progress = true;
-    h->rx.client_index = idx;
-    h->rx.topic_len_announced = (tl > 0) ? (size_t)tl : 0u;
-    h->rx.payload_len_announced = (pl > 0) ? (size_t)pl : 0u;
+  if (sscanf(line, "+CMQTTRXSTART: %d,%d,%d", &idx, &tl, &pl) < 1)
+    return;
+  if (h->rx.assembling)
+    h->rx.dropped++; /* the previous message never reached RXEND */
+  h->rx.assembling = true;
+  h->rx.discard = h->rx.count >= HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH ||
+                  tl >= HAL_SIMCOM_A76XX_TOPIC_MAX || tl < 0 ||
+                  pl > HAL_SIMCOM_A76XX_PAYLOAD_MAX || pl < 0;
+  rx_message_t *m = rx_current(h);
+  if (m) {
+    m->client_index = idx;
+    m->topic_len = 0u;
+    m->topic[0] = '\0';
+    m->payload_len = 0u;
+    m->payload[0] = 0u;
   }
 }
 
 static void on_urc_rxtopic(const char *line, void *user) {
   hal_simcom_a76xx_impl_t *h = (hal_simcom_a76xx_impl_t *)user;
-  if (!h->rx.in_progress)
-    return;
-  /* +CMQTTRXTOPIC: <idx>,<topic_len>  - the actual topic is on the
-     next non-URC line. Mark that we expect it. */
-  int idx = 0, tl = 0;
-  if (sscanf(line, "+CMQTTRXTOPIC: %d,%d", &idx, &tl) >= 1) {
-    h->rx.topic_len_announced =
-        (tl > 0) ? (size_t)tl : h->rx.topic_len_announced;
-    h->rx.expect_topic_line = true;
-  }
+  /* The bytes always have to be consumed, even for a dropped message:
+     line-parsed, a topic starting with '+' would look like a URC. */
+  (void)hal_modem_at_read_raw(h->at,
+                              parse_rx_length(line, "+CMQTTRXTOPIC: %d,%d"),
+                              on_rx_topic_bytes, h);
 }
 
 static void on_urc_rxpayload(const char *line, void *user) {
   hal_simcom_a76xx_impl_t *h = (hal_simcom_a76xx_impl_t *)user;
-  if (!h->rx.in_progress)
-    return;
-  int idx = 0, pl = 0;
-  if (sscanf(line, "+CMQTTRXPAYLOAD: %d,%d", &idx, &pl) >= 1) {
-    h->rx.payload_len_announced =
-        (pl > 0) ? (size_t)pl : h->rx.payload_len_announced;
-    h->rx.expect_payload_line = true;
-  }
+  (void)hal_modem_at_read_raw(h->at,
+                              parse_rx_length(line, "+CMQTTRXPAYLOAD: %d,%d"),
+                              on_rx_payload_bytes, h);
 }
 
 static void on_urc_rxend(const char *line, void *user) {
   (void)line;
   hal_simcom_a76xx_impl_t *h = (hal_simcom_a76xx_impl_t *)user;
-  if (!h->rx.in_progress)
+  if (!h->rx.assembling)
     return;
-  h->rx.complete = true;
-}
-
-/* Wildcard handler installed at "" - every URC line reaches us; we
-   use it to capture the topic and payload text that follow the
-   RXTOPIC / RXPAYLOAD announcements. Lines starting with '+' are
-   skipped here (they go through the dedicated handlers). */
-static void on_urc_any(const char *line, void *user) {
-  hal_simcom_a76xx_impl_t *h = (hal_simcom_a76xx_impl_t *)user;
-  if (!h->rx.in_progress)
-    return;
-  if (line[0] == '+' || line[0] == '\0')
-    return;
-
-  if (h->rx.expect_topic_line) {
-    size_t n = strlen(line);
-    if (n >= sizeof(h->rx.topic))
-      n = sizeof(h->rx.topic) - 1u;
-    memcpy(h->rx.topic, line, n);
-    h->rx.topic[n] = '\0';
-    h->rx.topic_len = n;
-    h->rx.expect_topic_line = false;
-    return;
+  if (h->rx.discard || rx_current(h)->topic_len == 0u) {
+    h->rx.dropped++;
+  } else {
+    h->rx.count++;
   }
-  if (h->rx.expect_payload_line) {
-    size_t n = strlen(line);
-    if (n > sizeof(h->rx.payload))
-      n = sizeof(h->rx.payload);
-    memcpy(h->rx.payload, line, n);
-    h->rx.payload_len = n;
-    h->rx.expect_payload_line = false;
-    return;
-  }
+  h->rx.assembling = false;
+  h->rx.discard = false;
 }
 
 static void on_urc_disconn(const char *line, void *user) {
@@ -829,9 +851,6 @@ static void install_mqtt_urcs(hal_simcom_a76xx_impl_t *h) {
   hal_modem_at_urc_register(h->at, "+CMQTTRXEND:", on_urc_rxend, h);
   hal_modem_at_urc_register(h->at, "+CMQTTCONNLOST:", on_urc_disconn, h);
   hal_modem_at_urc_register(h->at, "+CMQTTCONNECT:", on_urc_mqtt_connect, h);
-  /* Raw line observer captures the bare topic/payload lines that the
-     SimCom CMQTTRX family emits between the announcement URCs. */
-  hal_modem_at_set_line_observer(h->at, on_urc_any, h);
 }
 
 /* ── Lifecycle ───────────────────────────────────────────────────────── */
@@ -881,6 +900,7 @@ hal_simcom_a76xx_create(const hal_simcom_a76xx_config_t *cfg) {
     hal_critical_section_exit();
     return NULL;
   }
+  h->op_lock = hal_mutex_create();
 
   install_mqtt_urcs(h);
   return h;
@@ -893,6 +913,10 @@ void hal_simcom_a76xx_destroy(hal_simcom_a76xx_t h) {
     hal_modem_at_destroy(h->at);
     h->at = NULL;
   }
+  if (h->op_lock) {
+    hal_mutex_destroy(h->op_lock);
+    h->op_lock = NULL;
+  }
   hal_critical_section_enter();
   h->in_use = false;
   hal_critical_section_exit();
@@ -900,10 +924,8 @@ void hal_simcom_a76xx_destroy(hal_simcom_a76xx_t h) {
 
 /* ── Power ───────────────────────────────────────────────────────────── */
 
-hal_simcom_a76xx_result_t hal_simcom_a76xx_power_toggle(hal_simcom_a76xx_t h,
-                                                        uint32_t pulse_ms) {
-  if (!h)
-    return HAL_SIMCOM_A76XX_INVALID_ARG;
+static hal_simcom_a76xx_result_t power_toggle_locked(hal_simcom_a76xx_t h,
+                                                     uint32_t pulse_ms) {
   h->gnss_powered = false;
   h->gnss_supported = true;
   if (h->cfg.pwr_pin < 0)
@@ -915,14 +937,23 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_power_toggle(hal_simcom_a76xx_t h,
   return HAL_SIMCOM_A76XX_OK;
 }
 
+hal_simcom_a76xx_result_t hal_simcom_a76xx_power_toggle(hal_simcom_a76xx_t h,
+                                                        uint32_t pulse_ms) {
+  if (!h)
+    return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
+  return power_toggle_locked(h, pulse_ms);
+}
+
 hal_simcom_a76xx_result_t hal_simcom_a76xx_hard_reset(hal_simcom_a76xx_t h) {
   if (!h)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
   if (h->cfg.pwr_pin < 0)
     return HAL_SIMCOM_A76XX_OK;
-  (void)hal_simcom_a76xx_power_toggle(h, 1500u);
+  OpLock lock(h);
+  (void)power_toggle_locked(h, 1500u);
   hal_modem_at_sleep_ms(h->at, 5000u);
-  (void)hal_simcom_a76xx_power_toggle(h, 1500u);
+  (void)power_toggle_locked(h, 1500u);
   hal_modem_at_sleep_ms(h->at, 5000u);
   return HAL_SIMCOM_A76XX_OK;
 }
@@ -967,6 +998,7 @@ hal_simcom_a76xx_result_t
 hal_simcom_a76xx_wait_boot(hal_simcom_a76xx_t h, uint32_t total_timeout_ms) {
   if (!h)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
   boot_state_t st;
   memset(&st, 0, sizeof(st));
   st.start_ms = hal_millis();
@@ -980,6 +1012,7 @@ hal_simcom_a76xx_wait_boot(hal_simcom_a76xx_t h, uint32_t total_timeout_ms) {
 hal_simcom_a76xx_result_t hal_simcom_a76xx_init(hal_simcom_a76xx_t h) {
   if (!h)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
 
   bool at_ok = false;
   for (int i = 0; i < 10; i++) {
@@ -1015,6 +1048,7 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_set_pin(hal_simcom_a76xx_t h,
 
   char cmd[20]; /* AT+CPIN="<8 digits>" + NUL */
   (void)snprintf(cmd, sizeof(cmd), "AT+CPIN=\"%s\"", pin);
+  OpLock lock(h);
   return map_at(hal_modem_at_send_masked(h->at, cmd, "OK", 5000u, pin));
 }
 
@@ -1025,12 +1059,9 @@ static bool cpin_code_is(const char *value, const char *code) {
          (value[n] == '\0' || value[n] == '\r' || value[n] == '\n');
 }
 
-hal_simcom_a76xx_result_t
-hal_simcom_a76xx_get_sim_state(hal_simcom_a76xx_t h,
-                               hal_simcom_a76xx_sim_state_t *out_state) {
-  if (!h || !out_state)
-    return HAL_SIMCOM_A76XX_INVALID_ARG;
-
+static hal_simcom_a76xx_result_t
+get_sim_state_locked(hal_simcom_a76xx_t h,
+                     hal_simcom_a76xx_sim_state_t *out_state) {
   hal_modem_at_result_t r = hal_modem_at_send(h->at, "AT+CPIN?", NULL, 5000u);
   if (r != HAL_MODEM_AT_OK)
     return map_at(r);
@@ -1054,14 +1085,24 @@ hal_simcom_a76xx_get_sim_state(hal_simcom_a76xx_t h,
   return HAL_SIMCOM_A76XX_OK;
 }
 
+hal_simcom_a76xx_result_t
+hal_simcom_a76xx_get_sim_state(hal_simcom_a76xx_t h,
+                               hal_simcom_a76xx_sim_state_t *out_state) {
+  if (!h || !out_state)
+    return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
+  return get_sim_state_locked(h, out_state);
+}
+
 hal_simcom_a76xx_result_t hal_simcom_a76xx_wait_sim_ready(hal_simcom_a76xx_t h,
                                                           uint32_t timeout_ms) {
   if (!h)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
   uint32_t start = hal_millis();
   do {
     hal_simcom_a76xx_sim_state_t state = HAL_SIMCOM_A76XX_SIM_OTHER;
-    if (hal_simcom_a76xx_get_sim_state(h, &state) == HAL_SIMCOM_A76XX_OK &&
+    if (get_sim_state_locked(h, &state) == HAL_SIMCOM_A76XX_OK &&
         state == HAL_SIMCOM_A76XX_SIM_READY) {
       return HAL_SIMCOM_A76XX_OK;
     }
@@ -1075,6 +1116,7 @@ hal_simcom_a76xx_wait_network_registered(hal_simcom_a76xx_t h,
                                          uint32_t timeout_ms) {
   if (!h)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
   uint32_t start = hal_millis();
   do {
     if (hal_modem_at_send(h->at, "AT+CREG?", "OK", 2000u) == HAL_MODEM_AT_OK) {
@@ -1098,6 +1140,7 @@ hal_simcom_a76xx_attach_pdp(hal_simcom_a76xx_t h,
   int n = snprintf(cmd, sizeof(cmd), "AT+CGDCONT=1,\"IP\",\"%s\"", apn->apn);
   if (n <= 0 || (size_t)n >= sizeof(cmd))
     return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
   hal_modem_at_result_t r = hal_modem_at_send(h->at, cmd, "OK", 5000u);
   if (r != HAL_MODEM_AT_OK)
     return map_at(r);
@@ -1113,6 +1156,7 @@ hal_simcom_a76xx_get_network_time_iso8601(hal_simcom_a76xx_t h, char *out,
                                           size_t out_size) {
   if (!h || !out || out_size < 26u)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
 
   hal_modem_at_result_t r =
       hal_modem_at_send(h->at, "AT+CCLK?", "+CCLK:", 3000u);
@@ -1164,6 +1208,7 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_get_cell_location(
     uint32_t timeout_ms) {
   if (!h || !out_location)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
 
   hal_modem_at_result_t r = hal_modem_at_send(
       h->at, "AT+CLBS=1,1", "+CLBS:", timeout_ms ? timeout_ms : 12000u);
@@ -1223,10 +1268,8 @@ void hal_simcom_a76xx_gnss_location_init(
   loc->fix_mode = -1;
 }
 
-hal_simcom_a76xx_result_t hal_simcom_a76xx_gnss_power_on(hal_simcom_a76xx_t h,
-                                                         uint32_t timeout_ms) {
-  if (!h)
-    return HAL_SIMCOM_A76XX_INVALID_ARG;
+static hal_simcom_a76xx_result_t gnss_power_on_locked(hal_simcom_a76xx_t h,
+                                                      uint32_t timeout_ms) {
   if (h->gnss_powered)
     return HAL_SIMCOM_A76XX_OK;
   if (!h->gnss_supported)
@@ -1258,8 +1301,19 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_gnss_power_on(hal_simcom_a76xx_t h,
   return last;
 }
 
+hal_simcom_a76xx_result_t hal_simcom_a76xx_gnss_power_on(hal_simcom_a76xx_t h,
+                                                         uint32_t timeout_ms) {
+  if (!h)
+    return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
+  return gnss_power_on_locked(h, timeout_ms);
+}
+
 bool hal_simcom_a76xx_gnss_is_powered(hal_simcom_a76xx_t h) {
-  return h && h->gnss_powered;
+  if (!h)
+    return false;
+  OpLock lock(h);
+  return h->gnss_powered;
 }
 
 hal_simcom_a76xx_result_t hal_simcom_a76xx_get_gnss_location(
@@ -1268,7 +1322,8 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_get_gnss_location(
   if (!h || !out_location)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
 
-  hal_simcom_a76xx_result_t pwr = hal_simcom_a76xx_gnss_power_on(h, timeout_ms);
+  OpLock lock(h);
+  hal_simcom_a76xx_result_t pwr = gnss_power_on_locked(h, timeout_ms);
   if (pwr != HAL_SIMCOM_A76XX_OK)
     return pwr;
 
@@ -1369,6 +1424,7 @@ hal_simcom_a76xx_mqtt_connect(hal_simcom_a76xx_t h,
   if (cfg->client_index < 0 || cfg->client_index > 1)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
 
+  OpLock lock(h);
   char cmd[320];
   int n;
   int ci = cfg->client_index;
@@ -1454,6 +1510,7 @@ int hal_simcom_a76xx_mqtt_last_connect_result(hal_simcom_a76xx_t h,
                                               int client_index) {
   if (!h || client_index < 0 || client_index > 1)
     return HAL_SIMCOM_A76XX_MQTT_RESULT_UNKNOWN;
+  OpLock lock(h);
   return h->mqtt_last_connect_result[client_index];
 }
 
@@ -1461,6 +1518,7 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_disconnect(hal_simcom_a76xx_t h,
                                                            int client_index) {
   if (!h || client_index < 0 || client_index > 1)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
   char cmd[32];
   snprintf(cmd, sizeof(cmd), "AT+CMQTTDISC=%d,10", client_index);
   hal_modem_at_result_t r = hal_modem_at_send(h->at, cmd, "OK", 5000u);
@@ -1478,6 +1536,7 @@ hal_simcom_a76xx_mqtt_publish(hal_simcom_a76xx_t h, int client_index,
     return HAL_SIMCOM_A76XX_INVALID_ARG;
   if (qos < 0 || qos > 2)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
   if (!h->mqtt_connected[client_index])
     return HAL_SIMCOM_A76XX_NOT_READY;
 
@@ -1525,6 +1584,7 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_subscribe(hal_simcom_a76xx_t h,
     return HAL_SIMCOM_A76XX_INVALID_ARG;
   if (qos < 0 || qos > 2)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
   if (!h->mqtt_connected[client_index])
     return HAL_SIMCOM_A76XX_NOT_READY;
 
@@ -1554,6 +1614,7 @@ hal_simcom_a76xx_mqtt_unsubscribe(hal_simcom_a76xx_t h, int client_index,
     return HAL_SIMCOM_A76XX_INVALID_ARG;
   if (!topic || !*topic)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
   if (!h->mqtt_connected[client_index])
     return HAL_SIMCOM_A76XX_NOT_READY;
 
@@ -1580,6 +1641,7 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_set_message_callback(
     hal_simcom_a76xx_t h, hal_simcom_a76xx_mqtt_message_cb_t cb, void *user) {
   if (!h)
     return HAL_SIMCOM_A76XX_INVALID_ARG;
+  OpLock lock(h);
   h->msg_cb = cb;
   h->msg_cb_user = user;
   return HAL_SIMCOM_A76XX_OK;
@@ -1588,25 +1650,48 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_set_message_callback(
 int hal_simcom_a76xx_mqtt_poll(hal_simcom_a76xx_t h) {
   if (!h)
     return 0;
-  h->dispatched_in_poll = 0;
-  (void)hal_modem_at_urc_poll(h->at);
-
-  if (h->rx.complete) {
-    if (h->msg_cb && h->rx.topic_len > 0) {
-      h->msg_cb(h->rx.client_index, h->rx.topic, h->rx.payload,
-                h->rx.payload_len, h->msg_cb_user);
-    }
-    rx_reset(h);
-    h->dispatched_in_poll++;
+  int delivered = 0;
+  hal_mutex_lock(h->op_lock);
+  if (h->rx.delivering) {
+    /* Called from the message callback or by a second poller. */
+    hal_mutex_unlock(h->op_lock);
+    return 0;
   }
+  (void)hal_modem_at_urc_poll(h->at);
+  while (h->rx.count > 0u) {
+    /* The head slot stays queued while the callback reads it, so new
+       messages fill the slots behind it. The callback runs without the
+       lock and may call publish or any other driver function. */
+    const rx_message_t *m = &h->rx.slots[h->rx.head];
+    const hal_simcom_a76xx_mqtt_message_cb_t cb = h->msg_cb;
+    void *const cb_user = h->msg_cb_user;
+    h->rx.delivering = true;
+    hal_mutex_unlock(h->op_lock);
+    if (cb) {
+      cb(m->client_index, m->topic, m->payload, m->payload_len, cb_user);
+    }
+    hal_mutex_lock(h->op_lock);
+    h->rx.delivering = false;
+    h->rx.head = (uint8_t)((h->rx.head + 1u) % HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH);
+    h->rx.count--;
+    delivered++;
+  }
+  hal_mutex_unlock(h->op_lock);
+  return delivered;
+}
 
-  return h->dispatched_in_poll;
+uint32_t hal_simcom_a76xx_mqtt_rx_dropped(hal_simcom_a76xx_t h) {
+  if (!h)
+    return 0u;
+  OpLock lock(h);
+  return h->rx.dropped;
 }
 
 bool hal_simcom_a76xx_mqtt_is_connected(hal_simcom_a76xx_t h,
                                         int client_index) {
   if (!h || client_index < 0 || client_index > 1)
     return false;
+  OpLock lock(h);
   return h->mqtt_connected[client_index];
 }
 

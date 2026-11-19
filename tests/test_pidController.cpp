@@ -72,6 +72,29 @@ void test_error_stable_within_tolerance(void) {
   TEST_ASSERT_TRUE(stable);
 }
 
+/* Audit F13: reset() left the stability count from the previous run, so the
+ * first sample after a reset could already report a stable error. */
+void test_reset_restarts_error_stability_count(void) {
+  PIDController pid(1.0f, 0.0f, 0.0f, 0.0f);
+  TEST_ASSERT_FALSE(pid.isErrorStable(0.1f, 0.5f, 3));
+  TEST_ASSERT_FALSE(pid.isErrorStable(0.1f, 0.5f, 3));
+  TEST_ASSERT_TRUE(pid.isErrorStable(0.1f, 0.5f, 3));
+
+  pid.reset();
+  TEST_ASSERT_FALSE(pid.isErrorStable(0.1f, 0.5f, 3));
+  TEST_ASSERT_FALSE(pid.isErrorStable(0.1f, 0.5f, 3));
+  TEST_ASSERT_TRUE(pid.isErrorStable(0.1f, 0.5f, 3));
+
+  /* A reset in the middle of a run also starts the count again. */
+  pid.reset();
+  TEST_ASSERT_FALSE(pid.isErrorStable(0.1f, 0.5f, 3));
+  TEST_ASSERT_FALSE(pid.isErrorStable(0.1f, 0.5f, 3));
+  pid.reset();
+  TEST_ASSERT_FALSE(pid.isErrorStable(0.1f, 0.5f, 3));
+  TEST_ASSERT_FALSE(pid.isErrorStable(9.0f, 0.5f, 3));
+  TEST_ASSERT_FALSE(pid.isErrorStable(0.1f, 0.5f, 3));
+}
+
 static float legacy_step_after(PIDController &pid, uint32_t elapsed_ms,
                                float divider = 1000.0f, float error = 1000.0f) {
   hal_mock_advance_millis(elapsed_ms);
@@ -386,6 +409,7 @@ int main(void) {
   RUN_TEST(test_reset_clears_integral);
   RUN_TEST(test_gains_set_and_get);
   RUN_TEST(test_error_stable_within_tolerance);
+  RUN_TEST(test_reset_restarts_error_stability_count);
   RUN_TEST(test_legacy_time_keeps_resolution_after_float_timestamp_limit);
   RUN_TEST(test_default_constructor_starts_time_at_creation);
   RUN_TEST(test_c_constructors_start_time_at_creation);

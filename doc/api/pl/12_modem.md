@@ -21,7 +21,8 @@ typedef enum {
     HAL_MODEM_AT_TIMEOUT,
     HAL_MODEM_AT_NO_PROMPT,
     HAL_MODEM_AT_INVALID_ARG,
-    HAL_MODEM_AT_BUSY
+    HAL_MODEM_AT_BUSY,
+    HAL_MODEM_AT_OVERFLOW
 } hal_modem_at_result_t;
 
 typedef hal_modem_at_impl_t *hal_modem_at_t;
@@ -61,6 +62,10 @@ bool hal_modem_at_urc_register(hal_modem_at_t h, const char *prefix,
 int  hal_modem_at_urc_poll(hal_modem_at_t h);
 void hal_modem_at_set_log_filter(hal_modem_at_t h,
                                  const char *const *secrets, size_t count);
+typedef void (*hal_modem_at_raw_cb_t)(const uint8_t *data, size_t len,
+                                      void *user);
+bool hal_modem_at_read_raw(hal_modem_at_t h, size_t len,
+                           hal_modem_at_raw_cb_t cb, void *user);
 void hal_modem_at_set_line_observer(hal_modem_at_t h,
                                     hal_modem_at_urc_cb_t cb, void *user);
 
@@ -76,6 +81,16 @@ void hal_modem_at_sleep_ms(hal_modem_at_t h, uint32_t ms);
 
 **Sekrety w logu:** `hal_modem_at_set_log_filter()` ukrywa stałą (zdefiniowaną) listę tekstów we wszystkich logowanych poleceniach i odpowiedziach. `hal_modem_at_send_masked()` ukrywa sekret tylko
 w jednym poleceniu, łącznie z jego echem; modem dostaje polecenie które nie zakrywa czegokolwiek.
+
+**Granica polecenia:** bajty, które przyszły przed wysłaniem polecenia, trafiają
+do handlerów URC, ale zaległe `OK` ani `ERROR` nie mogą na nie odpowiedzieć. Po
+`HAL_MODEM_AT_TIMEOUT` albo `HAL_MODEM_AT_NO_PROMPT` następne polecenie najpierw
+czeka, aż na linii zapanuje cisza przez `quiet_window_ms` (najdłużej
+`default_timeout_ms`), więc spóźniona odpowiedź też go nie zakończy. Silnik
+rozpoznaje końcowe `OK` także za zapełnionym `rx_buf`; takie polecenie zwraca
+`HAL_MODEM_AT_OVERFLOW`, a `hal_modem_at_last_response()` ma tylko początek
+odpowiedzi. `hal_modem_at_listen_until()` bez predykatu kończy się po
+`quiet_window_ms` bez nowego bajtu.
 
 **Współbieżność:** Każdy uchwyt ma własny muteks serializujący dostęp. API można bezpiecznie
 wywoływać z wielu wątków lub rdzeni.
@@ -248,6 +263,7 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_set_message_callback(hal_simcom_
                                                                      hal_simcom_a76xx_mqtt_message_cb_t cb,
                                                                      void *user);
 int  hal_simcom_a76xx_mqtt_poll(hal_simcom_a76xx_t h);
+uint32_t hal_simcom_a76xx_mqtt_rx_dropped(hal_simcom_a76xx_t h);
 bool hal_simcom_a76xx_mqtt_is_connected(hal_simcom_a76xx_t h, int client_index);
 ```
 
@@ -267,7 +283,7 @@ na przykład `+CGNSSINFO: ,,,,,,,,`. W wariancie odpowiedzi A7670E
 `+CGNSSINFO: <fix>,<sat_count>,...` pojedyncza liczba satelitów jest raportowana zarówno
 jako `satellites_used`, jak i `satellites_view`.
 
-**Odbiór wiadomości MQTT:** Modem zgłasza wiadomość w czterech komunikatach URC (`+CMQTTRXSTART:` / `+CMQTTRXTOPIC:` / `+CMQTTRXPAYLOAD:` / `+CMQTTRXEND:`), pomiędzy którymi przesyła osobne wiersze tematu i treści. Sterownik składa je w jedną wiadomość i wywołuje `hal_simcom_a76xx_mqtt_message_cb_t` podczas `hal_simcom_a76xx_mqtt_poll()`.
+**Odbiór wiadomości MQTT:** Modem zgłasza wiadomość jako `+CMQTTRXSTART:`, jeden lub więcej pakietów `+CMQTTRXTOPIC:` i `+CMQTTRXPAYLOAD:` oraz `+CMQTTRXEND:`. Każdy pakiet podaje swoją długość, a sterownik czyta dokładnie tyle bajtów przez `hal_modem_at_read_raw()`, więc treść może zawierać znaki nowej linii, NUL albo tekst podobny do URC. Kompletne wiadomości czekają w kolejce o `HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH` miejscach (domyślnie 2); każde zajmuje około `HAL_SIMCOM_A76XX_TOPIC_MAX` (128) + `HAL_SIMCOM_A76XX_PAYLOAD_MAX` (512) bajtów statycznego RAM. `hal_simcom_a76xx_mqtt_poll()` przekazuje każdą wiadomość z kolejki do `hal_simcom_a76xx_mqtt_message_cb_t`, od najstarszej. Wiadomość, która zastanie pełną kolejkę albo nie mieści się w buforach, przepada; `hal_simcom_a76xx_mqtt_rx_dropped()` liczy takie straty. Gdy wiadomości mogą przychodzić seriami, wywołuj poll odpowiednio często albo zwiększ głębokość kolejki.
 
 `+CMQTTCONNECT: <client>,<result>` jest dekodowane przez sterownik. Nieudane połączenia
 generują czytelną diagnostykę konsolową, na przykład:
@@ -288,8 +304,13 @@ do celów diagnostyki aplikacji. Wynik `3` oznacza niepowodzenie połączenia gn
 uwierzytelnieniem MQTT; błędna nazwa użytkownika/hasło to `30`, odrzucona autoryzacja to
 `31`, a niepowodzenie handshake'u TLS to `32`.
 
-**Współbieżność:** Dostęp przez każdy uchwyt jest serializowany muteksem
-`hal_modem_at`. API można bezpiecznie wywoływać z wielu wątków lub rdzeni.
+**Współbieżność:** każde wywołanie trzyma blokadę sterownika przez całą
+operację, więc komendy AT jednego wywołania (publish wysyła trzy) i analiza
+ich odpowiedzi nie przeplatają się z innym wątkiem. API można bezpiecznie
+wywoływać z wielu wątków lub rdzeni. Callback wiadomości działa bez tej
+blokady i może wołać dowolną funkcję sterownika, także publish. Surowe
+komendy wysyłane przez `hal_simcom_a76xx_get_at()` omijają blokadę
+sterownika, więc nie uruchamiaj ich równolegle z wywołaniami sterownika.
 
 ---
 

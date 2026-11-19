@@ -16,9 +16,33 @@ static void push_str(const char *s) {
   hal_mock_uart_push(s_uart, (const uint8_t *)s, (int)strlen(s));
 }
 
+/* Replies the "modem" sends after each write (command line or payload):
+   bytes already waiting before a command belong to an earlier exchange. */
+#define REPLY_MAX 4
+static const char *s_replies[REPLY_MAX];
+static int s_reply_count;
+static int s_reply_pos;
+
+static void reply_on_write(hal_uart_t uart, const char *text, void *user) {
+  (void)text;
+  (void)user;
+  if (s_reply_pos < s_reply_count) {
+    const char *reply = s_replies[s_reply_pos++];
+    hal_mock_uart_push(uart, (const uint8_t *)reply, (int)strlen(reply));
+  }
+}
+
+static void reply_after_tx(const char *reply) {
+  TEST_ASSERT_LESS_THAN(REPLY_MAX, s_reply_count);
+  s_replies[s_reply_count++] = reply;
+}
+
 void setUp(void) {
   s_uart = hal_uart_create(HAL_UART_PORT_2, 5, 4);
   hal_mock_uart_reset(s_uart);
+  s_reply_count = 0;
+  s_reply_pos = 0;
+  hal_mock_uart_set_write_callback(s_uart, reply_on_write, NULL);
 
   memset(s_rxbuf, 0, sizeof(s_rxbuf));
   hal_modem_at_config_t cfg = {0};
@@ -31,6 +55,7 @@ void setUp(void) {
 }
 
 void tearDown(void) {
+  hal_mock_uart_set_write_callback(s_uart, NULL, NULL);
   hal_modem_at_destroy(s_modem);
   s_modem = NULL;
   hal_uart_destroy(s_uart);
@@ -66,26 +91,26 @@ void test_destroy_null_handle_safe(void) {
 /* ── send: OK / ERROR / expected / timeout ───────────────────────────── */
 
 void test_send_ok(void) {
-  push_str("\r\nOK\r\n");
+  reply_after_tx("\r\nOK\r\n");
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_OK,
                     hal_modem_at_send(s_modem, "AT", NULL, 100));
   TEST_ASSERT_EQUAL_STRING("AT\r\n", hal_mock_uart_last_write(s_uart));
 }
 
 void test_send_error(void) {
-  push_str("\r\nERROR\r\n");
+  reply_after_tx("\r\nERROR\r\n");
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_ERROR,
                     hal_modem_at_send(s_modem, "AT+FAIL", NULL, 100));
 }
 
 void test_send_cme_error_classified_as_error(void) {
-  push_str("\r\n+CME ERROR: 100\r\n");
+  reply_after_tx("\r\n+CME ERROR: 100\r\n");
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_ERROR,
                     hal_modem_at_send(s_modem, "AT+CPIN?", NULL, 100));
 }
 
 void test_send_expected_substring_matches_before_ok(void) {
-  push_str("\r\n+CSQ: 21,99\r\n");
+  reply_after_tx("\r\n+CSQ: 21,99\r\n");
   /* No OK present, but expected matches early. */
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_OK,
                     hal_modem_at_send(s_modem, "AT+CSQ", "+CSQ:", 100));
@@ -95,7 +120,7 @@ void test_send_expected_substring_matches_before_ok(void) {
 }
 
 void test_send_timeout_when_no_terminator(void) {
-  push_str("\r\nrandom noise\r\n");
+  reply_after_tx("\r\nrandom noise\r\n");
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_TIMEOUT,
                     hal_modem_at_send(s_modem, "AT", NULL, 50));
 }
@@ -107,12 +132,103 @@ void test_send_invalid_args(void) {
                     hal_modem_at_send(s_modem, NULL, NULL, 0));
 }
 
+static int s_urc_calls = 0;
+static char s_last_urc[256];
+
+static void capture_urc(const char *line, void *user) {
+  (void)user;
+  s_urc_calls++;
+  strncpy(s_last_urc, line, sizeof(s_last_urc) - 1);
+  s_last_urc[sizeof(s_last_urc) - 1] = '\0';
+}
+
 void test_send_drains_stale_urcs_before_command(void) {
-  /* Stale URC sitting in UART before the command is issued. */
+  /* Stale URC sitting in UART before the command is issued: it reaches its
+     handler, but stays out of the command's response. */
+  s_urc_calls = 0;
+  TEST_ASSERT_TRUE(
+      hal_modem_at_urc_register(s_modem, "+CREG:", capture_urc, NULL));
   push_str("\r\n+CREG: 1\r\n");
-  push_str("\r\nOK\r\n");
+  reply_after_tx("\r\nOK\r\n");
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_OK,
                     hal_modem_at_send(s_modem, "AT", NULL, 100));
+  TEST_ASSERT_EQUAL_INT(1, s_urc_calls);
+  TEST_ASSERT_NULL(strstr(hal_modem_at_last_response(s_modem), "+CREG"));
+}
+
+/* Audit F06: an OK left over from an earlier exchange answered the next
+   command in 0 ms although the modem never replied to it. */
+void test_stale_ok_does_not_answer_next_command(void) {
+  push_str("\r\nOK\r\n");
+  TEST_ASSERT_EQUAL(HAL_MODEM_AT_TIMEOUT,
+                    hal_modem_at_send(s_modem, "AT+NEW", NULL, 50));
+}
+
+/* A stale line still arriving when the command starts cannot carry its
+   result: here its first half came before TX, "K" after it. */
+void test_line_started_before_command_is_not_its_result(void) {
+  push_str("\r\nO");
+  reply_after_tx("K\r\n");
+  TEST_ASSERT_EQUAL(HAL_MODEM_AT_TIMEOUT,
+                    hal_modem_at_send(s_modem, "AT", NULL, 50));
+}
+
+typedef struct {
+  uint32_t at_ms;
+  bool sent;
+} timed_reply_t;
+
+static void late_ok_tick(void *user) {
+  timed_reply_t *late = (timed_reply_t *)user;
+  if (!late->sent && hal_millis() >= late->at_ms) {
+    late->sent = true;
+    push_str("\r\nOK\r\n");
+  }
+}
+
+/* Audit F06: after a timeout the late reply of that command must not answer
+   the next one; the engine first waits for a quiet line. */
+void test_late_reply_after_timeout_does_not_answer_next_command(void) {
+  hal_mock_set_millis(1000u);
+  TEST_ASSERT_EQUAL(HAL_MODEM_AT_TIMEOUT,
+                    hal_modem_at_send(s_modem, "AT+SLOW", NULL, 50));
+  timed_reply_t late = {hal_millis() + 10u, false};
+  hal_modem_at_set_tick_callback(s_modem, late_ok_tick, &late);
+  TEST_ASSERT_EQUAL(HAL_MODEM_AT_TIMEOUT,
+                    hal_modem_at_send(s_modem, "AT", NULL, 50));
+  TEST_ASSERT_TRUE(late.sent);
+  hal_modem_at_set_tick_callback(s_modem, NULL, NULL);
+}
+
+/* Audit F06: a response longer than rx_buf lost its final OK and ended in a
+   timeout. The result is now detected on the line and reported as overflow. */
+void test_response_larger_than_buffer_reports_overflow(void) {
+  char small_rx[64];
+  hal_modem_at_config_t cfg = {0};
+  cfg.uart = s_uart;
+  cfg.rx_buf = small_rx;
+  cfg.rx_buf_size = sizeof(small_rx);
+  cfg.default_timeout_ms = 200;
+  cfg.quiet_window_ms = 50;
+  hal_modem_at_t small = hal_modem_at_create(&cfg);
+  TEST_ASSERT_NOT_NULL(small);
+
+  static char long_reply[128];
+  memset(long_reply, 0, sizeof(long_reply));
+  memcpy(long_reply, "\r\n", 2);
+  memset(long_reply + 2, 'A', 90);
+  memcpy(long_reply + 92, "\r\nOK\r\n", 6);
+  reply_after_tx(long_reply);
+  TEST_ASSERT_EQUAL(HAL_MODEM_AT_OVERFLOW,
+                    hal_modem_at_send(small, "AT+LONG", NULL, 100));
+  TEST_ASSERT_EQUAL_UINT(sizeof(small_rx) - 1u,
+                         strlen(hal_modem_at_last_response(small)));
+  TEST_ASSERT_EQUAL_INT(0, hal_uart_available(s_uart));
+
+  reply_after_tx("\r\nERROR\r\n");
+  TEST_ASSERT_EQUAL(HAL_MODEM_AT_ERROR,
+                    hal_modem_at_send(small, "AT+FAIL", NULL, 100));
+  hal_modem_at_destroy(small);
 }
 
 void test_send_expected_waits_past_early_ok(void) {
@@ -122,7 +238,7 @@ void test_send_expected_waits_past_early_ok(void) {
      substring, the engine MUST wait for that substring and NOT
      short-circuit on the bare "\r\nOK\r\n" - otherwise it races the
      URC and fires the next command while the modem is still busy. */
-  push_str("\r\nOK\r\n");
+  reply_after_tx("\r\nOK\r\n");
   /* expected is given but not yet present -> must time out, not OK. */
   TEST_ASSERT_EQUAL(
       HAL_MODEM_AT_TIMEOUT,
@@ -138,12 +254,12 @@ void test_send_expected_drains_trailing_ok(void) {
      and corrupt the next command's RX buffer.
 
      Simulate: payload arrives first, then OK arrives a poll later. */
-  push_str("\r\n+CCLK: \"26/06/02,20:40:25+08\"\r\n\r\nOK\r\n");
+  reply_after_tx("\r\n+CCLK: \"26/06/02,20:40:25+08\"\r\n\r\nOK\r\n");
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_OK,
                     hal_modem_at_send(s_modem, "AT+CCLK?", "+CCLK:", 500));
   /* Issue a follow-up command - its RX buffer must NOT contain the
      trailing "OK" of the previous response. */
-  push_str("\r\nOK\r\n");
+  reply_after_tx("\r\nOK\r\n");
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_OK,
                     hal_modem_at_send(s_modem, "AT", NULL, 100));
 }
@@ -152,7 +268,8 @@ void test_send_expected_drains_trailing_ok(void) {
 
 void test_send_with_data_happy_path(void) {
   /* Modem replies with '>' prompt, then OK after payload. */
-  push_str("> \r\nOK\r\n");
+  reply_after_tx("> ");
+  reply_after_tx("\r\nOK\r\n");
   const uint8_t payload[] = "hello";
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_OK,
                     hal_modem_at_send_with_data(s_modem, "AT+CMQTTPAYLOAD=0,5",
@@ -164,7 +281,7 @@ void test_send_with_data_happy_path(void) {
 }
 
 void test_send_with_data_no_prompt(void) {
-  push_str("\r\nERROR\r\n");
+  reply_after_tx("\r\nERROR\r\n");
   const uint8_t payload[] = "x";
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_NO_PROMPT,
                     hal_modem_at_send_with_data(s_modem, "AT+CMQTTPAYLOAD=0,1",
@@ -198,6 +315,28 @@ void test_listen_until_settles_when_no_predicate(void) {
                     hal_modem_at_listen_until(s_modem, NULL, NULL, 500));
 }
 
+static void late_byte_tick(void *user) {
+  timed_reply_t *late = (timed_reply_t *)user;
+  if (!late->sent && hal_millis() >= late->at_ms) {
+    late->sent = true;
+    push_str("x");
+  }
+}
+
+/* Audit F06: without a predicate the listener ended 50 ms after its start
+   even though a byte came at 40 ms; "settled" needs a full quiet window
+   after the last byte. */
+void test_listen_until_waits_quiet_window_after_last_byte(void) {
+  hal_mock_set_millis(0u);
+  timed_reply_t late = {40u, false};
+  hal_modem_at_set_tick_callback(s_modem, late_byte_tick, &late);
+  TEST_ASSERT_EQUAL(HAL_MODEM_AT_OK,
+                    hal_modem_at_listen_until(s_modem, NULL, NULL, 500));
+  TEST_ASSERT_TRUE(late.sent);
+  TEST_ASSERT_GREATER_OR_EQUAL_UINT32(90u, hal_millis());
+  hal_modem_at_set_tick_callback(s_modem, NULL, NULL);
+}
+
 void test_listen_until_times_out_when_predicate_never_fires(void) {
   push_str("\r\nirrelevant\r\n");
   TEST_ASSERT_EQUAL(
@@ -207,16 +346,6 @@ void test_listen_until_times_out_when_predicate_never_fires(void) {
 
 /* ── URC router ──────────────────────────────────────────────────────── */
 
-static int s_urc_calls = 0;
-static char s_last_urc[256];
-
-static void capture_urc(const char *line, void *user) {
-  (void)user;
-  s_urc_calls++;
-  strncpy(s_last_urc, line, sizeof(s_last_urc) - 1);
-  s_last_urc[sizeof(s_last_urc) - 1] = '\0';
-}
-
 void test_urc_dispatch_during_send(void) {
   s_urc_calls = 0;
   s_last_urc[0] = '\0';
@@ -224,7 +353,7 @@ void test_urc_dispatch_during_send(void) {
   TEST_ASSERT_TRUE(
       hal_modem_at_urc_register(s_modem, "+CMQTTRXSTART:", capture_urc, NULL));
 
-  push_str("\r\n+CMQTTRXSTART: 0,5,3\r\nOK\r\n");
+  reply_after_tx("\r\n+CMQTTRXSTART: 0,5,3\r\nOK\r\n");
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_OK,
                     hal_modem_at_send(s_modem, "AT+POLL", NULL, 100));
   TEST_ASSERT_EQUAL_INT(1, s_urc_calls);
@@ -243,7 +372,7 @@ void test_urc_register_unregister_with_null_cb(void) {
   TEST_ASSERT_TRUE(
       hal_modem_at_urc_register(s_modem, "+CREG:", capture_urc, NULL));
   TEST_ASSERT_TRUE(hal_modem_at_urc_register(s_modem, "+CREG:", NULL, NULL));
-  push_str("\r\n+CREG: 1\r\nOK\r\n");
+  reply_after_tx("\r\n+CREG: 1\r\nOK\r\n");
   (void)hal_modem_at_send(s_modem, "AT", NULL, 100);
   TEST_ASSERT_EQUAL_INT(0, s_urc_calls);
 }
@@ -262,7 +391,7 @@ void test_urc_unknown_prefix_does_not_fire(void) {
   s_urc_calls = 0;
   TEST_ASSERT_TRUE(
       hal_modem_at_urc_register(s_modem, "+CMQTTRXSTART:", capture_urc, NULL));
-  push_str("\r\n+CSQ: 21,99\r\nOK\r\n");
+  reply_after_tx("\r\n+CSQ: 21,99\r\nOK\r\n");
   (void)hal_modem_at_send(s_modem, "AT+CSQ", NULL, 100);
   TEST_ASSERT_EQUAL_INT(0, s_urc_calls);
 }
@@ -275,7 +404,7 @@ void test_log_filter_install_and_clear(void) {
   /* No public observable other than absence of crash; the redaction is
      inside log_filtered() and only emits when hal_deb is initialised.
      Smoke test: a send that exercises the log path must still succeed. */
-  push_str("\r\nOK\r\n");
+  reply_after_tx("\r\nOK\r\n");
   TEST_ASSERT_EQUAL(
       HAL_MODEM_AT_OK,
       hal_modem_at_send(s_modem, "AT+CMQTTACCQ=0,supersecret", NULL, 100));
@@ -303,7 +432,7 @@ void test_send_masked_hides_secret_in_tx_log(void) {
 
 void test_send_masked_hides_secret_in_echo(void) {
   hal_debug_init_default();
-  push_str("AT+CPIN=\"1234\"\r\r\nOK\r\n");
+  reply_after_tx("AT+CPIN=\"1234\"\r\r\nOK\r\n");
   TEST_ASSERT_EQUAL(
       HAL_MODEM_AT_OK,
       hal_modem_at_send_masked(s_modem, "AT+CPIN=\"1234\"", NULL, 100, "1234"));
@@ -313,7 +442,7 @@ void test_send_masked_hides_secret_in_echo(void) {
 }
 
 void test_send_masked_null_secret_matches_send(void) {
-  push_str("\r\nOK\r\n");
+  reply_after_tx("\r\nOK\r\n");
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_OK,
                     hal_modem_at_send_masked(s_modem, "AT", NULL, 100, NULL));
   TEST_ASSERT_EQUAL(HAL_MODEM_AT_INVALID_ARG,
@@ -323,7 +452,7 @@ void test_send_masked_null_secret_matches_send(void) {
 /* ── last_response ───────────────────────────────────────────────────── */
 
 void test_last_response_returns_buffer(void) {
-  push_str("\r\nOK\r\n");
+  reply_after_tx("\r\nOK\r\n");
   (void)hal_modem_at_send(s_modem, "AT", NULL, 100);
   const char *r = hal_modem_at_last_response(s_modem);
   TEST_ASSERT_EQUAL_PTR(s_rxbuf, r);
@@ -399,6 +528,10 @@ int main(void) {
   RUN_TEST(test_send_timeout_when_no_terminator);
   RUN_TEST(test_send_invalid_args);
   RUN_TEST(test_send_drains_stale_urcs_before_command);
+  RUN_TEST(test_stale_ok_does_not_answer_next_command);
+  RUN_TEST(test_line_started_before_command_is_not_its_result);
+  RUN_TEST(test_late_reply_after_timeout_does_not_answer_next_command);
+  RUN_TEST(test_response_larger_than_buffer_reports_overflow);
   RUN_TEST(test_send_expected_waits_past_early_ok);
   RUN_TEST(test_send_expected_drains_trailing_ok);
 
@@ -408,6 +541,7 @@ int main(void) {
 
   RUN_TEST(test_listen_until_predicate_fires);
   RUN_TEST(test_listen_until_settles_when_no_predicate);
+  RUN_TEST(test_listen_until_waits_quiet_window_after_last_byte);
   RUN_TEST(test_listen_until_times_out_when_predicate_never_fires);
 
   RUN_TEST(test_urc_dispatch_during_send);

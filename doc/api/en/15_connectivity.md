@@ -1087,6 +1087,14 @@ for (;;) {
 example `127.0.0.1`, with the same results as `hal_http_server_start_ex()`.
 The server copies the endpoint and the path.
 
+`hal_websocket_send()` and the broadcast helpers send each frame whole or not
+at all. `HAL_EAGAIN` means TCP had no room and took no byte: the client stays
+open and the same message can be sent again later. When TCP takes only part of
+a frame, the rest cannot follow without breaking the stream, so the server
+closes the client, calls `on_disconnect` with code 1006 and returns `HAL_EIO`.
+A socket error ends the same way. Each client slot holds its own outgoing
+frame buffer, so sending does not put the frame on the caller's stack.
+
 Broadcasting telemetry:
 
 ```c

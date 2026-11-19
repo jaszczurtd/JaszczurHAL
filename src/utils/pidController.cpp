@@ -1,6 +1,8 @@
 
 #include "pidController.h"
 
+#include <limits.h>
+
 PIDController::PIDController(float kp, float ki, float kd, float mi) {
   setKp(kp);
   setKi(ki);
@@ -219,6 +221,8 @@ void PIDController::reset() {
   dt = 0.001f;
   errorHistoryHead = 0;
   errorHistoryCount = 0;
+  stabilityCounter = 0;
+  instabilityCounter = 0;
 }
 
 void PIDController::setDirection(Direction d) {
@@ -233,12 +237,17 @@ void PIDController::setDirection(Direction d) {
 
 bool PIDController::isErrorStable(float error, float tolerance,
                                   int stabilityThreshold) {
+  /* Saturate: a long stable run must not overflow the signed counters. */
   if (fabs(error) < tolerance) {
-    stabilityCounter++;
+    if (stabilityCounter < INT_MAX) {
+      stabilityCounter++;
+    }
     instabilityCounter = 0;
   } else {
     stabilityCounter = 0;
-    instabilityCounter++;
+    if (instabilityCounter < INT_MAX) {
+      instabilityCounter++;
+    }
   }
   return (stabilityCounter >= stabilityThreshold);
 }

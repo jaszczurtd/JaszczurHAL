@@ -10,6 +10,12 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <atomic>
+#include <chrono>
+#include <string>
+#include <thread>
+#include <vector>
+
 /* ── Test fixture ─────────────────────────────────────────────────────── */
 
 static hal_uart_t s_uart = NULL;
@@ -814,6 +820,390 @@ void test_mqtt_rx_reassembly_dispatches_message(void) {
   TEST_ASSERT_EQUAL_size_t(5, s_msg_payload_len);
 }
 
+/* ── MQTT receive: byte counts, queue, callback context (audit F07) ──── */
+
+struct rx_record_t {
+  int client_index;
+  std::string topic;
+  std::string payload;
+};
+static std::vector<rx_record_t> s_rx;
+
+static void record_msg(int client_index, const char *topic,
+                       const uint8_t *payload, size_t payload_len, void *user) {
+  (void)user;
+  s_rx.push_back(
+      {client_index, topic, std::string((const char *)payload, payload_len)});
+}
+
+/* The CMQTTRX URC sequence of one message, topic and payload in one packet
+   each, as the A76xx sends it. */
+static std::string rx_message(const std::string &topic,
+                              const std::string &payload) {
+  return "\r\n+CMQTTRXSTART: 0," + std::to_string(topic.size()) + "," +
+         std::to_string(payload.size()) + "\r\n+CMQTTRXTOPIC: 0," +
+         std::to_string(topic.size()) + "\r\n" + topic +
+         "\r\n+CMQTTRXPAYLOAD: 0," + std::to_string(payload.size()) + "\r\n" +
+         payload + "\r\n+CMQTTRXEND: 0\r\n";
+}
+
+/* Push @p bytes in pieces of @p chunk bytes, polling after each piece. */
+static int feed_and_poll(const std::string &bytes, size_t chunk) {
+  int delivered = 0;
+  for (size_t pos = 0u; pos < bytes.size(); pos += chunk) {
+    const size_t n = bytes.size() - pos < chunk ? bytes.size() - pos : chunk;
+    hal_mock_uart_push(s_uart, (const uint8_t *)bytes.data() + pos, (int)n);
+    delivered += hal_simcom_a76xx_mqtt_poll(s_modem);
+  }
+  return delivered;
+}
+
+static void start_recording(void) {
+  s_rx.clear();
+  TEST_ASSERT_EQUAL(
+      HAL_SIMCOM_A76XX_OK,
+      hal_simcom_a76xx_mqtt_set_message_callback(s_modem, record_msg, NULL));
+}
+
+/* Audit F07: two messages waiting in one poll gave one callback with the
+   second topic only. */
+void test_mqtt_rx_burst_delivers_every_message(void) {
+  start_recording();
+  TEST_ASSERT_EQUAL_INT(
+      2, feed_and_poll(rx_message("first", "A") + rx_message("second", "B"),
+                       256u));
+  TEST_ASSERT_EQUAL_UINT(2u, s_rx.size());
+  TEST_ASSERT_EQUAL_STRING("first", s_rx[0].topic.c_str());
+  TEST_ASSERT_EQUAL_STRING("A", s_rx[0].payload.c_str());
+  TEST_ASSERT_EQUAL_STRING("second", s_rx[1].topic.c_str());
+  TEST_ASSERT_EQUAL_STRING("B", s_rx[1].payload.c_str());
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_simcom_a76xx_mqtt_rx_dropped(s_modem));
+}
+
+/* Audit F07: a payload with a newline lost everything after it and NUL cut
+   the length. The payload is read by count, so every byte value survives,
+   also text that looks like a URC or a result code. */
+void test_mqtt_rx_payload_keeps_every_byte(void) {
+  start_recording();
+  const std::string payloads[] = {"line1\nline2", std::string("A\0B", 3),
+                                  "+CMQTTRXEND: 0", "\r\nOK\r\n"};
+  for (const std::string &payload : payloads) {
+    s_rx.clear();
+    TEST_ASSERT_EQUAL_INT(1, feed_and_poll(rx_message("t", payload), 256u));
+    TEST_ASSERT_EQUAL_UINT(1u, s_rx.size());
+    TEST_ASSERT_EQUAL_UINT(payload.size(), s_rx[0].payload.size());
+    TEST_ASSERT_EQUAL_MEMORY(payload.data(), s_rx[0].payload.data(),
+                             payload.size());
+  }
+}
+
+/* The URC sequence may reach the UART in any pieces. */
+void test_mqtt_rx_split_at_every_byte(void) {
+  start_recording();
+  const std::string payload("x\r\n+y\0z", 7);
+  TEST_ASSERT_EQUAL_INT(1, feed_and_poll(rx_message("a/b", payload), 1u));
+  TEST_ASSERT_EQUAL_UINT(1u, s_rx.size());
+  TEST_ASSERT_EQUAL_STRING("a/b", s_rx[0].topic.c_str());
+  TEST_ASSERT_EQUAL_UINT(payload.size(), s_rx[0].payload.size());
+  TEST_ASSERT_EQUAL_MEMORY(payload.data(), s_rx[0].payload.data(),
+                           payload.size());
+}
+
+/* Long topics and payloads come in several RXTOPIC / RXPAYLOAD packets. */
+void test_mqtt_rx_joins_topic_and_payload_packets(void) {
+  start_recording();
+  const std::string rx = "\r\n+CMQTTRXSTART: 1,7,11\r\n"
+                         "+CMQTTRXTOPIC: 1,4\r\ndpf/\r\n"
+                         "+CMQTTRXTOPIC: 1,3\r\ncmd\r\n"
+                         "+CMQTTRXPAYLOAD: 1,6\r\nhello \r\n"
+                         "+CMQTTRXPAYLOAD: 1,5\r\nworld\r\n"
+                         "+CMQTTRXEND: 1\r\n";
+  TEST_ASSERT_EQUAL_INT(1, feed_and_poll(rx, 256u));
+  TEST_ASSERT_EQUAL_INT(1, s_rx[0].client_index);
+  TEST_ASSERT_EQUAL_STRING("dpf/cmd", s_rx[0].topic.c_str());
+  TEST_ASSERT_EQUAL_STRING("hello world", s_rx[0].payload.c_str());
+}
+
+/* Exactly full buffers are delivered; one byte more drops the message,
+   counts it and leaves the next message intact. */
+void test_mqtt_rx_size_limits_drop_and_count(void) {
+  start_recording();
+  const std::string max_topic(HAL_SIMCOM_A76XX_TOPIC_MAX - 1, 't');
+  const std::string max_payload(HAL_SIMCOM_A76XX_PAYLOAD_MAX, 'p');
+  TEST_ASSERT_EQUAL_INT(1, feed_and_poll(rx_message(max_topic, "x"), 200u));
+  TEST_ASSERT_EQUAL_INT(1, feed_and_poll(rx_message("t", max_payload), 200u));
+  TEST_ASSERT_EQUAL_UINT(2u, s_rx.size());
+  TEST_ASSERT_TRUE(s_rx[0].topic == max_topic);
+  TEST_ASSERT_TRUE(s_rx[1].payload == max_payload);
+
+  TEST_ASSERT_EQUAL_INT(0,
+                        feed_and_poll(rx_message(max_topic + "t", "x"), 200u));
+  TEST_ASSERT_EQUAL_INT(
+      0, feed_and_poll(rx_message("t", max_payload + "p"), 200u));
+  TEST_ASSERT_EQUAL_UINT32(2u, hal_simcom_a76xx_mqtt_rx_dropped(s_modem));
+  TEST_ASSERT_EQUAL_INT(1, feed_and_poll(rx_message("next", "ok"), 200u));
+  TEST_ASSERT_EQUAL_STRING("ok", s_rx.back().payload.c_str());
+}
+
+/* A burst longer than the queue keeps the oldest messages and counts the
+   rest; nothing is overwritten. */
+void test_mqtt_rx_full_queue_drops_newest_and_counts(void) {
+  start_recording();
+  std::string burst;
+  for (int i = 0; i <= HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH; ++i) {
+    burst += rx_message("q", std::to_string(i));
+  }
+  TEST_ASSERT_EQUAL_INT(HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH,
+                        feed_and_poll(burst, 400u));
+  for (int i = 0; i < HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH; ++i) {
+    TEST_ASSERT_TRUE(s_rx[(size_t)i].payload == std::to_string(i));
+  }
+  TEST_ASSERT_EQUAL_UINT32(1u, hal_simcom_a76xx_mqtt_rx_dropped(s_modem));
+}
+
+/* A message that arrives inside another command's response is queued for
+   the next poll, and its payload cannot end that command. */
+void test_mqtt_rx_during_command_is_queued(void) {
+  start_recording();
+  static std::string reply;
+  reply = rx_message("in/cmd", "\r\nOK\r\n") + "\r\n+CPIN: READY\r\n\r\nOK\r\n";
+  script_push("AT+CPIN?", reply.c_str());
+  hal_simcom_a76xx_sim_state_t state = HAL_SIMCOM_A76XX_SIM_OTHER;
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                    hal_simcom_a76xx_get_sim_state(s_modem, &state));
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_SIM_READY, state);
+  TEST_ASSERT_TRUE(s_rx.empty());
+  TEST_ASSERT_EQUAL_INT(1, hal_simcom_a76xx_mqtt_poll(s_modem));
+  TEST_ASSERT_EQUAL_STRING("in/cmd", s_rx[0].topic.c_str());
+  TEST_ASSERT_TRUE(s_rx[0].payload == "\r\nOK\r\n");
+}
+
+static std::atomic<int> s_reply_publish_result{HAL_SIMCOM_A76XX_ERROR};
+static std::atomic<bool> s_reply_published{false};
+static std::thread s_reply_thread;
+static bool s_published_in_callback;
+static int s_nested_poll;
+static void publish_reply(int client_index, const char *topic,
+                          const uint8_t *payload, size_t payload_len,
+                          void *user) {
+  (void)topic;
+  (void)payload;
+  (void)payload_len;
+  (void)user;
+  s_msg_calls++;
+  /* Publish from another thread and wait for it here: with the driver lock
+     still held by poll this would time out instead of deadlocking. */
+  s_reply_thread = std::thread([client_index] {
+    s_reply_publish_result.store(hal_simcom_a76xx_mqtt_publish(
+        s_modem, client_index, "reply", "ping", 4u, 0));
+    s_reply_published.store(true);
+  });
+  for (int ms = 0; ms < 2000 && !s_reply_published.load(); ++ms) {
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  /* Asserted after poll returns; a nested poll is safe only without the
+     lock and must not deliver the same message again. */
+  s_published_in_callback = s_reply_published.load();
+  if (s_published_in_callback) {
+    s_nested_poll = hal_simcom_a76xx_mqtt_poll(s_modem);
+  }
+}
+
+/* The callback runs outside the driver lock, so it may publish. */
+void test_mqtt_callback_may_publish_from_poll(void) {
+  script_mqtt_connect_plain(0);
+  hal_simcom_a76xx_mqtt_config_t cfg = {0};
+  cfg.broker_host = "h";
+  cfg.broker_port = 1883;
+  cfg.client_id = "c";
+  cfg.client_index = 0;
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                    hal_simcom_a76xx_mqtt_connect(s_modem, &cfg));
+  script_push("AT+CMQTTTOPIC=0,5", ">");
+  script_push("reply", "\r\nOK\r\n");
+  script_push("AT+CMQTTPAYLOAD=0,4", ">");
+  script_push("ping", "\r\nOK\r\n");
+  script_push("AT+CMQTTPUB=0,0", "\r\nOK\r\n\r\n+CMQTTPUB: 0,0\r\n");
+
+  s_msg_calls = 0;
+  s_reply_publish_result.store(HAL_SIMCOM_A76XX_ERROR);
+  s_reply_published.store(false);
+  s_published_in_callback = false;
+  s_nested_poll = -1;
+  TEST_ASSERT_EQUAL(
+      HAL_SIMCOM_A76XX_OK,
+      hal_simcom_a76xx_mqtt_set_message_callback(s_modem, publish_reply, NULL));
+  const std::string rx = rx_message("in", "ping");
+  hal_mock_uart_push(s_uart, (const uint8_t *)rx.data(), (int)rx.size());
+  const int delivered = hal_simcom_a76xx_mqtt_poll(s_modem);
+  if (s_reply_thread.joinable()) {
+    s_reply_thread.join();
+  }
+  TEST_ASSERT_TRUE_MESSAGE(s_published_in_callback,
+                           "callback ran with the driver lock held");
+  TEST_ASSERT_EQUAL_INT(0, s_nested_poll);
+  TEST_ASSERT_EQUAL_INT(1, delivered);
+  TEST_ASSERT_EQUAL_INT(1, s_msg_calls);
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK, s_reply_publish_result.load());
+}
+
+/* A '>' inside an incoming payload is data: send_with_data must keep
+   waiting for the real prompt before it writes the topic bytes. */
+static int s_unread_at_data_write = -1;
+static void reply_prompt_after_message(hal_uart_t h, const char *text,
+                                       void *user) {
+  (void)user;
+  const std::string line(text);
+  std::string reply;
+  if (line.rfind("AT+CMQTTTOPIC=", 0) == 0) {
+    reply = rx_message("in", "a>b") + ">";
+  } else if (line.rfind("AT+CMQTTPAYLOAD=", 0) == 0) {
+    reply = ">";
+  } else if (line.rfind("AT+CMQTTPUB=", 0) == 0) {
+    reply = "\r\nOK\r\n\r\n+CMQTTPUB: 0,0\r\n";
+  } else {
+    if (line == "out") {
+      s_unread_at_data_write = hal_uart_available(h);
+    }
+    reply = "\r\nOK\r\n";
+  }
+  hal_mock_uart_push(h, (const uint8_t *)reply.data(), (int)reply.size());
+}
+
+void test_prompt_char_in_incoming_payload_is_not_the_prompt(void) {
+  script_mqtt_connect_plain(0);
+  hal_simcom_a76xx_mqtt_config_t cfg = {0};
+  cfg.broker_host = "h";
+  cfg.broker_port = 1883;
+  cfg.client_id = "c";
+  cfg.client_index = 0;
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                    hal_simcom_a76xx_mqtt_connect(s_modem, &cfg));
+  start_recording();
+  s_unread_at_data_write = -1;
+  hal_mock_uart_set_write_callback(s_uart, reply_prompt_after_message, NULL);
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK, hal_simcom_a76xx_mqtt_publish(
+                                             s_modem, 0, "out", "x", 1u, 0));
+  hal_mock_uart_set_write_callback(s_uart, NULL, NULL);
+  TEST_ASSERT_EQUAL_INT(0, s_unread_at_data_write);
+  TEST_ASSERT_EQUAL_INT(1, hal_simcom_a76xx_mqtt_poll(s_modem));
+  TEST_ASSERT_TRUE(s_rx[0].payload == "a>b");
+}
+
+/* ── Concurrent callers (audit F08) ───────────────────────────────────── */
+
+/* Stateless modem: answers each write by its content. Every publish also
+   brings one incoming message, as a busy broker would. */
+static std::vector<std::string> s_wire;
+static void modem_by_command(hal_uart_t h, const char *text, void *user) {
+  (void)user;
+  const std::string line(text);
+  s_wire.push_back(line.substr(0, line.find_first_of("=\r")));
+  std::string reply;
+  if (line.rfind("AT+CMQTTTOPIC=", 0) == 0 ||
+      line.rfind("AT+CMQTTPAYLOAD=", 0) == 0) {
+    reply = ">";
+  } else if (line.rfind("AT+CMQTTPUB=", 0) == 0) {
+    reply = "\r\nOK\r\n\r\n+CMQTTPUB: 0,0\r\n" + rx_message("in", "m");
+  } else if (line.rfind("AT+CPIN?", 0) == 0) {
+    reply = "\r\n+CPIN: READY\r\n\r\nOK\r\n";
+  } else {
+    reply = "\r\nOK\r\n"; /* topic or payload bytes after a prompt */
+  }
+  hal_mock_uart_push(h, (const uint8_t *)reply.data(), (int)reply.size());
+}
+
+static std::atomic<int> s_delivered{0};
+static void count_msg(int client_index, const char *topic,
+                      const uint8_t *payload, size_t payload_len, void *user) {
+  (void)client_index;
+  (void)topic;
+  (void)payload;
+  (void)payload_len;
+  (void)user;
+  s_delivered.fetch_add(1);
+}
+
+/* A publish is three AT transactions and get_sim_state parses the reply
+   after its command: both must stay whole while other threads use the
+   modem, and messages that arrive meanwhile must all reach the callback.
+   Under the TSan gate stage this also checks the shared state for races. */
+void test_concurrent_callers_keep_operations_whole(void) {
+  script_mqtt_connect_plain(0);
+  hal_simcom_a76xx_mqtt_config_t cfg = {0};
+  cfg.broker_host = "h";
+  cfg.broker_port = 1883;
+  cfg.client_id = "c";
+  cfg.client_index = 0;
+  TEST_ASSERT_EQUAL(HAL_SIMCOM_A76XX_OK,
+                    hal_simcom_a76xx_mqtt_connect(s_modem, &cfg));
+  hal_mock_uart_set_write_callback(s_uart, modem_by_command, NULL);
+  s_wire.clear();
+  s_delivered.store(0);
+  TEST_ASSERT_EQUAL(
+      HAL_SIMCOM_A76XX_OK,
+      hal_simcom_a76xx_mqtt_set_message_callback(s_modem, count_msg, NULL));
+
+  const int rounds = 100;
+  std::atomic<bool> done{false};
+  std::atomic<int> publish_failures{0};
+  std::atomic<int> sim_failures{0};
+  std::thread publisher([&] {
+    for (int i = 0; i < rounds; ++i) {
+      if (hal_simcom_a76xx_mqtt_publish(s_modem, 0, "out", "data", 4u, 0) !=
+          HAL_SIMCOM_A76XX_OK) {
+        publish_failures.fetch_add(1);
+      }
+      /* Keep at most one message waiting, below the queue depth. */
+      for (int spin = 0; spin < 100000 && s_delivered.load() <= i; ++spin) {
+        std::this_thread::yield();
+      }
+    }
+    done.store(true);
+  });
+  std::thread poller([&] {
+    while (!done.load()) {
+      (void)hal_simcom_a76xx_mqtt_poll(s_modem);
+    }
+    (void)hal_simcom_a76xx_mqtt_poll(s_modem);
+  });
+  std::thread sim_reader([&] {
+    while (!done.load()) {
+      hal_simcom_a76xx_sim_state_t state = HAL_SIMCOM_A76XX_SIM_OTHER;
+      if (hal_simcom_a76xx_get_sim_state(s_modem, &state) !=
+              HAL_SIMCOM_A76XX_OK ||
+          state != HAL_SIMCOM_A76XX_SIM_READY) {
+        sim_failures.fetch_add(1);
+      }
+      std::this_thread::yield();
+    }
+  });
+  publisher.join();
+  poller.join();
+  sim_reader.join();
+  hal_mock_uart_set_write_callback(s_uart, NULL, NULL);
+
+  TEST_ASSERT_EQUAL_INT(0, publish_failures.load());
+  TEST_ASSERT_EQUAL_INT(0, sim_failures.load());
+  TEST_ASSERT_EQUAL_INT(rounds, s_delivered.load());
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_simcom_a76xx_mqtt_rx_dropped(s_modem));
+  /* Each publish shows on the wire as its five writes in a row. */
+  const char *const publish_writes[] = {
+      "AT+CMQTTTOPIC", "out", "AT+CMQTTPAYLOAD", "data", "AT+CMQTTPUB"};
+  int publishes = 0;
+  for (size_t i = 0u; i < s_wire.size(); ++i) {
+    if (s_wire[i] != publish_writes[0]) {
+      continue;
+    }
+    TEST_ASSERT_LESS_OR_EQUAL_UINT(s_wire.size(), i + COUNTOF(publish_writes));
+    for (size_t k = 1u; k < COUNTOF(publish_writes); ++k) {
+      TEST_ASSERT_EQUAL_STRING(publish_writes[k], s_wire[i + k].c_str());
+    }
+    ++publishes;
+  }
+  TEST_ASSERT_EQUAL_INT(rounds, publishes);
+}
+
 void test_mqtt_poll_without_data_returns_zero(void) {
   TEST_ASSERT_EQUAL_INT(0, hal_simcom_a76xx_mqtt_poll(s_modem));
 }
@@ -912,6 +1302,16 @@ int main(void) {
   RUN_TEST(test_mqtt_set_message_callback_null_handle);
   RUN_TEST(test_mqtt_rx_reassembly_dispatches_message);
   RUN_TEST(test_mqtt_poll_without_data_returns_zero);
+  RUN_TEST(test_mqtt_rx_burst_delivers_every_message);
+  RUN_TEST(test_mqtt_rx_payload_keeps_every_byte);
+  RUN_TEST(test_mqtt_rx_split_at_every_byte);
+  RUN_TEST(test_mqtt_rx_joins_topic_and_payload_packets);
+  RUN_TEST(test_mqtt_rx_size_limits_drop_and_count);
+  RUN_TEST(test_mqtt_rx_full_queue_drops_newest_and_counts);
+  RUN_TEST(test_mqtt_rx_during_command_is_queued);
+  RUN_TEST(test_mqtt_callback_may_publish_from_poll);
+  RUN_TEST(test_prompt_char_in_incoming_payload_is_not_the_prompt);
+  RUN_TEST(test_concurrent_callers_keep_operations_whole);
   RUN_TEST(test_mqtt_connlost_urc_clears_flag);
 
   return UNITY_END();

@@ -735,14 +735,16 @@ bool hal_display_set_rotation(uint8_t r);
 bool hal_display_invert(bool invert);
 
 /**
- * @brief Return the display width that was set via hal_display_configure().
- * @return Width in pixels, or 0 if not yet configured.
+ * @brief Return the width of the active display.
+ * @return Width in pixels, or 0 when no display is initialised (also after a
+ *         failed initialisation).
  */
 int hal_display_get_width(void);
 
 /**
- * @brief Return the display height that was set via hal_display_configure().
- * @return Height in pixels, or 0 if not yet configured.
+ * @brief Return the height of the active display.
+ * @return Height in pixels, or 0 when no display is initialised (also after a
+ *         failed initialisation).
  */
 int hal_display_get_height(void);
 
@@ -1106,7 +1108,20 @@ hal_status_t hal_display_suspend_ex(void);
 hal_status_t hal_display_resume_ex(void);
 hal_status_t hal_display_set_rotation_ex(uint8_t r);
 hal_status_t hal_display_invert_ex(bool invert);
+/**
+ * @brief Status form of hal_display_get_width().
+ * @param out_width Receives the width in pixels, 0 without an active display.
+ * @return HAL_OK, HAL_EUNINIT without an active display (also after a failed
+ *         initialisation), HAL_EINVAL for a NULL pointer.
+ */
 hal_status_t hal_display_get_width_ex(int *out_width);
+/**
+ * @brief Status form of hal_display_get_height().
+ * @param out_height Receives the height in pixels, 0 without an active
+ *        display.
+ * @return HAL_OK, HAL_EUNINIT without an active display (also after a failed
+ *         initialisation), HAL_EINVAL for a NULL pointer.
+ */
 hal_status_t hal_display_get_height_ex(int *out_height);
 hal_status_t
 hal_display_get_capabilities_ex(hal_display_capabilities_t *out_capabilities);
@@ -1155,8 +1170,28 @@ hal_status_t hal_display_set_font_ex(hal_font_id_t font);
 hal_status_t hal_display_set_text_color_ex(uint16_t color);
 hal_status_t hal_display_set_text_size_ex(uint8_t size);
 hal_status_t hal_display_set_cursor_ex(int x, int y);
+/**
+ * @brief Print text at the cursor with the legacy GFX font.
+ * @param s NUL-terminated text, not NULL.
+ * @return HAL_OK; HAL_EIO when a TFT or RGB OLED bus transfer fails (the
+ *         cursor still advances); HAL_EINVAL, HAL_EUNINIT or HAL_EUNSUPPORTED
+ *         as for other GFX calls. The buffered SSD1306 reports bus errors on
+ *         flush.
+ */
 hal_status_t hal_display_print_ex(const char *s);
+/**
+ * @brief hal_display_print_ex() followed by a newline.
+ * @param s NUL-terminated text, not NULL.
+ * @return Same results as hal_display_print_ex().
+ */
 hal_status_t hal_display_println_ex(const char *s);
+/**
+ * @brief Move the cursor, then print like hal_display_print_ex().
+ * @param x Cursor column in pixels.
+ * @param y Cursor row in pixels.
+ * @param s NUL-terminated text, not NULL.
+ * @return Same results as hal_display_print_ex().
+ */
 hal_status_t hal_display_print_at_ex(int x, int y, const char *s);
 hal_status_t hal_display_clear_text_line_ex(int line_index, int line_height,
                                             uint16_t bg_color);

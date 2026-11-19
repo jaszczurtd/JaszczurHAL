@@ -129,6 +129,22 @@ void hal_websocket_server_poll(void);
 size_t hal_websocket_client_count(void);
 bool hal_websocket_client_is_connected(hal_websocket_client_t client);
 
+/**
+ * @brief Send one text or binary message as a single frame.
+ *
+ * The frame goes out whole or not at all. A frame that TCP accepted only in
+ * part cannot be completed without corrupting the stream, so the server then
+ * closes the client and reports close code 1006 to on_disconnect.
+ * @param client Open client.
+ * @param type HAL_WEBSOCKET_MESSAGE_TEXT or HAL_WEBSOCKET_MESSAGE_BINARY.
+ * @param data Payload; may be NULL only when @p len is zero.
+ * @param len Payload length, at most HAL_WEBSOCKET_MAX_PAYLOAD_SIZE.
+ * @return HAL_OK; HAL_EAGAIN when TCP took no byte (client stays open, retry
+ *         later); HAL_EIO when the client was closed after a partial write or
+ *         a socket error; HAL_ENOENT for a client that is not open;
+ *         HAL_ESTATE when its socket is disconnected; HAL_EINVAL or
+ *         HAL_EOVERFLOW for invalid arguments.
+ */
 hal_status_t hal_websocket_send(hal_websocket_client_t client,
                                 hal_websocket_message_type_t type,
                                 const void *data, size_t len);

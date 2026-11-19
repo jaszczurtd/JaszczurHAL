@@ -115,10 +115,25 @@ void test_st7567_raw_write_skips_padding_between_pages(void) {
   TEST_ASSERT_TRUE(hal_mock_gpio_get_state(10u));
 }
 
+/* Audit F10: a failed re-initialisation left the old size in the getters. */
+void test_st7567_failed_reinit_forgets_size(void) {
+  const hal_display_st7567_config_t config = st7567_config();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_st7567_ex(&config));
+  TEST_ASSERT_TRUE(hal_display_get_width() > 0);
+
+  hal_mock_spi_fail_next_write(0u, true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_display_init_st7567_ex(&config));
+  int width = -1;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_display_get_width_ex(&width));
+  TEST_ASSERT_EQUAL_INT(0, width);
+  TEST_ASSERT_EQUAL_INT(0, hal_display_get_height());
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_st7567_capabilities_expose_page_layout);
   RUN_TEST(test_st7567_raw_write_validates_format_and_page_alignment);
   RUN_TEST(test_st7567_raw_write_skips_padding_between_pages);
+  RUN_TEST(test_st7567_failed_reinit_forgets_size);
   return UNITY_END();
 }

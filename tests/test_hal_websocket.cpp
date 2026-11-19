@@ -422,6 +422,124 @@ void test_start_ex_rejects_invalid_endpoints(void) {
   TEST_ASSERT_FALSE(hal_websocket_server_is_running());
 }
 
+static hal_websocket_client_t first_open_client(void) {
+  for (hal_websocket_client_t i = 0u; i < HAL_WEBSOCKET_MAX_CLIENTS; ++i) {
+    if (hal_websocket_client_is_connected(i)) {
+      return i;
+    }
+  }
+  return HAL_WEBSOCKET_INVALID_CLIENT;
+}
+
+/* Expected server frame for an unmasked text payload. */
+static size_t make_server_text_frame(const uint8_t *payload, size_t len,
+                                     uint8_t *out) {
+  size_t pos = 0u;
+  out[pos++] = 0x81u;
+  if (len <= 125u) {
+    out[pos++] = (uint8_t)len;
+  } else {
+    out[pos++] = 126u;
+    out[pos++] = (uint8_t)(len >> 8u);
+    out[pos++] = (uint8_t)len;
+  }
+  memcpy(out + pos, payload, len);
+  return pos + len;
+}
+
+/* Audit F05: when TCP took only part of a frame, the client stayed open and
+ * the next frame started inside the missing payload. Every cut point in the
+ * header and the payload must leave a closed client and no later bytes. */
+void test_partial_frame_write_closes_client(void) {
+  install_callbacks();
+  uint8_t payload[200];
+  for (size_t i = 0u; i < sizeof(payload); ++i) {
+    payload[i] = (uint8_t)('a' + (i % 26u));
+  }
+  const size_t lengths[] = {1u, sizeof(payload)};
+  for (size_t l = 0u; l < COUNTOF(lengths); ++l) {
+    uint8_t expected[4u + sizeof(payload)];
+    const size_t frame_len =
+        make_server_text_frame(payload, lengths[l], expected);
+    for (size_t cut = 1u; cut < frame_len; ++cut) {
+      hal_tcp_socket_t socket =
+          accept_client(8102u, "/ws", "dGhlIHNhbXBsZSBub25jZQ==");
+      const hal_websocket_client_t client = first_open_client();
+      TEST_ASSERT_NOT_EQUAL(HAL_WEBSOCKET_INVALID_CLIENT, client);
+      TEST_ASSERT_EQUAL_INT(HAL_OK,
+                            hal_mock_tcp_set_send_capacity(socket, cut));
+
+      TEST_ASSERT_EQUAL_INT(
+          HAL_EIO, hal_websocket_send(client, HAL_WEBSOCKET_MESSAGE_TEXT,
+                                      payload, lengths[l]));
+      TEST_ASSERT_EQUAL_UINT(cut, hal_mock_tcp_get_last_tx_len(socket));
+      TEST_ASSERT_EQUAL_UINT8_ARRAY(
+          expected, hal_mock_tcp_get_last_tx_payload(socket), cut);
+      TEST_ASSERT_FALSE(hal_websocket_client_is_connected(client));
+      TEST_ASSERT_EQUAL_UINT(client, s_last_disconnect_client);
+      TEST_ASSERT_EQUAL_UINT16(1006u, s_last_disconnect_code);
+      TEST_ASSERT_EQUAL_INT(HAL_ENOENT, hal_websocket_send_text(client, "Z"));
+    }
+  }
+}
+
+/* No byte accepted: the stream is intact, the client stays open and the same
+ * frame can be sent again once TCP has room. */
+void test_send_without_tcp_room_keeps_client_open(void) {
+  install_callbacks();
+  hal_tcp_socket_t socket =
+      accept_client(8103u, "/ws", "dGhlIHNhbXBsZSBub25jZQ==");
+  const hal_websocket_client_t client = s_connected[0];
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_tcp_set_send_capacity(socket, 0u));
+  TEST_ASSERT_EQUAL_INT(HAL_EAGAIN, hal_websocket_send_text(client, "ABCD"));
+  TEST_ASSERT_TRUE(hal_websocket_client_is_connected(client));
+  TEST_ASSERT_EQUAL_UINT16(0u, s_last_disconnect_code);
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK,
+                        hal_mock_tcp_set_send_capacity(socket, SIZE_MAX));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_websocket_send_text(client, "ABCD"));
+  const uint8_t expected[] = {0x81u, 0x04u, 'A', 'B', 'C', 'D'};
+  TEST_ASSERT_EQUAL_UINT(sizeof(expected),
+                         hal_mock_tcp_get_last_tx_len(socket));
+  TEST_ASSERT_EQUAL_UINT8_ARRAY(
+      expected, hal_mock_tcp_get_last_tx_payload(socket), sizeof(expected));
+}
+
+void test_socket_send_error_closes_client(void) {
+  install_callbacks();
+  hal_tcp_socket_t socket =
+      accept_client(8104u, "/ws", "dGhlIHNhbXBsZSBub25jZQ==");
+  const hal_websocket_client_t client = s_connected[0];
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_tcp_set_send_status(socket, HAL_EIO));
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_websocket_send_text(client, "A"));
+  TEST_ASSERT_FALSE(hal_websocket_client_is_connected(client));
+  TEST_ASSERT_EQUAL_UINT16(1006u, s_last_disconnect_code);
+}
+
+/* PONG goes through the same path: a half-written PONG closes the client,
+ * a PONG that found no room at all is dropped and the client stays open. */
+void test_partial_pong_closes_client_and_unsent_pong_is_dropped(void) {
+  install_callbacks();
+  uint8_t frame[32];
+  const uint8_t payload[] = {'o', 'k'};
+  const size_t frame_len =
+      make_masked_frame(0x9u, payload, sizeof(payload), frame, sizeof(frame));
+
+  hal_tcp_socket_t socket =
+      accept_client(8105u, "/ws", "dGhlIHNhbXBsZSBub25jZQ==");
+  const hal_websocket_client_t client = s_connected[0];
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_tcp_set_send_capacity(socket, 0u));
+  hal_mock_tcp_inject_rx(socket, frame, (uint16_t)frame_len);
+  hal_websocket_server_poll();
+  TEST_ASSERT_TRUE(hal_websocket_client_is_connected(client));
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_tcp_set_send_capacity(socket, 1u));
+  hal_mock_tcp_inject_rx(socket, frame, (uint16_t)frame_len);
+  hal_websocket_server_poll();
+  TEST_ASSERT_FALSE(hal_websocket_client_is_connected(client));
+  TEST_ASSERT_EQUAL_UINT16(1006u, s_last_disconnect_code);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_handshake_accepts_upgrade_and_calls_connect);
@@ -440,5 +558,9 @@ int main(void) {
   RUN_TEST(test_maximum_payload_fits_frame_buffer_and_is_delivered);
   RUN_TEST(test_server_owns_path_after_start);
   RUN_TEST(test_incomplete_handshakes_time_out_and_release_slots);
+  RUN_TEST(test_partial_frame_write_closes_client);
+  RUN_TEST(test_send_without_tcp_room_keeps_client_open);
+  RUN_TEST(test_socket_send_error_closes_client);
+  RUN_TEST(test_partial_pong_closes_client_and_unsent_pong_is_dropped);
   return UNITY_END();
 }

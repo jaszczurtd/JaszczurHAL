@@ -59,7 +59,10 @@ typedef enum {
   HAL_MODEM_AT_TIMEOUT,     /**< No terminating response within the timeout. */
   HAL_MODEM_AT_NO_PROMPT,   /**< send_with_data: '>' prompt never arrived. */
   HAL_MODEM_AT_INVALID_ARG, /**< NULL handle, NULL command, etc. */
-  HAL_MODEM_AT_BUSY /**< Another thread is currently holding the engine. */
+  HAL_MODEM_AT_BUSY,    /**< Another thread is currently holding the engine. */
+  HAL_MODEM_AT_OVERFLOW /**< Success, but the response did not fit into
+                           rx_buf; hal_modem_at_last_response() holds only
+                           its beginning. */
 } hal_modem_at_result_t;
 
 /**
@@ -161,6 +164,15 @@ void hal_modem_at_destroy(hal_modem_at_t h);
  * The full response (including any intermediate URC lines that arrived
  * during the wait) is available via hal_modem_at_last_response().
  *
+ * Bytes that arrived before the command was written go to the URC handlers
+ * but cannot answer the command, so a stale "OK" never completes it. After
+ * a timeout (or a missing prompt) the next command first waits until the
+ * line has been quiet for quiet_window_ms, at most default_timeout_ms, so
+ * the late reply cannot complete it either. The final result is also
+ * recognised past a full rx_buf: an "OK" (or @p expected) whose response did
+ * not fit returns HAL_MODEM_AT_OVERFLOW with the beginning of the response
+ * in the buffer.
+ *
  * @param h           Handle.
  * @param cmd         AT command without trailing CR/LF (e.g. "AT+CGMI"). Must
  * not be NULL.
@@ -208,6 +220,9 @@ hal_modem_at_result_t hal_modem_at_send_masked(hal_modem_at_t h,
  *   3. Write `data` (@p data_len bytes, no terminator added).
  *   4. Wait up to @p resp_timeout_ms for OK/ERROR (no flush in between -
  *      the OK that arrives between phases must not be lost).
+ *
+ * Stale bytes, the wait after a timeout and HAL_MODEM_AT_OVERFLOW work as
+ * in hal_modem_at_send().
  *
  * @param h                  Handle.
  * @param cmd                AT command without trailing CR/LF. Must not be
@@ -340,6 +355,37 @@ int hal_modem_at_urc_poll(hal_modem_at_t h);
  */
 void hal_modem_at_set_log_filter(hal_modem_at_t h, const char *const *secrets,
                                  size_t count);
+
+/**
+ * @brief Callback receiving the bytes of a block requested with
+ *        hal_modem_at_read_raw().
+ * @param data Received bytes; valid only during the call.
+ * @param len  Number of bytes in @p data.
+ * @param user Opaque pointer given to hal_modem_at_read_raw().
+ */
+typedef void (*hal_modem_at_raw_cb_t)(const uint8_t *data, size_t len,
+                                      void *user);
+
+/**
+ * @brief Route the next @p len received bytes to @p cb instead of the line
+ *        assembler.
+ *
+ * For URCs that announce a binary block by its length, e.g.
+ * "+CMQTTRXPAYLOAD: <client>,<len>" followed by exactly that many bytes.
+ * Call it only from a URC handler or line observer, which already runs with
+ * the engine mutex held. The block starts after the line terminator of the
+ * announcing line (its LF is skipped). Its bytes may contain CR, LF, NUL or
+ * '+': they reach neither URC handlers nor the command response buffer. A
+ * new call replaces an unfinished block.
+ *
+ * @param h    Handle.
+ * @param len  Number of bytes in the block; 0 cancels an unfinished block.
+ * @param cb   Receiver of the bytes, not NULL.
+ * @param user Opaque pointer passed to @p cb.
+ * @return false for a NULL handle or callback.
+ */
+bool hal_modem_at_read_raw(hal_modem_at_t h, size_t len,
+                           hal_modem_at_raw_cb_t cb, void *user);
 
 /**
  * @brief Install a raw per-line observer callback.

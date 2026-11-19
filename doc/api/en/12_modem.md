@@ -21,7 +21,8 @@ typedef enum {
     HAL_MODEM_AT_TIMEOUT,
     HAL_MODEM_AT_NO_PROMPT,
     HAL_MODEM_AT_INVALID_ARG,
-    HAL_MODEM_AT_BUSY
+    HAL_MODEM_AT_BUSY,
+    HAL_MODEM_AT_OVERFLOW
 } hal_modem_at_result_t;
 
 typedef hal_modem_at_impl_t *hal_modem_at_t;
@@ -61,6 +62,10 @@ bool hal_modem_at_urc_register(hal_modem_at_t h, const char *prefix,
 int  hal_modem_at_urc_poll(hal_modem_at_t h);
 void hal_modem_at_set_log_filter(hal_modem_at_t h,
                                  const char *const *secrets, size_t count);
+typedef void (*hal_modem_at_raw_cb_t)(const uint8_t *data, size_t len,
+                                      void *user);
+bool hal_modem_at_read_raw(hal_modem_at_t h, size_t len,
+                           hal_modem_at_raw_cb_t cb, void *user);
 void hal_modem_at_set_line_observer(hal_modem_at_t h,
                                     hal_modem_at_urc_cb_t cb, void *user);
 
@@ -78,6 +83,16 @@ void hal_modem_at_sleep_ms(hal_modem_at_t h, uint32_t ms);
 strings in every logged command and reply. `hal_modem_at_send_masked()` hides a
 secret only for one command, including its echo, while the modem still receives
 the full command.
+
+**Command boundary:** bytes that arrived before a command was written go to
+the URC handlers, but a stale `OK` or `ERROR` cannot answer that command.
+After `HAL_MODEM_AT_TIMEOUT` or `HAL_MODEM_AT_NO_PROMPT` the next command first
+waits until the line has been quiet for `quiet_window_ms` (at most
+`default_timeout_ms`), so a late reply cannot complete it either. The engine
+also finds the final `OK` beyond a full `rx_buf`; such a command returns
+`HAL_MODEM_AT_OVERFLOW` and `hal_modem_at_last_response()` holds only the
+beginning of the reply. `hal_modem_at_listen_until()` without a predicate ends
+after `quiet_window_ms` without a new byte.
 
 **Thread safety:** every handle serialises access internally via a
 per-instance mutex. Safe to call from multiple threads/cores.
@@ -250,6 +265,7 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_set_message_callback(hal_simcom_
                                                                      hal_simcom_a76xx_mqtt_message_cb_t cb,
                                                                      void *user);
 int  hal_simcom_a76xx_mqtt_poll(hal_simcom_a76xx_t h);
+uint32_t hal_simcom_a76xx_mqtt_rx_dropped(hal_simcom_a76xx_t h);
 bool hal_simcom_a76xx_mqtt_is_connected(hal_simcom_a76xx_t h, int client_index);
 ```
 
@@ -269,7 +285,7 @@ fix yet, for example `+CGNSSINFO: ,,,,,,,,`. For the A7670E
 `+CGNSSINFO: <fix>,<sat_count>,...` shape, the single satellite count is
 reported as both `satellites_used` and `satellites_view`.
 
-**Receiving MQTT messages:** The modem reports a message through four URCs (`+CMQTTRXSTART:` / `+CMQTTRXTOPIC:` / `+CMQTTRXPAYLOAD:` / `+CMQTTRXEND:`), interleaved with separate topic and payload lines. The driver assembles them into one message and invokes `hal_simcom_a76xx_mqtt_message_cb_t` from `hal_simcom_a76xx_mqtt_poll()`.
+**Receiving MQTT messages:** The modem reports a message as `+CMQTTRXSTART:`, one or more `+CMQTTRXTOPIC:` and `+CMQTTRXPAYLOAD:` packets, and `+CMQTTRXEND:`. Each packet announces its length, and the driver reads exactly that many bytes through `hal_modem_at_read_raw()`, so a payload may contain newlines, NUL or text that looks like a URC. Complete messages wait in a queue of `HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH` slots (default 2), each about `HAL_SIMCOM_A76XX_TOPIC_MAX` (128) + `HAL_SIMCOM_A76XX_PAYLOAD_MAX` (512) bytes of static RAM. `hal_simcom_a76xx_mqtt_poll()` passes every queued message to `hal_simcom_a76xx_mqtt_message_cb_t`, oldest first. A message that finds the queue full, or does not fit the buffers, is dropped; `hal_simcom_a76xx_mqtt_rx_dropped()` counts such losses. Poll often enough, or raise the queue depth, when messages may arrive in bursts.
 
 `+CMQTTCONNECT: <client>,<result>` is decoded by the driver. Failed
 connections produce a readable console diagnostic, for example:
@@ -291,8 +307,13 @@ table for application diagnostics. A result of `3` is a socket-connect
 failure before MQTT authentication; bad username/password is `30`, rejected
 authorization is `31`, and a TLS handshake failure is `32`.
 
-**Thread safety:** every handle serialises on the underlying
-`hal_modem_at` mutex. Safe to call from multiple threads/cores.
+**Thread safety:** each call holds a driver lock for its whole operation,
+so the AT commands of one call (a publish sends three) and the parsing of
+their replies never interleave with another thread. Safe to call from
+multiple threads/cores. The message callback runs without that lock and may
+call any driver function, publish included. Raw commands sent through
+`hal_simcom_a76xx_get_at()` bypass the driver lock, so do not run them
+concurrently with driver calls.
 
 ---
 

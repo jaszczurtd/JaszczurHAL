@@ -1121,6 +1121,12 @@ Rysowanie albo `flush` bez zainicjalizowanego backendu zwraca `HAL_EUNINIT`, a b
 trafia do logu przez `hal_derr_limited("display", ...)`. Pętla, która rysuje dalej po
 nieudanej inicjalizacji, nie zalewa więc portu szeregowego komunikatami.
 
+Tekst na TFT i RGB OLED trafia od razu na magistralę, więc `hal_display_print_ex()`,
+`hal_display_println_ex()` i `hal_display_print_at_ex()` zwracają `HAL_EIO`, gdy
+transfer się nie powiedzie. Po nieudanej inicjalizacji, także ponownej, nie ma
+aktywnego wyświetlacza: gettery rozmiaru zwracają wtedy 0, a ich warianty `_ex`
+zwracają `HAL_EUNINIT`, tak jak `hal_display_get_capabilities_ex()`.
+
 ```c
 // Konfiguracja + rysowanie z typowaną diagnostyką
 hal_status_t st = hal_display_configure_ex(240, 320, 0, false, false);

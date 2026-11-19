@@ -6,6 +6,7 @@ uint32_t hal_mock_spi_get_transfer_count(uint8_t bus);
 int hal_mock_spi_get_lock_depth(uint8_t bus);
 bool hal_mock_spi_transaction_active(uint8_t bus);
 size_t hal_mock_spi_get_tx(uint8_t bus, uint8_t *out, size_t max_len);
+void hal_mock_spi_fail_next_write(uint8_t bus, bool fail);
 
 void setUp(void) { hal_mock_spi_reset(); }
 void tearDown(void) {}
@@ -97,11 +98,52 @@ void test_rgb_oled_raw_write_rejects_undersized_padded_buffer(void) {
                         hal_display_write_raw_ex(0u, 0u, &desc, pixels));
 }
 
+/* Audit F10: text drawn through the GFX engine returned HAL_OK even when
+ * every SPI write failed. */
+void test_rgb_oled_text_reports_bus_failure(void) {
+  const hal_display_rgb_oled_config_t config = rgb_config();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_rgb_oled_ex(&config));
+
+  hal_mock_spi_fail_next_write(0u, true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_display_print_at_ex(0, 0, "A"));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_print_at_ex(0, 0, "A"));
+
+  hal_mock_spi_fail_next_write(0u, true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_display_println_ex("B"));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_println_ex("B"));
+}
+
+/* Audit F10: after a failed re-initialisation the size getters still
+ * reported the previous panel while capabilities said "not initialised". */
+void test_rgb_oled_failed_reinit_forgets_size(void) {
+  const hal_display_rgb_oled_config_t config = rgb_config();
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_rgb_oled_ex(&config));
+
+  hal_mock_spi_fail_next_write(0u, true);
+  TEST_ASSERT_EQUAL_INT(HAL_EIO, hal_display_init_rgb_oled_ex(&config));
+  hal_display_capabilities_t caps = {};
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_display_get_capabilities_ex(&caps));
+  int width = -1;
+  int height = -1;
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_display_get_width_ex(&width));
+  TEST_ASSERT_EQUAL_INT(HAL_EUNINIT, hal_display_get_height_ex(&height));
+  TEST_ASSERT_EQUAL_INT(0, width);
+  TEST_ASSERT_EQUAL_INT(0, height);
+  TEST_ASSERT_EQUAL_INT(0, hal_display_get_width());
+  TEST_ASSERT_EQUAL_INT(0, hal_display_get_height());
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_init_rgb_oled_ex(&config));
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_display_get_width_ex(&width));
+  TEST_ASSERT_EQUAL_INT(96, width);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_rgb_oled_is_exposed_as_immediate_rgb_backend);
   RUN_TEST(test_rgb_oled_raw_write_dispatches_rgb565_bytes);
   RUN_TEST(test_rgb_oled_raw_write_strips_row_padding);
   RUN_TEST(test_rgb_oled_raw_write_rejects_undersized_padded_buffer);
+  RUN_TEST(test_rgb_oled_text_reports_bus_failure);
+  RUN_TEST(test_rgb_oled_failed_reinit_forgets_size);
   return UNITY_END();
 }

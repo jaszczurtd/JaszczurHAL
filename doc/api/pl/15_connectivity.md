@@ -1137,6 +1137,15 @@ IPv4, a `hal_websocket_server_start_ex(&local, path)` na jednym adresie
 lokalnym, na przykład `127.0.0.1`, z takimi samymi wynikami jak
 `hal_http_server_start_ex()`. Serwer kopiuje adres i ścieżkę.
 
+`hal_websocket_send()` i funkcje rozgłaszania wysyłają ramkę w całości albo
+wcale. `HAL_EAGAIN` znaczy, że TCP nie miał miejsca i nie przyjął ani bajtu:
+klient zostaje połączony, a tę samą wiadomość można wysłać później. Gdy TCP
+przyjmie tylko część ramki, reszty nie da się już dosłać bez zepsucia
+strumienia, więc serwer zamyka klienta, wywołuje `on_disconnect` z kodem 1006
+i zwraca `HAL_EIO`. Tak samo kończy się błąd gniazda. Każdy slot klienta ma
+własny bufor ramki wychodzącej, więc wysyłanie nie kładzie ramki na stosie
+wywołującego.
+
 Rozgłaszanie telemetrii:
 
 ```c

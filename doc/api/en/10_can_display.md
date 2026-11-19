@@ -1070,6 +1070,12 @@ A drawing or flush call without an initialized backend returns `HAL_EUNINIT`
 and logs through `hal_derr_limited("display", ...)`, so a loop that keeps
 drawing after a failed init does not flood the serial output.
 
+Text on a TFT or RGB OLED goes straight to the bus, so `hal_display_print_ex()`,
+`hal_display_println_ex()` and `hal_display_print_at_ex()` return `HAL_EIO` when
+a transfer fails. A failed initialisation or re-initialisation leaves no active
+display: the size getters then return 0 and their `_ex` variants return
+`HAL_EUNINIT`, the same as `hal_display_get_capabilities_ex()`.
+
 ```c
 // Configure + draw with typed diagnostics
 hal_status_t st = hal_display_configure_ex(240, 320, 0, false, false);

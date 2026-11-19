@@ -29,8 +29,13 @@ extern "C" {
  * (publish + subscribe) built on top of the SimCom CMQTT command
  * family.
  *
- * Every handle is multi-thread safe: all entry points serialise on
- * the underlying hal_modem_at handle's mutex.
+ * Every handle is multi-thread safe: each entry point holds a driver lock
+ * for its whole operation, so the AT commands of one call (e.g. the three
+ * commands of a publish) and the parsing of their responses never
+ * interleave with another thread. The message callback runs without that
+ * lock and may call any driver function. Raw commands sent through
+ * hal_simcom_a76xx_get_at() bypass the driver lock: do not run them
+ * concurrently with driver calls.
  *
  * The driver is opt-in via HAL_ENABLE_A7670 (which automatically
  * pulls in HAL_ENABLE_CELLULAR_MODEM and HAL_ENABLE_UART).
@@ -39,6 +44,25 @@ extern "C" {
  * SIMCom A76xx; the AT command set (CMQTT*, CSSLCFG, CREG, CGACT, ...)
  * is shared across the family, hence the driver name.
  */
+
+/** Longest received MQTT topic, including its terminating NUL. */
+#ifndef HAL_SIMCOM_A76XX_TOPIC_MAX
+#define HAL_SIMCOM_A76XX_TOPIC_MAX 128
+#endif
+
+/** Longest received MQTT payload in bytes. */
+#ifndef HAL_SIMCOM_A76XX_PAYLOAD_MAX
+#define HAL_SIMCOM_A76XX_PAYLOAD_MAX 512
+#endif
+
+/**
+ * Received MQTT messages kept until hal_simcom_a76xx_mqtt_poll(); each one
+ * takes about HAL_SIMCOM_A76XX_TOPIC_MAX + HAL_SIMCOM_A76XX_PAYLOAD_MAX bytes
+ * of static RAM.
+ */
+#ifndef HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH
+#define HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH 2
+#endif
 
 /**
  * @brief Result of a SimCom A76xx driver operation.
@@ -210,8 +234,8 @@ typedef struct {
  *
  * @param client_index  CMQTT client index that received the message.
  * @param topic         NUL-terminated topic string.
- * @param payload       Payload bytes (NOT NUL-terminated; payload_len gives the
- * length).
+ * @param payload       Payload bytes, any byte value; payload_len gives the
+ * length (a NUL follows the last byte for convenience).
  * @param payload_len   Number of payload bytes.
  * @param user          Opaque user pointer registered alongside the callback.
  */
@@ -530,9 +554,9 @@ hal_simcom_a76xx_mqtt_publish(hal_simcom_a76xx_t h, int client_index,
  * Uses the AT+CMQTTSUBTOPIC + AT+CMQTTSUB pair (topic provided in two
  * steps; CMQTTSUB is then a single command). Incoming messages will
  * be delivered to the message callback installed via
- * hal_simcom_a76xx_mqtt_set_message_callback() each time
- * hal_simcom_a76xx_mqtt_poll() (or any other driver entry point that
- * drains the UART) observes a complete CMQTTRXSTART..RXEND sequence.
+ * hal_simcom_a76xx_mqtt_set_message_callback() by
+ * hal_simcom_a76xx_mqtt_poll(). Any driver call that drains the UART
+ * queues the messages that arrive meanwhile.
  */
 hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_subscribe(hal_simcom_a76xx_t h,
                                                           int client_index,
@@ -557,14 +581,30 @@ hal_simcom_a76xx_result_t hal_simcom_a76xx_mqtt_set_message_callback(
     hal_simcom_a76xx_t h, hal_simcom_a76xx_mqtt_message_cb_t cb, void *user);
 
 /**
- * @brief Drain pending CMQTT RX URCs, dispatching complete messages
- *        to the registered callback.
+ * @brief Drain pending CMQTT RX URCs and deliver every queued message
+ *        to the registered callback, oldest first.
  *
- * Safe to call from the main loop. Internally calls
- * hal_modem_at_urc_poll(); returns the number of complete messages
- * dispatched on this invocation.
+ * Topic and payload are read by the byte counts the modem announces, so a
+ * payload may hold any byte value. Up to HAL_SIMCOM_A76XX_RX_QUEUE_DEPTH
+ * complete messages wait between polls; a message that finds the queue
+ * full, or whose topic does not fit HAL_SIMCOM_A76XX_TOPIC_MAX - 1 bytes
+ * or payload HAL_SIMCOM_A76XX_PAYLOAD_MAX bytes, is dropped and counted by
+ * hal_simcom_a76xx_mqtt_rx_dropped(). The callback runs without the driver
+ * lock; a nested or concurrent poll returns 0.
+ *
+ * @return Number of messages delivered by this call.
  */
 int hal_simcom_a76xx_mqtt_poll(hal_simcom_a76xx_t h);
+
+/**
+ * @brief Count of received MQTT messages dropped since create.
+ *
+ * A message is dropped when the receive queue is full, when its topic or
+ * payload exceeds the driver buffers, or when the modem starts a new
+ * message before ending the previous one.
+ * @return Dropped messages; 0 for a NULL handle.
+ */
+uint32_t hal_simcom_a76xx_mqtt_rx_dropped(hal_simcom_a76xx_t h);
 
 /**
  * @brief Best-effort connection-state probe.

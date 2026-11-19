@@ -87,6 +87,14 @@ static int s_width = 0;
 static int s_height = 0;
 static uint8_t s_rotation = HAL_DISPLAY_ROTATION_0;
 
+/* No active display: also forget the size of the previous one, so a failed
+   (re)initialisation never reports stale dimensions. */
+static inline void clear_active_display(void) {
+  s_backend = DISPLAY_BACKEND_NONE;
+  s_width = 0;
+  s_height = 0;
+}
+
 /* ---- TFT state ----------------------------------------------------------- */
 
 #ifdef HAL_ENABLE_TFT
@@ -140,18 +148,37 @@ public:
   }
 
   void drawPixel(int16_t x, int16_t y, uint16_t color) override {
-    draw_pixel_unlocked(x, y, color);
+    if (!transport_failed_ && !draw_pixel_unlocked(x, y, color)) {
+      transport_failed_ = true;
+    }
   }
 
   void fillRect(int16_t x, int16_t y, int16_t w, int16_t h,
                 uint16_t color) override {
-    fill_rect_unlocked(x, y, w, h, color);
+    fill_rect_checked(x, y, w, h, color);
   }
 
   void writeFillRect(int16_t x, int16_t y, int16_t w, int16_t h,
                      uint16_t color) override {
-    fill_rect_unlocked(x, y, w, h, color);
+    fill_rect_checked(x, y, w, h, color);
   }
+
+  /* The GFX engine draws through void methods; a text operation clears the
+     flag first and reads it afterwards. After the first failure the rest of
+     the operation skips the bus. */
+  void clear_transport_error(void) { transport_failed_ = false; }
+  bool transport_failed(void) const { return transport_failed_; }
+
+private:
+  void fill_rect_checked(int16_t x, int16_t y, int16_t w, int16_t h,
+                         uint16_t color) {
+    if (!transport_failed_ && w > 0 && h > 0 &&
+        !fill_rect_unlocked(x, y, w, h, color)) {
+      transport_failed_ = true;
+    }
+  }
+
+  bool transport_failed_ = false;
 };
 
 static TftGfx s_tft_gfx;
@@ -299,8 +326,7 @@ static hal_status_t oled_init_locked(const jh_ssd1306_config_t *config,
     return HAL_EINVAL;
   }
 
-  s_backend = DISPLAY_BACKEND_NONE;
-  s_width = s_height = 0;
+  clear_active_display();
   s_rotation = HAL_DISPLAY_ROTATION_0;
   s_oled_unbuffered = config->page_addressing;
   if (!s_oled_gfx.allocate((int16_t)config->width, (int16_t)config->height,
@@ -311,9 +337,7 @@ static hal_status_t oled_init_locked(const jh_ssd1306_config_t *config,
 
   if (!jh_ssd1306_init(&s_oled, config)) {
     s_oled_gfx.release();
-    s_backend = DISPLAY_BACKEND_NONE;
-    s_width = 0;
-    s_height = 0;
+    clear_active_display();
     hal_derr("%s: SSD1306-family init failed", fn_name);
     return HAL_EIO;
   }
@@ -330,8 +354,7 @@ static hal_status_t oled_init_locked(const jh_ssd1306_config_t *config,
           : (jh_ssd1306_display(&s_oled, s_oled_gfx.data()) ? HAL_OK : HAL_EIO);
   if (hal_status_is_error(status)) {
     s_oled_gfx.release();
-    s_backend = DISPLAY_BACKEND_NONE;
-    s_width = s_height = 0;
+    clear_active_display();
   }
   return status;
 }
@@ -450,6 +473,27 @@ static hal_status_t gfx_unavailable_status(const char *fn) {
   }
   (void)ensure_display_ready(fn);
   return HAL_EUNINIT;
+}
+
+/* Immediate RGB backends draw GFX text straight to the bus; the buffered
+   SSD1306 engine draws into RAM and reports bus errors on flush. */
+static void gfx_transport_begin(JHGfx *gfx) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (gfx == &s_tft_gfx) {
+    s_tft_gfx.clear_transport_error();
+  }
+#endif
+  (void)gfx;
+}
+
+static hal_status_t gfx_transport_status(const JHGfx *gfx) {
+#ifdef JH_DISPLAY_HAS_IMMEDIATE_RGB
+  if (gfx == &s_tft_gfx && s_tft_gfx.transport_failed()) {
+    return HAL_EIO;
+  }
+#endif
+  (void)gfx;
+  return HAL_OK;
 }
 
 /* ---- TFT primitives (immediate mode) ------------------------------------- */
@@ -1041,7 +1085,7 @@ hal_display_init_rgb_oled_ex(const hal_display_rgb_oled_config_t *config) {
   driver.inverted = config->inverted;
 
   if (!jh_rgb_oled_init(&s_rgb_oled, &driver)) {
-    s_backend = DISPLAY_BACKEND_NONE;
+    clear_active_display();
     return HAL_EIO;
   }
   s_backend = DISPLAY_BACKEND_RGB_OLED;
@@ -1093,7 +1137,7 @@ hal_display_init_st7567_ex(const hal_display_st7567_config_t *config) {
                             : JH_ST7567_PIXEL_MONO10;
 
   if (!jh_st7567_init(&s_st7567, &driver)) {
-    s_backend = DISPLAY_BACKEND_NONE;
+    clear_active_display();
     return HAL_EIO;
   }
   s_backend = DISPLAY_BACKEND_ST7567;
@@ -1169,7 +1213,7 @@ hal_display_init_ssd16xx_ex(const hal_display_ssd16xx_config_t *config) {
   }
   const hal_status_t status = jh_ssd16xx_init(&s_ssd16xx, &driver);
   if (hal_status_is_error(status)) {
-    s_backend = DISPLAY_BACKEND_NONE;
+    clear_active_display();
     return status;
   }
   s_backend = DISPLAY_BACKEND_SSD16XX;
@@ -1238,7 +1282,7 @@ hal_display_init_uc81xx_ex(const hal_display_uc81xx_config_t *config) {
   }
   const hal_status_t status = jh_uc81xx_init(&s_uc81xx, &driver);
   if (hal_status_is_error(status)) {
-    s_backend = DISPLAY_BACKEND_NONE;
+    clear_active_display();
     return status;
   }
   s_backend = DISPLAY_BACKEND_UC81XX;
@@ -1523,11 +1567,13 @@ hal_status_t hal_display_invert_ex(bool invert) {
 }
 
 void jh_hal_display_get_dimensions(int *out_width, int *out_height) {
+  DisplayLock guard;
+  const bool active = has_active_display();
   if (out_width != NULL) {
-    *out_width = s_width;
+    *out_width = active ? s_width : 0;
   }
   if (out_height != NULL) {
-    *out_height = s_height;
+    *out_height = active ? s_height : 0;
   }
 }
 
@@ -2526,10 +2572,11 @@ hal_status_t hal_display_print_ex(const char *s) {
   if (!gfx) {
     return gfx_unavailable_status("hal_display_print");
   }
+  gfx_transport_begin(gfx);
   gfx->print(s);
   s_cursor_x = gfx->getCursorX();
   s_cursor_y = gfx->getCursorY();
-  return HAL_OK;
+  return gfx_transport_status(gfx);
 }
 bool hal_display_print(const char *s) {
   return hal_status_to_bool(hal_display_print_ex(s));
@@ -2545,11 +2592,12 @@ hal_status_t hal_display_println_ex(const char *s) {
   if (!gfx) {
     return gfx_unavailable_status("hal_display_println");
   }
+  gfx_transport_begin(gfx);
   gfx->print(s);
   gfx->write((uint8_t)'\n');
   s_cursor_x = gfx->getCursorX();
   s_cursor_y = gfx->getCursorY();
-  return HAL_OK;
+  return gfx_transport_status(gfx);
 }
 bool hal_display_println(const char *s) {
   return hal_status_to_bool(hal_display_println_ex(s));

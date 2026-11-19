@@ -684,7 +684,7 @@ pid.setDirection(FORWARD);   // lub BACKWARD
 bool stable = pid.isErrorStable(error, tolerance, stabilityThreshold);
 bool osc    = pid.isOscillating(currentError, windowSize);  // domyślny windowSize = 20
 
-// Reset całki, różniczki, historii
+// Reset całki, różniczki, historii i licznika isErrorStable()
 pid.reset();
 
 // Alias kompatybilności wstecznej dla ograniczania (w nowym kodzie użyj hal_constrain())

@@ -23,6 +23,11 @@
 #define WS_CLOSE_PROTOCOL_ERROR 1002u
 #define WS_CLOSE_UNSUPPORTED_DATA 1003u
 #define WS_CLOSE_TOO_BIG 1009u
+/* Reported to on_disconnect only; RFC 6455 forbids sending it on the wire. */
+#define WS_CLOSE_ABNORMAL 1006u
+
+/* Largest server frame header: FIN/opcode byte, 126 and a 16-bit length. */
+#define WS_SERVER_HEADER_MAX 4u
 
 typedef enum {
   WS_CLIENT_UNUSED = 0,
@@ -38,6 +43,8 @@ typedef struct {
   size_t request_len;
   uint8_t frame[HAL_WEBSOCKET_FRAME_BUFFER_SIZE];
   size_t frame_len;
+  /* Outgoing frame, kept off the caller's stack. */
+  uint8_t tx[WS_SERVER_HEADER_MAX + HAL_WEBSOCKET_MAX_PAYLOAD_SIZE];
   uint32_t accepted_ms;
   uint32_t last_activity_ms;
 } ws_client_t;
@@ -389,39 +396,67 @@ static bool process_handshake(ws_client_t *client) {
   return true;
 }
 
-static hal_status_t send_frame(hal_tcp_socket_t socket, uint8_t opcode,
-                               const void *data, size_t len) {
-  if (len > HAL_WEBSOCKET_MAX_PAYLOAD_SIZE) {
+/* Write one complete frame. HAL_EAGAIN: the TCP stack took no byte, so the
+   stream is intact and the caller may retry. HAL_EIO: a part of the frame is
+   already on the wire (or the socket failed); a frame cannot be resumed
+   without breaking the stream, so the caller has to drop the client. */
+static hal_status_t write_frame(ws_client_t *client, uint8_t opcode,
+                                const void *data, size_t len) {
+  if (len > HAL_WEBSOCKET_MAX_PAYLOAD_SIZE || len > 65535u) {
     return HAL_EOVERFLOW;
   }
+  if (len > 0u && !data) {
+    return HAL_EINVAL;
+  }
 
-  uint8_t packet[10u + HAL_WEBSOCKET_MAX_PAYLOAD_SIZE];
+  uint8_t *packet = client->tx;
   size_t pos = 0u;
   packet[pos++] = (uint8_t)(0x80u | (opcode & 0x0fu));
   if (len <= 125u) {
     packet[pos++] = (uint8_t)len;
-  } else if (len <= 65535u) {
+  } else {
     packet[pos++] = 126u;
     jh_store_be16(&packet[pos], (uint16_t)len);
     pos += 2u;
-  } else {
-    return HAL_EOVERFLOW;
   }
   if (len > 0u) {
-    if (!data) {
-      return HAL_EINVAL;
-    }
     memcpy(packet + pos, data, len);
     pos += len;
   }
-  return send_all(socket, packet, pos) ? HAL_OK : HAL_EIO;
+
+  size_t sent = 0u;
+  while (sent < pos) {
+    size_t accepted = 0u;
+    const hal_status_t status = hal_tcp_socket_send_ex(
+        client->socket, packet + sent, pos - sent, &accepted);
+    sent += accepted;
+    if (status == HAL_OK && accepted > 0u) {
+      continue;
+    }
+    if ((status == HAL_OK || status == HAL_EAGAIN) && sent == 0u) {
+      return HAL_EAGAIN;
+    }
+    return HAL_EIO;
+  }
+  return HAL_OK;
+}
+
+/* Data frames and PONG: a half-written frame closes the client. */
+static hal_status_t send_frame(ws_client_t *client, uint8_t opcode,
+                               const void *data, size_t len) {
+  const hal_status_t status = write_frame(client, opcode, data, len);
+  if (status == HAL_EIO) {
+    clear_client(client, WS_CLOSE_ABNORMAL, true);
+  }
+  return status;
 }
 
 static void send_close_frame(ws_client_t *client, uint16_t code) {
   uint8_t payload[2];
   jh_store_be16(payload, code);
   if (client->socket && hal_tcp_socket_is_connected(client->socket)) {
-    send_frame(client->socket, WS_OPCODE_CLOSE, payload, sizeof(payload));
+    /* The caller clears the client next, so a failure needs no handling. */
+    (void)write_frame(client, WS_OPCODE_CLOSE, payload, sizeof(payload));
   }
 }
 
@@ -495,7 +530,11 @@ static bool parse_frame(ws_client_t *client) {
       }
     }
   } else if (opcode == WS_OPCODE_PING) {
-    send_frame(client->socket, WS_OPCODE_PONG, payload, (size_t)payload_len);
+    /* HAL_EAGAIN drops this PONG and keeps the stream intact. */
+    (void)send_frame(client, WS_OPCODE_PONG, payload, (size_t)payload_len);
+    if (client->state != WS_CLIENT_OPEN) {
+      return false;
+    }
   } else if (opcode == WS_OPCODE_CLOSE) {
     if (payload_len == 1u) {
       send_close_frame(client, WS_CLOSE_PROTOCOL_ERROR);
@@ -734,7 +773,7 @@ hal_status_t hal_websocket_send(hal_websocket_client_t client,
   } else {
     return HAL_EINVAL;
   }
-  return send_frame(s_clients[client].socket, opcode, data, len);
+  return send_frame(&s_clients[client], opcode, data, len);
 }
 
 hal_status_t hal_websocket_send_text(hal_websocket_client_t client,

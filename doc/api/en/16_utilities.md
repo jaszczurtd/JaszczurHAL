@@ -660,7 +660,7 @@ pid.setDirection(FORWARD);   // or BACKWARD
 bool stable = pid.isErrorStable(error, tolerance, stabilityThreshold);
 bool osc    = pid.isOscillating(currentError, windowSize);  // default windowSize = 20
 
-// Reset integral, derivative, history
+// Reset integral, derivative, history and the isErrorStable() count
 pid.reset();
 
 // Backward-compat clamp alias (use hal_constrain() in new code)
