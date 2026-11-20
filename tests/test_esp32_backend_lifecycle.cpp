@@ -283,6 +283,56 @@ static void test_pwm_resolution_change_waits_for_a_clean_release(void) {
   hal_pwm_set_resolution(8u);
 }
 
+/* A LEDC timer with one channel is retuned in place; a shared timer, a
+ * frequency beyond the duty resolution and a driver error leave it alone. */
+static void test_pwm_freq_set_frequency_retunes_only_an_unshared_timer(void) {
+  hal_pwm_freq_channel_t channel = hal_pwm_freq_create(kPwmPin, 1000u, 100u);
+  TEST_ASSERT_NOT_NULL(channel);
+  hal_pwm_freq_write(channel, 50);
+  TEST_ASSERT_EQUAL_UINT32(1000u, fake_idf::ledc_timer_frequency(0));
+  TEST_ASSERT_EQUAL_UINT32(1000000u, hal_pwm_freq_get_period_ns(channel));
+  const size_t updates = fake_idf::count_calls("ledc_set_duty_and_update");
+
+  TEST_ASSERT_EQUAL(HAL_OK, hal_pwm_freq_set_frequency(channel, 2000u));
+  TEST_ASSERT_EQUAL_UINT32(2000u, fake_idf::ledc_timer_frequency(0));
+  TEST_ASSERT_EQUAL_UINT32(500000u, hal_pwm_freq_get_period_ns(channel));
+  TEST_ASSERT_TRUE(fake_idf::ledc_channel(0).running);
+  TEST_ASSERT_EQUAL_UINT32((uint32_t)updates, (uint32_t)fake_idf::count_calls(
+                                                  "ledc_set_duty_and_update"));
+
+  const size_t retunes = fake_idf::count_calls("ledc_set_freq");
+  TEST_ASSERT_EQUAL(HAL_OK, hal_pwm_freq_set_frequency(channel, 2000u));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, hal_pwm_freq_set_frequency(channel, 0u));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, hal_pwm_freq_set_frequency(nullptr, 500u));
+  /* 100 duty steps need 7 bits; at 40 MHz the timer has none left. */
+  TEST_ASSERT_EQUAL(HAL_EINVAL, hal_pwm_freq_set_frequency(channel, 40000000u));
+  TEST_ASSERT_EQUAL_UINT32((uint32_t)retunes,
+                           (uint32_t)fake_idf::count_calls("ledc_set_freq"));
+
+  fake_idf::fail_next("ledc_set_freq", ESP_FAIL);
+  TEST_ASSERT_EQUAL(HAL_EIO, hal_pwm_freq_set_frequency(channel, 500u));
+  TEST_ASSERT_EQUAL_UINT32(2000u, fake_idf::ledc_timer_frequency(0));
+  TEST_ASSERT_EQUAL_UINT32(500000u, hal_pwm_freq_get_period_ns(channel));
+
+  /* A second channel with the same frequency and resolution shares the
+   * timer; neither may retune it then. */
+  hal_pwm_freq_channel_t sibling =
+      hal_pwm_freq_create((uint8_t)(kPwmPin + 1u), 2000u, 100u);
+  TEST_ASSERT_NOT_NULL(sibling);
+  const hal_status_t blocked = hal_pwm_freq_set_frequency(channel, 500u);
+  const uint32_t frequency_while_shared = fake_idf::ledc_timer_frequency(0);
+  hal_pwm_freq_destroy(sibling);
+  TEST_ASSERT_EQUAL(HAL_EBUSY, blocked);
+  TEST_ASSERT_EQUAL_UINT32(2000u, frequency_while_shared);
+  TEST_ASSERT_EQUAL(HAL_OK, hal_pwm_freq_set_frequency(channel, 500u));
+  TEST_ASSERT_EQUAL_UINT32(500u, fake_idf::ledc_timer_frequency(0));
+
+  hal_pwm_freq_destroy(channel);
+  TEST_ASSERT_EQUAL(HAL_EINVAL, hal_pwm_freq_set_frequency(channel, 1000u));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_pwm_freq_get_period_ns(channel));
+  fake_idf::clear_calls();
+}
+
 static void test_pwm_freq_failed_destroy_keeps_the_channel(void) {
   hal_pwm_freq_channel_t channel = hal_pwm_freq_create(kPwmPin, 1000u, 100u);
   TEST_ASSERT_NOT_NULL(channel);
@@ -377,6 +427,7 @@ int main(void) {
   RUN_GUARDED(test_ledc_full_scale_holds_the_output_high);
   RUN_GUARDED(test_ledc_failed_release_keeps_the_channel_owned);
   RUN_GUARDED(test_pwm_resolution_change_waits_for_a_clean_release);
+  RUN_GUARDED(test_pwm_freq_set_frequency_retunes_only_an_unshared_timer);
   RUN_GUARDED(test_pwm_freq_failed_destroy_keeps_the_channel);
   RUN_GUARDED(test_rmt_failed_channel_delete_keeps_the_handle_for_retry);
   RUN_GUARDED(test_rmt_failed_encoder_delete_keeps_the_encoder_for_retry);

@@ -354,12 +354,77 @@ hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin,
 // Write value in [0, resolution] - values outside range are clamped automatically
 void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value);
 
+// Zmiana częstotliwości istniejącego kanału; ostatnio zapisane wypełnienie zostaje
+hal_status_t hal_pwm_freq_set_frequency(hal_pwm_freq_channel_t ch,
+                                        uint32_t frequency_hz);
+
+// Okres, na który timer jest rzeczywiście ustawiony, w nanosekundach (0 dla błędnego uchwytu)
+uint32_t hal_pwm_freq_get_period_ns(hal_pwm_freq_channel_t ch);
+
 // Stop output without releasing the channel; the next write starts it again
 void hal_pwm_freq_stop(hal_pwm_freq_channel_t ch);
 
 // Free resources
 void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
 ```
+
+### Kanały na wspólnym timerze
+
+Timer PWM ma jedną częstotliwość, więc kanały liczone przez ten sam timer
+muszą mieć ją wspólną. `hal_pwm_freq_create()` zwraca `NULL`, gdy wyjście ma
+już kanał oraz gdy jego timer obsługuje inny kanał z inną częstotliwością.
+Odrzucone żądanie zostawia działający kanał bez zmian. Wyjście albo
+częstotliwość zwalnia `hal_pwm_freq_destroy()` wywołane na pierwszym kanale.
+
+| Platforma | Co współdzieli timer |
+| --- | --- |
+| RP2040/RP2350 | Dwa wyjścia jednego slice'u PWM, na przykład GPIO 8 i GPIO 9. Drugi kanał przejmuje okres slice'u taki, jaki jest, i skaluje na niego własną rozdzielczość; licznik i pierwsze wyjście pozostają nietknięte. `hal_pwm_freq_stop()` na jednym wyjściu sprowadza je do zerowego wypełnienia i zostawia drugie w pracy. |
+| STM32G474 | Wszystkie kanały jednego TIM. Drugi kanał wymaga tej samej częstotliwości i rozdzielczości, która daje ten sam okres licznika. Dopóki kanał `hal_pwm_freq` korzysta z timera, `hal_pwm_write()` i PWM audio też nie przełączą tego timera na inną częstotliwość ani rozdzielczość. |
+| ESP32 | Backend dobiera timer LEDC do każdej częstotliwości i rozdzielczości. Kanały o różnych częstotliwościach dostają różne timery, dopóki są wolne timery LEDC. |
+
+Backend mock nie modeluje timerów i przyjmuje każde żądanie.
+
+### Zmiana częstotliwości działającego kanału
+
+`hal_pwm_freq_set_frequency()` przestraja kanał bez jego niszczenia. Skala
+wypełnienia pozostaje `[0, resolution]`, a wyjście zachowuje ostatnio zapisane
+wypełnienie względne, więc aplikacja nie musi zapisywać go ponownie. Kanał,
+który nie został jeszcze uruchomiony albo został zatrzymany, tylko przyjmuje
+nową konfigurację i pozostaje wyłączony.
+
+```c
+hal_pwm_freq_channel_t pwm = hal_pwm_freq_create(9, 200, 2047);
+hal_pwm_freq_write(pwm, 700);
+
+if (hal_pwm_freq_set_frequency(pwm, 400) == HAL_OK) {
+  uint32_t period_ns = hal_pwm_freq_get_period_ns(pwm); // około 2 500 000
+}
+```
+
+Funkcja zwraca `HAL_EINVAL` dla uchwytu `NULL` albo zwolnionego, dla zerowej
+częstotliwości oraz dla częstotliwości, której timer nie osiągnie przy
+rozdzielczości kanału. Zwraca `HAL_EBUSY`, gdy inny czynny kanał korzysta
+z tego samego timera, bo zmiana przestroiłaby także ten kanał. `HAL_EIO`
+oznacza, że sterownik platformy odrzucił zmianę. Nieudane wywołanie zostawia
+kanał bez zmian. Wywołanie z bieżącą częstotliwością kończy się powodzeniem
+i niczego nie zapisuje.
+
+`hal_pwm_freq_get_period_ns()` podaje okres po zaokrągleniu dzielnika zegara
+i okresu licznika. Przydaje się, gdy pomiar musi znać rzeczywisty okres, na
+przykład 4 999 798 ns dla nominalnych 200 Hz na RP2350.
+
+Przebieg przejścia zależy od platformy:
+
+| Platforma | Przejście | Reguła współdzielenia |
+| --- | --- | --- |
+| RP2040/RP2350 | Backend najpierw zostawia dzielnik zegara i zmienia okres licznika; okres i wypełnienie przełączają się wtedy razem przy najbliższym przepełnieniu licznika i żaden okres nie jest nieregularny. Działa to, dopóki nowy okres zachowuje co najmniej żądaną rozdzielczość, na przykład 200 Hz <-> 400 Hz. W przeciwnym razie zmienia się także dzielnik. Nie jest on buforowany, więc trwający okres ma pośrednią długość i wypełnienie; następny jest już regularny. | Oba piny jednego slice'u PWM mają wspólny okres; czynny drugi kanał blokuje zmianę. |
+| STM32G474 | Preskaler, okres i wartość porównania są buforowane i zaczynają obowiązywać razem przy najbliższej aktualizacji timera. Częstotliwość wynika z całkowitego preskalera. | Wszystkie kanały jednego timera mają wspólną częstotliwość, także piny sterowane przez `hal_pwm_write()` i PWM audio; każdy z nich na innym kanale blokuje zmianę. PWM audio oddaje timer przy zniszczeniu, a pin zapisany przez `hal_pwm_write()` zachowuje swój kanał. |
+| ESP32 | Timer LEDC jest przestrajany przez `ledc_set_freq()` i zachowuje rozdzielczość wypełnienia. Częstotliwość, która zostawia mniej bitów wypełnienia, niż używa kanał, jest odrzucana. | Timery LEDC są współdzielone przez kanały o tej samej częstotliwości i rozdzielczości; współdzielony timer blokuje zmianę. |
+
+Po zmianie dzielnika na RP wypełnienie jest skalowane ilorazem zamiast
+przesunięcia bitowego, gdy okres licznika nie jest wielokrotnością
+rozdzielczości przez potęgę dwójki. Pełna skala nadal oznacza wyjście stale
+aktywne.
 
 **impl/rp2040:** Pico SDK `hardware/pwm.h` + `hardware/clocks.h` - oblicza
 `clkdiv` i `wrap`, aby dokładnie uzyskać żądaną częstotliwość. Dla przypadków
@@ -401,10 +466,14 @@ int      hal_mock_pwm_freq_get_value(hal_pwm_freq_channel_t ch);
 uint32_t hal_mock_pwm_freq_get_frequency(hal_pwm_freq_channel_t ch);
 uint8_t  hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch);
 bool     hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
+// Następne poprawne hal_pwm_freq_set_frequency() zwraca ten status i niczego nie zmienia
+void     hal_mock_pwm_freq_fail_next_set_frequency(hal_status_t status);
 ```
 
 **Wielowątkowość:** Backendy RP2040, STM32G474 i ESP32-S3 chronią
-`hal_pwm_freq_create()`, `hal_pwm_freq_write()`, `hal_pwm_freq_stop()` i
+`hal_pwm_freq_create()`, `hal_pwm_freq_write()`,
+`hal_pwm_freq_set_frequency()`, `hal_pwm_freq_get_period_ns()`,
+`hal_pwm_freq_stop()` i
 `hal_pwm_freq_destroy()` wewnętrznym muteksem. Kod wywołujący nadal odpowiada
 za cykl życia uchwytu kanału i nie może używać go po
 `hal_pwm_freq_destroy()`. Backend mock nie zapewnia synchronizacji

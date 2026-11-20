@@ -317,12 +317,76 @@ hal_pwm_freq_channel_t hal_pwm_freq_create(uint8_t pin,
 // Write value in [0, resolution] - values outside range are clamped automatically
 void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value);
 
+// Change the frequency of an existing channel; the duty ratio written last is kept
+hal_status_t hal_pwm_freq_set_frequency(hal_pwm_freq_channel_t ch,
+                                        uint32_t frequency_hz);
+
+// Period the timer is actually programmed for, in nanoseconds (0 for an invalid handle)
+uint32_t hal_pwm_freq_get_period_ns(hal_pwm_freq_channel_t ch);
+
 // Stop output without releasing the channel; the next write starts it again
 void hal_pwm_freq_stop(hal_pwm_freq_channel_t ch);
 
 // Free resources
 void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch);
 ```
+
+### Channels on a shared timer
+
+A PWM timer has one frequency, so channels that count on the same timer have
+to agree on it. `hal_pwm_freq_create()` returns `NULL` when the output already
+has a channel, and when its timer runs another channel at a different
+frequency. A refused request leaves the running channel as it was. Call
+`hal_pwm_freq_destroy()` on the first channel to free the output or the
+frequency.
+
+| Target | What shares a timer |
+| --- | --- |
+| RP2040/RP2350 | The two outputs of one PWM slice, for example GPIO 8 and GPIO 9. The second channel takes the period of the slice as it is and scales its own resolution onto it; the counter and the first output are not touched. `hal_pwm_freq_stop()` on one output takes it to zero duty and leaves the other running. |
+| STM32G474 | All channels of one TIM. A second channel needs the same frequency and a resolution that gives the same counter period. While a `hal_pwm_freq` channel uses a timer, `hal_pwm_write()` and PWM audio cannot switch that timer to another frequency or resolution either. |
+| ESP32 | The backend picks a LEDC timer for each frequency and resolution. Channels at different frequencies get different timers, until no LEDC timer is left. |
+
+The mock backend does not model timers and accepts every request.
+
+### Changing the frequency of a running channel
+
+`hal_pwm_freq_set_frequency()` retunes a channel without destroying it. The
+duty scale stays `[0, resolution]` and the output keeps the duty ratio that
+was written last, so the application does not have to write it again. A
+channel that was not started yet, or was stopped, only takes the new
+configuration and stays off.
+
+```c
+hal_pwm_freq_channel_t pwm = hal_pwm_freq_create(9, 200, 2047);
+hal_pwm_freq_write(pwm, 700);
+
+if (hal_pwm_freq_set_frequency(pwm, 400) == HAL_OK) {
+  uint32_t period_ns = hal_pwm_freq_get_period_ns(pwm); // about 2 500 000
+}
+```
+
+The call returns `HAL_EINVAL` for a `NULL` or released handle, a zero
+frequency or a frequency the timer cannot reach with the channel resolution.
+It returns `HAL_EBUSY` when another active channel shares the same timer,
+because the change would retune that channel as well. `HAL_EIO` means that
+the target driver rejected the change. A failed call leaves the channel as
+it was. A call with the current frequency succeeds and writes nothing.
+
+`hal_pwm_freq_get_period_ns()` reports the period after the rounding of the
+clock divider and of the counter period. Use it when a measurement has to
+know the real period, for example 4 999 798 ns for a nominal 200 Hz on RP2350.
+
+How the transition looks depends on the target:
+
+| Target | Transition | Sharing rule |
+| --- | --- | --- |
+| RP2040/RP2350 | The backend first keeps the clock divider and changes the counter period; period and duty then switch together at the next counter wrap and no period is irregular. This works while the new period keeps at least the requested resolution, for example 200 Hz <-> 400 Hz. Otherwise the divider changes too. It is not buffered, so the period in progress has an intermediate length and duty ratio; the next one is regular. | Both pins of one PWM slice share the period; an active second channel blocks the change. |
+| STM32G474 | Prescaler, period and compare value are preloaded and take effect together at the next timer update. The frequency follows the integer prescaler. | All channels of one timer share the frequency, including pins driven by `hal_pwm_write()` and PWM audio; any of them on another channel blocks the change. PWM audio gives the timer back when it is destroyed, a pin written by `hal_pwm_write()` keeps its channel. |
+| ESP32 | The LEDC timer is retuned with `ledc_set_freq()` and keeps its duty resolution. A frequency that leaves fewer duty bits than the channel uses is rejected. | LEDC timers are shared by channels with the same frequency and resolution; a shared timer blocks the change. |
+
+After a divider change on RP the duty is scaled by a ratio instead of a bit
+shift whenever the counter period is not a power-of-two multiple of the
+resolution. Full scale still means a constant active output.
 
 **impl/rp2040:** pico SDK `hardware/pwm.h` + `hardware/clocks.h` - computes clkdiv and wrap
 to achieve the exact requested frequency, with pseudo/slow-scale correction for edge cases.
@@ -358,10 +422,14 @@ int      hal_mock_pwm_freq_get_value(hal_pwm_freq_channel_t ch);
 uint32_t hal_mock_pwm_freq_get_frequency(hal_pwm_freq_channel_t ch);
 uint8_t  hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch);
 bool     hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
+// Next valid hal_pwm_freq_set_frequency() returns this status and changes nothing
+void     hal_mock_pwm_freq_fail_next_set_frequency(hal_status_t status);
 ```
 
 **Thread safety:** RP2040, STM32G474, and ESP32-S3 backends protect
-`hal_pwm_freq_create()`, `hal_pwm_freq_write()`, `hal_pwm_freq_stop()` and
+`hal_pwm_freq_create()`, `hal_pwm_freq_write()`,
+`hal_pwm_freq_set_frequency()`, `hal_pwm_freq_get_period_ns()`,
+`hal_pwm_freq_stop()` and
 `hal_pwm_freq_destroy()` with an internal mutex. Callers still own channel
 handle lifetime and must not use a handle after `hal_pwm_freq_destroy()`. Mock
 backend does not provide concurrent-access synchronization.

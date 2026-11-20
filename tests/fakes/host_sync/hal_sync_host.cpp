@@ -1,20 +1,37 @@
 // hal_mutex on std::mutex for host tests that compile a target backend and
 // run it on real threads.
 
+#include "hal_sync_host.h"
+
 #include "hal/core/hal_mutex_once.h"
 #include "hal/system/hal_sync.h"
 
+#include <atomic>
 #include <mutex>
 
 struct hal_mutex_impl_t {
   std::mutex mutex;
 };
 
+namespace {
+std::atomic<void (*)(void)> s_before_lock{nullptr};
+} // namespace
+
 extern "C" {
 
 hal_mutex_t hal_mutex_create(void) { return new hal_mutex_impl_t(); }
 hal_mutex_t jh_hal_mutex_try_create(void) { return hal_mutex_create(); }
-void hal_mutex_lock(hal_mutex_t mutex) { mutex->mutex.lock(); }
+void hal_sync_host_before_next_lock(void (*hook)(void)) {
+  s_before_lock.store(hook);
+}
+
+void hal_mutex_lock(hal_mutex_t mutex) {
+  void (*const hook)(void) = s_before_lock.exchange(nullptr);
+  if (hook != nullptr) {
+    hook();
+  }
+  mutex->mutex.lock();
+}
 bool hal_mutex_try_lock(hal_mutex_t mutex) { return mutex->mutex.try_lock(); }
 void hal_mutex_unlock(hal_mutex_t mutex) { mutex->mutex.unlock(); }
 void hal_mutex_destroy(hal_mutex_t mutex) { delete mutex; }

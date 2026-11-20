@@ -459,6 +459,51 @@ target_compile_definitions(test_rp_flash_dma_guard PRIVATE
 jh_enable_host_warnings(test_rp_flash_dma_guard ERRORS)
 add_test(NAME test_rp_flash_dma_guard COMMAND test_rp_flash_dma_guard)
 
+# The RP frequency PWM backend on simulated slices with buffered period and
+# compare registers: unchanged creation, frequency changes and their pairing.
+add_executable(test_rp_pwm_freq_backend
+    test_rp_pwm_freq_backend.cpp
+    fakes/host_sync/hal_sync_host.cpp
+    fakes/rp_pwm_sdk/rp_pwm_fake.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/hal_pwm_freq.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/core/hal_config.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_rp_pwm_freq_backend PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/host_sync
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/rp_pwm_sdk
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_rp_pwm_freq_backend PRIVATE
+    HAL_TARGET_RP2040=1 HAL_BOARD_PROFILE_RP_PICO=1 HAL_ENABLE_PWM_FREQ
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_rp_pwm_freq_backend ERRORS)
+target_link_libraries(test_rp_pwm_freq_backend PRIVATE Threads::Threads)
+add_test(NAME test_rp_pwm_freq_backend COMMAND test_rp_pwm_freq_backend)
+
+# The STM32G474 frequency PWM backend on a register table: a frequency change
+# through preloaded prescaler, period and compare registers, and PWM audio as
+# the other user of a timer.
+add_executable(test_stm32_pwm_freq_backend
+    test_stm32_pwm_freq_backend.cpp
+    fakes/host_sync/hal_sync_host.cpp
+    fakes/stm32g474_regs/jh_stm32g474_host_regs.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/hal_dma_pwm_audio.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/hal_pwm_freq.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/hal_pwm_stm32g474.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/core/hal_config.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_stm32_pwm_freq_backend PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/host_sync
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/stm32g474_regs
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_stm32_pwm_freq_backend PRIVATE
+    HAL_TARGET_STM32G474=1 JH_STM32G474_HW=1 JH_STM32G474_HOST_REGS=1
+    HAL_ENABLE_PWM_FREQ HAL_ENABLE_DMA_PWM_AUDIO
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_stm32_pwm_freq_backend ERRORS)
+target_link_libraries(test_stm32_pwm_freq_backend PRIVATE Threads::Threads)
+add_test(NAME test_stm32_pwm_freq_backend
+    COMMAND test_stm32_pwm_freq_backend)
+
 # The RP software UART backend on simulated PIO and DMA, once per chip: the
 # DMA transfer count differs (RP2350 keeps a MODE field in its top bits).
 foreach(_jh_swserial_chip IN ITEMS rp2040 rp2350)

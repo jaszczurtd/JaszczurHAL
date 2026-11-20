@@ -78,6 +78,7 @@ struct I2cDevice {
 std::function<void()> g_i2c_during_write;
 
 LedcChannel g_ledc[SOC_LEDC_CHANNEL_NUM] = {};
+uint32_t g_ledc_timer_hz[SOC_LEDC_TIMER_NUM] = {};
 std::vector<std::unique_ptr<fake_rmt_channel>> g_rmt_channels;
 std::vector<std::unique_ptr<fake_rmt_encoder>> g_rmt_encoders;
 
@@ -170,6 +171,9 @@ void reset() {
   g_critical_depth = 0;
   g_i2c = {};
   g_i2c_during_write = nullptr;
+  for (uint32_t &frequency : g_ledc_timer_hz) {
+    frequency = 0u;
+  }
   for (LedcChannel &channel : g_ledc) {
     channel = {};
   }
@@ -271,6 +275,10 @@ bool i2c_null_context_window() { return g_i2c.null_context_window; }
 LedcChannel ledc_channel(int channel) {
   return channel >= 0 && channel < SOC_LEDC_CHANNEL_NUM ? g_ledc[channel]
                                                         : LedcChannel{};
+}
+
+uint32_t ledc_timer_frequency(int timer) {
+  return timer >= 0 && timer < SOC_LEDC_TIMER_NUM ? g_ledc_timer_hz[timer] : 0u;
 }
 
 size_t rmt_live_channels() { return g_rmt_channels.size(); }
@@ -539,8 +547,25 @@ uint32_t ledc_find_suitable_duty_resolution(uint32_t src_clk_freq,
   return bits;
 }
 
-esp_err_t ledc_timer_config(const ledc_timer_config_t *) {
-  return driver_call("ledc_timer_config");
+esp_err_t ledc_timer_config(const ledc_timer_config_t *config) {
+  const esp_err_t result = driver_call("ledc_timer_config");
+  if (result == ESP_OK && config->timer_num >= 0 &&
+      config->timer_num < SOC_LEDC_TIMER_NUM) {
+    g_ledc_timer_hz[config->timer_num] = config->freq_hz;
+  }
+  return result;
+}
+
+esp_err_t ledc_set_freq(ledc_mode_t, ledc_timer_t timer_num, uint32_t freq_hz) {
+  const esp_err_t result = driver_call("ledc_set_freq");
+  if (result == ESP_OK && timer_num >= 0 && timer_num < SOC_LEDC_TIMER_NUM) {
+    g_ledc_timer_hz[timer_num] = freq_hz;
+  }
+  return result;
+}
+
+uint32_t ledc_get_freq(ledc_mode_t, ledc_timer_t timer_num) {
+  return ledc_timer_frequency(timer_num);
 }
 
 esp_err_t ledc_channel_config(const ledc_channel_config_t *config) {

@@ -90,6 +90,39 @@ void hal_pwm_freq_write(hal_pwm_freq_channel_t channel, int value) {
   HAL_ASSERT(written, "hal_pwm_freq_write: ESP-IDF LEDC update failed");
 }
 
+hal_status_t hal_pwm_freq_set_frequency(hal_pwm_freq_channel_t channel,
+                                        uint32_t frequency_hz) {
+  if (channel == nullptr || frequency_hz == 0u) {
+    return HAL_EINVAL;
+  }
+  hal_mutex_t mutex = jh_hal_mutex_try_create_once(&s_mutex);
+  if (mutex == nullptr) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(mutex);
+  const hal_status_t status =
+      channel->in_use != 0
+          ? jh_esp32_ledc_set_frequency(channel->ledc, frequency_hz)
+          : HAL_EINVAL;
+  hal_mutex_unlock(mutex);
+  return status;
+}
+
+uint32_t hal_pwm_freq_get_period_ns(hal_pwm_freq_channel_t channel) {
+  if (channel == nullptr) {
+    return 0u;
+  }
+  hal_mutex_t mutex = pwm_mutex();
+  if (mutex == nullptr) {
+    return 0u;
+  }
+  hal_mutex_lock(mutex);
+  const uint32_t period_ns =
+      channel->in_use != 0 ? jh_esp32_ledc_period_ns(channel->ledc) : 0u;
+  hal_mutex_unlock(mutex);
+  return period_ns;
+}
+
 void hal_pwm_freq_stop(hal_pwm_freq_channel_t channel) {
   if (channel == nullptr) {
     return;

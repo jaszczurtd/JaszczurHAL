@@ -291,6 +291,14 @@ static void release_pool_slot(hal_dma_pwm_audio_impl_t *audio) {
   pool_unlock();
 }
 
+/* Final release: the output goes off, the timer channel stops blocking a
+ * frequency change of its timer and the pool slot is free again. */
+static void release_audio(hal_dma_pwm_audio_impl_t *audio) {
+  jh_stm32_pwm_release_output(&audio->pwm);
+  jh_stm32_pwm_forget_channel(&audio->pwm);
+  release_pool_slot(audio);
+}
+
 hal_status_t hal_dma_pwm_audio_create_ex(const hal_dma_pwm_audio_config_t *cfg,
                                          hal_dma_pwm_audio_t *out_audio) {
   if (out_audio == nullptr) {
@@ -356,14 +364,12 @@ hal_status_t hal_dma_pwm_audio_create_ex(const hal_dma_pwm_audio_config_t *cfg,
 
   const hal_status_t adc_status = configure_adc_dma(audio);
   if (adc_status != HAL_OK) {
-    jh_stm32_pwm_release_output(&audio->pwm);
-    release_pool_slot(audio);
+    release_audio(audio);
     return adc_status;
   }
   if (!configure_pwm_dma(audio)) {
     release_adc_dma(audio);
-    jh_stm32_pwm_release_output(&audio->pwm);
-    release_pool_slot(audio);
+    release_audio(audio);
     return HAL_EIO;
   }
 #endif
@@ -477,7 +483,7 @@ hal_status_t hal_dma_pwm_audio_destroy_ex(hal_dma_pwm_audio_t audio) {
   }
 
   (void)hal_dma_pwm_audio_stop(audio);
-  release_pool_slot(audio);
+  release_audio(audio);
   return HAL_OK;
 }
 

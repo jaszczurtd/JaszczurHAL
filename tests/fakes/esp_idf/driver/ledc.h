@@ -34,6 +34,9 @@ typedef struct {
 uint32_t ledc_find_suitable_duty_resolution(uint32_t src_clk_freq,
                                             uint32_t timer_freq);
 esp_err_t ledc_timer_config(const ledc_timer_config_t *timer_conf);
+esp_err_t ledc_set_freq(ledc_mode_t speed_mode, ledc_timer_t timer_num,
+                        uint32_t freq_hz);
+uint32_t ledc_get_freq(ledc_mode_t speed_mode, ledc_timer_t timer_num);
 esp_err_t ledc_channel_config(const ledc_channel_config_t *ledc_conf);
 esp_err_t ledc_stop(ledc_mode_t speed_mode, ledc_channel_t channel,
                     uint32_t idle_level);

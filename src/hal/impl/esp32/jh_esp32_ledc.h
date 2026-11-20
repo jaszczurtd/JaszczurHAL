@@ -1,5 +1,7 @@
 #pragma once
 
+#include "hal/core/hal_status.h"
+
 #include <stdbool.h>
 #include <stdint.h>
 
@@ -33,6 +35,19 @@ bool jh_esp32_ledc_write_from_isr(jh_esp32_ledc_channel_t *channel,
                                   uint32_t logical_value);
 void jh_esp32_ledc_stop(jh_esp32_ledc_channel_t *channel);
 bool jh_esp32_ledc_release(jh_esp32_ledc_channel_t *channel);
+/**
+ * @brief Retune the LEDC timer of a channel.
+ * @param channel Channel from jh_esp32_ledc_acquire().
+ * @param frequency_hz New frequency in hertz.
+ * @return HAL_OK, HAL_EINVAL for an invalid channel or a frequency the timer
+ *         cannot reach with the channel duty resolution, HAL_EBUSY when other
+ *         channels share the timer, HAL_ENOMEM without a mutex, HAL_EIO when
+ *         ESP-IDF rejects the change. The duty value is kept by the driver.
+ */
+hal_status_t jh_esp32_ledc_set_frequency(jh_esp32_ledc_channel_t *channel,
+                                         uint32_t frequency_hz);
+/** Period of the channel timer in nanoseconds, 0 for an invalid channel. */
+uint32_t jh_esp32_ledc_period_ns(jh_esp32_ledc_channel_t *channel);
 uint32_t jh_esp32_ledc_source_clock_hz(void);
 
 #ifdef __cplusplus

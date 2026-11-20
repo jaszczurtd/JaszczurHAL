@@ -48,6 +48,49 @@ void test_write_multiple_pins_independent(void) {
 
 void test_pwm_freq_write_null_is_noop(void) { hal_pwm_freq_write(NULL, 123); }
 
+void test_pwm_freq_set_frequency_keeps_the_channel_and_its_duty(void) {
+  hal_pwm_freq_channel_t ch = hal_pwm_freq_create(9u, 200u, 2047u);
+  TEST_ASSERT_NOT_NULL(ch);
+  hal_pwm_freq_write(ch, 700);
+  TEST_ASSERT_EQUAL_UINT32(5000000u, hal_pwm_freq_get_period_ns(ch));
+
+  TEST_ASSERT_EQUAL(HAL_OK, hal_pwm_freq_set_frequency(ch, 400u));
+  TEST_ASSERT_EQUAL_UINT32(400u, hal_mock_pwm_freq_get_frequency(ch));
+  TEST_ASSERT_EQUAL_UINT32(2500000u, hal_pwm_freq_get_period_ns(ch));
+  TEST_ASSERT_EQUAL_INT(700, hal_mock_pwm_freq_get_value(ch));
+  TEST_ASSERT_TRUE(hal_mock_pwm_freq_is_running(ch));
+  TEST_ASSERT_EQUAL_UINT8(9u, hal_mock_pwm_freq_get_pin(ch));
+
+  hal_pwm_freq_destroy(ch);
+}
+
+void test_pwm_freq_set_frequency_rejects_invalid_requests(void) {
+  hal_pwm_freq_channel_t ch = hal_pwm_freq_create(9u, 200u, 2047u);
+  TEST_ASSERT_NOT_NULL(ch);
+
+  TEST_ASSERT_EQUAL(HAL_EINVAL, hal_pwm_freq_set_frequency(NULL, 400u));
+  TEST_ASSERT_EQUAL(HAL_EINVAL, hal_pwm_freq_set_frequency(ch, 0u));
+  TEST_ASSERT_EQUAL_UINT32(200u, hal_mock_pwm_freq_get_frequency(ch));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_pwm_freq_get_period_ns(NULL));
+
+  hal_pwm_freq_destroy(ch);
+  TEST_ASSERT_EQUAL(HAL_EINVAL, hal_pwm_freq_set_frequency(ch, 400u));
+  TEST_ASSERT_EQUAL_UINT32(0u, hal_pwm_freq_get_period_ns(ch));
+}
+
+void test_pwm_freq_mock_failure_is_reported_once_and_changes_nothing(void) {
+  hal_pwm_freq_channel_t ch = hal_pwm_freq_create(9u, 200u, 2047u);
+  TEST_ASSERT_NOT_NULL(ch);
+
+  hal_mock_pwm_freq_fail_next_set_frequency(HAL_EBUSY);
+  TEST_ASSERT_EQUAL(HAL_EBUSY, hal_pwm_freq_set_frequency(ch, 400u));
+  TEST_ASSERT_EQUAL_UINT32(200u, hal_mock_pwm_freq_get_frequency(ch));
+  TEST_ASSERT_EQUAL(HAL_OK, hal_pwm_freq_set_frequency(ch, 400u));
+  TEST_ASSERT_EQUAL_UINT32(400u, hal_mock_pwm_freq_get_frequency(ch));
+
+  hal_pwm_freq_destroy(ch);
+}
+
 int main(void) {
   UNITY_BEGIN();
   RUN_TEST(test_default_resolution);
@@ -58,5 +101,8 @@ int main(void) {
   RUN_TEST(test_write_zero);
   RUN_TEST(test_write_multiple_pins_independent);
   RUN_TEST(test_pwm_freq_write_null_is_noop);
+  RUN_TEST(test_pwm_freq_set_frequency_keeps_the_channel_and_its_duty);
+  RUN_TEST(test_pwm_freq_set_frequency_rejects_invalid_requests);
+  RUN_TEST(test_pwm_freq_mock_failure_is_reported_once_and_changes_nothing);
   return UNITY_END();
 }

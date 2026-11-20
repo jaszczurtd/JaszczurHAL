@@ -23,6 +23,8 @@ static void pwm_ensure_mutex(void) {
 struct hal_pwm_freq_channel_impl_s {
   jh_stm32_pwm_channel_desc pwm;
   uint32_t requested_period_ticks;
+  uint32_t frequency_hz;
+  uint32_t last_value; // last logical duty written
   uint8_t left_shift;
   uint8_t right_shift;
   int in_use;
@@ -45,15 +47,17 @@ hal_status_t jh_hal_pwm_freq_try_create(uint8_t pin, uint32_t frequency_hz,
     return HAL_ENOMEM;
   }
 
-  if (!jh_stm32_pwm_prepare_frequency_pin(pin, frequency_hz, resolution,
-                                          &cfg->pwm, &cfg->left_shift,
-                                          &cfg->right_shift)) {
+  const hal_status_t pin_status = jh_stm32_pwm_prepare_frequency_pin(
+      pin, frequency_hz, resolution, &cfg->pwm, &cfg->left_shift,
+      &cfg->right_shift);
+  if (pin_status != HAL_OK) {
     hal_mutex_unlock(pwm_mutex);
-    return HAL_EIO;
+    return pin_status;
   }
 
   cfg->in_use = 1;
   cfg->requested_period_ticks = resolution;
+  cfg->frequency_hz = frequency_hz;
   cfg->started = 0;
   hal_mutex_unlock(pwm_mutex);
   *out_channel = cfg;
@@ -77,6 +81,9 @@ void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value) {
   pwm_ensure_mutex();
 
   hal_pwm_freq_channel_impl_t *cfg = ch;
+  // The counter period and the shifts change with the frequency, so the
+  // compare value is derived under the lock a frequency change holds.
+  hal_mutex_lock(pwm_mutex);
   if (value < 0) {
     value = 0;
   } else if ((uint32_t)value > cfg->requested_period_ticks) {
@@ -99,13 +106,54 @@ void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value) {
     compare = cfg->pwm.period_ticks;
   }
 
-  hal_mutex_lock(pwm_mutex);
+  cfg->last_value = (uint32_t)value;
   jh_stm32_pwm_write_compare(&cfg->pwm, (uint32_t)compare);
   if (!cfg->started) {
     jh_stm32_pwm_start_output(&cfg->pwm);
     cfg->started = 1;
   }
   hal_mutex_unlock(pwm_mutex);
+}
+
+hal_status_t hal_pwm_freq_set_frequency(hal_pwm_freq_channel_t ch,
+                                        uint32_t frequency_hz) {
+  if (!ch || frequency_hz == 0u) {
+    return HAL_EINVAL;
+  }
+  hal_mutex_t mutex = jh_hal_mutex_try_create_once(&pwm_mutex);
+  if (mutex == NULL) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(mutex);
+  hal_status_t status = HAL_EINVAL;
+  if (ch->in_use != 0) {
+    status = HAL_OK;
+    if (ch->frequency_hz != frequency_hz) {
+      status = jh_stm32_pwm_set_frequency(
+          &ch->pwm, frequency_hz, ch->requested_period_ticks, ch->last_value,
+          &ch->left_shift, &ch->right_shift);
+      if (status == HAL_OK) {
+        ch->frequency_hz = frequency_hz;
+      }
+    }
+  }
+  hal_mutex_unlock(mutex);
+  return status;
+}
+
+uint32_t hal_pwm_freq_get_period_ns(hal_pwm_freq_channel_t ch) {
+  if (!ch) {
+    return 0u;
+  }
+  hal_mutex_t mutex = jh_hal_mutex_try_create_once(&pwm_mutex);
+  if (mutex == NULL) {
+    return 0u;
+  }
+  hal_mutex_lock(mutex);
+  const uint32_t period_ns =
+      ch->in_use != 0 ? jh_stm32_pwm_period_ns(&ch->pwm) : 0u;
+  hal_mutex_unlock(mutex);
+  return period_ns;
 }
 
 void hal_pwm_freq_stop(hal_pwm_freq_channel_t ch) {
@@ -126,6 +174,7 @@ void hal_pwm_freq_destroy(hal_pwm_freq_channel_t ch) {
   pwm_ensure_mutex();
   hal_mutex_lock(pwm_mutex);
   jh_stm32_pwm_release_output(&ch->pwm);
+  jh_stm32_pwm_forget_channel(&ch->pwm);
   ch->started = 0;
   ch->in_use = 0;
   hal_mutex_unlock(pwm_mutex);

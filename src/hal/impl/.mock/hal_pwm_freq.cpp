@@ -18,6 +18,7 @@ struct hal_pwm_freq_channel_impl_s {
 };
 
 static hal_pwm_freq_channel_impl_t s_pool[HAL_PWM_FREQ_MAX_CHANNELS];
+static hal_status_t s_next_set_frequency_status = HAL_OK;
 
 hal_status_t jh_hal_pwm_freq_try_create(uint8_t pin, uint32_t frequency_hz,
                                         uint32_t resolution,
@@ -66,6 +67,28 @@ void hal_pwm_freq_write(hal_pwm_freq_channel_t ch, int value) {
   ch->running = 1;
 }
 
+hal_status_t hal_pwm_freq_set_frequency(hal_pwm_freq_channel_t ch,
+                                        uint32_t frequency_hz) {
+  if (!ch || frequency_hz == 0u || ch->in_use == 0) {
+    return HAL_EINVAL;
+  }
+  if (s_next_set_frequency_status != HAL_OK) {
+    const hal_status_t status = s_next_set_frequency_status;
+    s_next_set_frequency_status = HAL_OK;
+    return status;
+  }
+  ch->frequency_hz = frequency_hz;
+  return HAL_OK;
+}
+
+uint32_t hal_pwm_freq_get_period_ns(hal_pwm_freq_channel_t ch) {
+  if (!ch || ch->in_use == 0 || ch->frequency_hz == 0u) {
+    return 0u;
+  }
+  return (uint32_t)((UINT64_C(1000000000) + ch->frequency_hz / 2u) /
+                    ch->frequency_hz);
+}
+
 void hal_pwm_freq_stop(hal_pwm_freq_channel_t ch) {
   if (!ch) {
     return;
@@ -95,5 +118,9 @@ uint8_t hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch) {
 
 bool hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch) {
   return ch ? (ch->running != 0) : false;
+}
+
+void hal_mock_pwm_freq_fail_next_set_frequency(hal_status_t status) {
+  s_next_set_frequency_status = status;
 }
 #endif // HAL_TARGET_IS_MOCK

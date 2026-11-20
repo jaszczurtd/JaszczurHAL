@@ -71,6 +71,8 @@ struct LedcChannel {
   int gpio;
 };
 LedcChannel ledc_channel(int channel);
+/* Frequency a LEDC timer was last configured or retuned to, 0 if never. */
+uint32_t ledc_timer_frequency(int timer);
 
 /* RMT objects that were created and not yet deleted. */
 size_t rmt_live_channels();

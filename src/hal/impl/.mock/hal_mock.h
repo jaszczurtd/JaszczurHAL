@@ -252,6 +252,9 @@ int hal_mock_pwm_freq_get_value(hal_pwm_freq_channel_t ch);
 uint32_t hal_mock_pwm_freq_get_frequency(hal_pwm_freq_channel_t ch);
 uint8_t hal_mock_pwm_freq_get_pin(hal_pwm_freq_channel_t ch);
 bool hal_mock_pwm_freq_is_running(hal_pwm_freq_channel_t ch);
+/** Make the next valid hal_pwm_freq_set_frequency() call return @p status
+ *  without changing the channel; HAL_OK cancels a pending failure. */
+void hal_mock_pwm_freq_fail_next_set_frequency(hal_status_t status);
 
 #endif
 

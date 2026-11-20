@@ -298,6 +298,58 @@ bool jh_esp32_ledc_release(jh_esp32_ledc_channel_t *channel) {
   return true;
 }
 
+hal_status_t jh_esp32_ledc_set_frequency(jh_esp32_ledc_channel_t *channel,
+                                         uint32_t frequency_hz) {
+  if (frequency_hz == 0u) {
+    return HAL_EINVAL;
+  }
+  hal_mutex_t mutex = ledc_mutex();
+  if (mutex == nullptr) {
+    return HAL_ENOMEM;
+  }
+  hal_mutex_lock(mutex);
+  hal_status_t status = HAL_EINVAL;
+  if (valid_channel_locked(channel)) {
+    timer_slot_t &timer = s_timers[channel->timer];
+    const uint32_t maximum_bits =
+        ledc_find_suitable_duty_resolution(source_clock_hz(), frequency_hz);
+    if (timer.frequency_hz == frequency_hz) {
+      status = HAL_OK;
+    } else if (timer.references > 1u) {
+      status = HAL_EBUSY;
+    } else if (maximum_bits >= channel->duty_bits) {
+      status = ledc_set_freq(LEDC_LOW_SPEED_MODE, (ledc_timer_t)channel->timer,
+                             frequency_hz) == ESP_OK
+                   ? HAL_OK
+                   : HAL_EIO;
+      if (status == HAL_OK) {
+        timer.frequency_hz = frequency_hz;
+      }
+    }
+  }
+  hal_mutex_unlock(mutex);
+  return status;
+}
+
+uint32_t jh_esp32_ledc_period_ns(jh_esp32_ledc_channel_t *channel) {
+  hal_mutex_t mutex = ledc_mutex();
+  if (mutex == nullptr) {
+    return 0u;
+  }
+  hal_mutex_lock(mutex);
+  uint32_t period_ns = 0u;
+  if (valid_channel_locked(channel)) {
+    const uint32_t frequency_hz =
+        ledc_get_freq(LEDC_LOW_SPEED_MODE, (ledc_timer_t)channel->timer);
+    if (frequency_hz != 0u) {
+      period_ns =
+          (uint32_t)((UINT64_C(1000000000) + frequency_hz / 2u) / frequency_hz);
+    }
+  }
+  hal_mutex_unlock(mutex);
+  return period_ns;
+}
+
 uint32_t jh_esp32_ledc_source_clock_hz(void) { return source_clock_hz(); }
 
 #endif // HAL_TARGET_IS_ESP32_FAMILY

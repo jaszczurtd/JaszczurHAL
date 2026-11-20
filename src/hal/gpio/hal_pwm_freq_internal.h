@@ -18,8 +18,10 @@ extern "C" {
  * @param resolution Requested PWM wrap value.
  * @param out_channel Receives the channel on success and NULL on failure.
  * @return HAL_OK on success, HAL_EINVAL for invalid arguments, HAL_ENOMEM
- *         when synchronization or pool storage is unavailable, or HAL_EIO
- *         when the target cannot configure the requested output.
+ *         when synchronization or pool storage is unavailable, HAL_EBUSY when
+ *         the output already has a channel or its timer runs another channel
+ *         at a different frequency, or HAL_EIO when the target cannot
+ *         configure the requested output.
  *
  * This internal entry point lets status-returning facades preserve allocation
  * failures. Public compatibility code continues to use hal_pwm_freq_create().

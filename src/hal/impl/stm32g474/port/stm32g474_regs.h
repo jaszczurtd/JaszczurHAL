@@ -431,6 +431,7 @@
 #define TIM2_CNT JH_REG32(TIM2_BASE + 0x24u)
 #define TIM2_ARR JH_REG32(TIM2_BASE + 0x2Cu)
 #define TIM_CR1_CEN (1u << 0)
+#define TIM_CR1_UDIS (1u << 1)
 #define TIM_CR1_OPM (1u << 3)
 #define TIM_CR1_ARPE (1u << 7)
 #define TIM_DIER_UIE (1u << 0)

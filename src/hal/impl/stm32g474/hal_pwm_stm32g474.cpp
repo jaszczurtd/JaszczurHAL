@@ -58,9 +58,24 @@ static const PwmPinMap kPinMap[] = {
 struct TimerState {
   uint32_t frequency_hz;
   uint32_t period_ticks;
+  uint8_t channel_mask; // channels prepared on this timer, bit 0 = channel 1
+  // Channels held by frequency channels until jh_stm32_pwm_forget_channel().
+  uint8_t frequency_mask;
 };
 
 static TimerState s_timer_state[PWM_TIMER_COUNT] = {};
+
+static uint8_t channel_bit(uint8_t channel) {
+  return (uint8_t)(1u << (channel - 1u));
+}
+
+/* A timer that runs a frequency channel keeps its prescaler and period until
+ * that channel is released: every channel of the timer counts on them. */
+static bool timing_is_held(const TimerState &state, uint32_t frequency_hz,
+                           uint32_t period_ticks) {
+  return state.frequency_mask != 0u && (state.frequency_hz != frequency_hz ||
+                                        state.period_ticks != period_ticks);
+}
 
 static const PwmPinMap *find_pin(uint8_t pin) {
   for (size_t i = 0; i < COUNTOF(kPinMap); i++) {
@@ -75,6 +90,22 @@ static const PwmPinMap *find_pin(uint8_t pin) {
     }
   }
   return nullptr;
+}
+
+static uint32_t prescaler_for(uint32_t clock_hz, uint32_t frequency_hz,
+                              uint32_t period_ticks) {
+  const uint64_t target = (uint64_t)frequency_hz * (uint64_t)period_ticks;
+  if (target == 0u) {
+    return 0u;
+  }
+
+  uint64_t divider = ((uint64_t)clock_hz + (target / 2u)) / target;
+  if (divider < 1u) {
+    divider = 1u;
+  } else if (divider > kMaxPrescalerDivider) {
+    divider = kMaxPrescalerDivider;
+  }
+  return (uint32_t)(divider - 1u);
 }
 
 #ifdef JH_STM32G474_HW
@@ -105,22 +136,6 @@ static void enable_timer_clock(const TimerHw &timer) {
     RCC_APB1ENR1 |= timer.rcc_mask;
     (void)RCC_APB1ENR1;
   }
-}
-
-static uint32_t prescaler_for(uint32_t clock_hz, uint32_t frequency_hz,
-                              uint32_t period_ticks) {
-  const uint64_t target = (uint64_t)frequency_hz * (uint64_t)period_ticks;
-  if (target == 0u) {
-    return 0u;
-  }
-
-  uint64_t divider = ((uint64_t)clock_hz + (target / 2u)) / target;
-  if (divider < 1u) {
-    divider = 1u;
-  } else if (divider > kMaxPrescalerDivider) {
-    divider = kMaxPrescalerDivider;
-  }
-  return (uint32_t)(divider - 1u);
 }
 
 static void configure_channel_mode(uint32_t base, uint8_t channel) {
@@ -195,6 +210,22 @@ static bool configure_hw(const PwmPinMap &map, uint32_t frequency_hz,
 static uint32_t timer_clock_hz(uint8_t timer) {
   return kTimerHw[timer].clock_hz;
 }
+
+/* PSC, ARR and CCR are preloaded. Update events are held off while the three
+ * are written, so one update loads a consistent set. */
+static void retune_hw(const PwmPinMap &map, uint32_t frequency_hz,
+                      uint32_t period_ticks, uint32_t compare) {
+  const TimerHw &timer = kTimerHw[map.timer];
+  if (compare > 0xFFFFu && timer.base != TIM2_BASE) {
+    compare = 0xFFFFu;
+  }
+  TIM_CR1(timer.base) |= TIM_CR1_UDIS;
+  TIM_PSC(timer.base) =
+      prescaler_for(timer.clock_hz, frequency_hz, period_ticks);
+  TIM_ARR(timer.base) = period_ticks - 1u;
+  write_ccr(timer.base, map.channel, compare);
+  TIM_CR1(timer.base) &= ~TIM_CR1_UDIS;
+}
 #else
 static uint32_t s_host_compare[128] = {};
 static uint32_t s_host_frequency[128] = {};
@@ -210,6 +241,13 @@ static bool configure_hw(const PwmPinMap &map, uint32_t frequency_hz,
 static uint32_t timer_clock_hz(uint8_t timer) {
   (void)timer;
   return JH_G474_CORE_CLOCK_HZ;
+}
+
+static void retune_hw(const PwmPinMap &map, uint32_t frequency_hz,
+                      uint32_t period_ticks, uint32_t compare) {
+  s_host_frequency[map.pin] = frequency_hz;
+  s_host_period[map.pin] = period_ticks;
+  s_host_compare[map.pin] = compare;
 }
 #endif
 
@@ -252,6 +290,36 @@ static bool period_is_too_fast(uint32_t clock_hz, uint32_t frequency_hz,
   const uint64_t target = (uint64_t)frequency_hz * (uint64_t)period_ticks;
   return target > (uint64_t)clock_hz;
 }
+
+/* Timer period for a frequency channel: the requested resolution scaled by
+ * powers of two until the prescaler can reach the frequency. */
+static bool frequency_period(uint32_t clock_hz, uint32_t frequency_hz,
+                             uint32_t requested_period_ticks,
+                             uint32_t *period_ticks, uint8_t *left_shift,
+                             uint8_t *right_shift) {
+  uint32_t ticks = requested_period_ticks;
+  uint8_t lshift = 0u;
+  uint8_t rshift = 0u;
+
+  while (period_is_too_slow(clock_hz, frequency_hz, ticks) &&
+         ticks <= (kMaxPeriodTicks / 2u)) {
+    ticks *= 2u;
+    lshift++;
+  }
+
+  while (period_is_too_fast(clock_hz, frequency_hz, ticks) && ticks > 1u) {
+    ticks /= 2u;
+    rshift++;
+  }
+
+  if (!period_can_reach_frequency(clock_hz, frequency_hz, ticks)) {
+    return false;
+  }
+  *period_ticks = ticks;
+  *left_shift = lshift;
+  *right_shift = rshift;
+  return true;
+}
 } // namespace
 
 bool jh_stm32_pwm_prepare_pin(uint8_t pin, uint32_t frequency_hz,
@@ -264,25 +332,111 @@ bool jh_stm32_pwm_prepare_pin(uint8_t pin, uint32_t frequency_hz,
     return false;
   }
 
-  if (s_timer_state[map->timer].frequency_hz != frequency_hz ||
-      s_timer_state[map->timer].period_ticks != period_ticks) {
+  TimerState &state = s_timer_state[map->timer];
+  if (timing_is_held(state, frequency_hz, period_ticks)) {
+    return false;
+  }
+
+  if (state.frequency_hz != frequency_hz ||
+      state.period_ticks != period_ticks) {
     if (!configure_hw(*map, frequency_hz, period_ticks)) {
       return false;
     }
-    s_timer_state[map->timer].frequency_hz = frequency_hz;
-    s_timer_state[map->timer].period_ticks = period_ticks;
+    state.frequency_hz = frequency_hz;
+    state.period_ticks = period_ticks;
   } else {
 #ifdef JH_STM32G474_HW
     configure_channel_mode(kTimerHw[map->timer].base, map->channel);
 #endif
   }
 
+  state.channel_mask |= channel_bit(map->channel);
   out->pin = map->pin;
   out->timer = map->timer;
   out->channel = map->channel;
   out->valid = 1u;
+  out->holds_timing = 0u;
   out->period_ticks = period_ticks;
   return true;
+}
+
+hal_status_t jh_stm32_pwm_set_frequency(jh_stm32_pwm_channel_desc *ch,
+                                        uint32_t frequency_hz,
+                                        uint32_t requested_period_ticks,
+                                        uint32_t logical_compare,
+                                        uint8_t *left_shift,
+                                        uint8_t *right_shift) {
+  if (!ch || !ch->valid || !left_shift || !right_shift || frequency_hz == 0u ||
+      requested_period_ticks == 0u ||
+      requested_period_ticks > kMaxPeriodTicks) {
+    return HAL_EINVAL;
+  }
+  const PwmPinMap *map = find_pin(ch->pin);
+  if (!map) {
+    return HAL_EINVAL;
+  }
+  TimerState &state = s_timer_state[ch->timer];
+  const uint8_t own = channel_bit(ch->channel);
+  if (((state.channel_mask | state.frequency_mask) & (uint8_t)~own) != 0u) {
+    return HAL_EBUSY;
+  }
+
+  const uint32_t clock_hz = timer_clock_hz(ch->timer);
+  uint32_t period_ticks = 0u;
+  uint8_t lshift = 0u;
+  uint8_t rshift = 0u;
+  if (!frequency_period(clock_hz, frequency_hz, requested_period_ticks,
+                        &period_ticks, &lshift, &rshift) ||
+      !direct_period_can_reach_frequency(clock_hz, frequency_hz,
+                                         period_ticks)) {
+    return HAL_EINVAL;
+  }
+
+  uint64_t compare = period_ticks;
+  if (logical_compare < requested_period_ticks) {
+    compare = ((uint64_t)logical_compare << lshift) >> rshift;
+    if (compare > period_ticks) {
+      compare = period_ticks;
+    }
+  }
+  retune_hw(*map, frequency_hz, period_ticks, (uint32_t)compare);
+  state.frequency_hz = frequency_hz;
+  state.period_ticks = period_ticks;
+  ch->period_ticks = period_ticks;
+  *left_shift = lshift;
+  *right_shift = rshift;
+  return HAL_OK;
+}
+
+uint32_t jh_stm32_pwm_period_ns(const jh_stm32_pwm_channel_desc *ch) {
+  if (!ch || !ch->valid) {
+    return 0u;
+  }
+  const TimerState &state = s_timer_state[ch->timer];
+  const uint32_t clock_hz = timer_clock_hz(ch->timer);
+  if (state.frequency_hz == 0u || clock_hz == 0u) {
+    return 0u;
+  }
+  const uint64_t divider = (uint64_t)prescaler_for(clock_hz, state.frequency_hz,
+                                                   state.period_ticks) +
+                           1u;
+  const uint64_t numerator =
+      divider * state.period_ticks * UINT64_C(1000000000);
+  return (uint32_t)((numerator + clock_hz / 2u) / clock_hz);
+}
+
+void jh_stm32_pwm_forget_channel(jh_stm32_pwm_channel_desc *ch) {
+  if (!ch || !ch->valid) {
+    return;
+  }
+  const uint8_t keep = (uint8_t)~channel_bit(ch->channel);
+  TimerState &state = s_timer_state[ch->timer];
+  state.channel_mask &= keep;
+  if (ch->holds_timing != 0u) {
+    state.frequency_mask &= keep;
+  }
+  ch->holds_timing = 0u;
+  ch->valid = 0u;
 }
 
 bool jh_stm32_pwm_pin_supported(uint8_t pin) {
@@ -294,46 +448,41 @@ uint32_t jh_stm32_pwm_source_clock_hz(uint8_t pin) {
   return map ? timer_clock_hz(map->timer) : 0u;
 }
 
-bool jh_stm32_pwm_prepare_frequency_pin(uint8_t pin, uint32_t frequency_hz,
-                                        uint32_t requested_period_ticks,
-                                        jh_stm32_pwm_channel_desc *out,
-                                        uint8_t *left_shift,
-                                        uint8_t *right_shift) {
+hal_status_t jh_stm32_pwm_prepare_frequency_pin(
+    uint8_t pin, uint32_t frequency_hz, uint32_t requested_period_ticks,
+    jh_stm32_pwm_channel_desc *out, uint8_t *left_shift, uint8_t *right_shift) {
   const PwmPinMap *map = find_pin(pin);
   if (!map || !out || !left_shift || !right_shift || frequency_hz == 0u ||
       requested_period_ticks == 0u ||
       requested_period_ticks > kMaxPeriodTicks) {
-    return false;
+    return HAL_EIO;
   }
 
-  uint32_t period_ticks = requested_period_ticks;
+  uint32_t period_ticks = 0u;
   uint8_t lshift = 0u;
   uint8_t rshift = 0u;
-  const uint32_t clock_hz = timer_clock_hz(map->timer);
-
-  while (period_is_too_slow(clock_hz, frequency_hz, period_ticks) &&
-         period_ticks <= (kMaxPeriodTicks / 2u)) {
-    period_ticks *= 2u;
-    lshift++;
+  if (!frequency_period(timer_clock_hz(map->timer), frequency_hz,
+                        requested_period_ticks, &period_ticks, &lshift,
+                        &rshift)) {
+    return HAL_EIO;
   }
 
-  while (period_is_too_fast(clock_hz, frequency_hz, period_ticks) &&
-         period_ticks > 1u) {
-    period_ticks /= 2u;
-    rshift++;
-  }
-
-  if (!period_can_reach_frequency(clock_hz, frequency_hz, period_ticks)) {
-    return false;
+  TimerState &state = s_timer_state[map->timer];
+  const uint8_t own = channel_bit(map->channel);
+  if ((state.frequency_mask & own) != 0u ||
+      timing_is_held(state, frequency_hz, period_ticks)) {
+    return HAL_EBUSY;
   }
 
   if (!jh_stm32_pwm_prepare_pin(pin, frequency_hz, period_ticks, out)) {
-    return false;
+    return HAL_EIO;
   }
 
+  state.frequency_mask |= own;
+  out->holds_timing = 1u;
   *left_shift = lshift;
   *right_shift = rshift;
-  return true;
+  return HAL_OK;
 }
 
 void jh_stm32_pwm_write_compare(const jh_stm32_pwm_channel_desc *ch,
