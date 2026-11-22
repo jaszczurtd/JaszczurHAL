@@ -7,7 +7,8 @@
  *             - HAL_STM32_FLASH_LITTLEFS_SIZE for hal_littlefs
  *             - HAL_STM32_FLASH_EEPROM_SIZE for hal_eeprom/hal_kv
  *   RAM   : 96  KB @ 0x20000000 (SRAM1+SRAM2)
- *   CCMRAM: 32  KB @ 0x10000000 (CPU-only data, not DMA-capable)
+ *   CCMRAM: 32  KB @ 0x10000000 (CPU-only data, not DMA-capable; also the
+ *           code of HAL_RAM_CODE_SOURCES, copied from flash at reset)
  *
  * Stack grows down from the top of RAM. A dedicated .noinit region holds the
  * retained exception record so it survives a fault-triggered reset.
@@ -89,6 +90,8 @@ SECTIONS
     .text :
     {
         . = ALIGN(4);
+        /* JH_RAM_CODE_TEXT: a project build with HAL_RAM_CODE_SOURCES
+         * excludes those objects here (jh_stm32g474_firmware.cmake). */
         *(.text)
         *(.text*)
         *(.glue_7)
@@ -147,7 +150,20 @@ SECTIONS
         . = ALIGN(4);
         _edata = .;
     } >RAM AT> FLASH
-    PROVIDE(__jh_stm32_flash_load_end = LOADADDR(.data) + SIZEOF(.data));
+
+    /* Code that runs from CCM SRAM, copied from flash by Reset_Handler. */
+    _siccmcode = LOADADDR(.ccmram_code);
+
+    .ccmram_code :
+    {
+        . = ALIGN(4);
+        _sccmcode = .;
+        *(.ccmram_code .ccmram_code.*)
+        /* JH_RAM_CODE_CCM: the .text of HAL_RAM_CODE_SOURCES objects. */
+        . = ALIGN(4);
+        _eccmcode = .;
+    } >CCMRAM AT> FLASH
+    PROVIDE(__jh_stm32_flash_load_end = LOADADDR(.ccmram_code) + SIZEOF(.ccmram_code));
 
     /* Consume CPU-only CCM inputs before the general .bss wildcard. */
     .ccmram_bss (NOLOAD) :

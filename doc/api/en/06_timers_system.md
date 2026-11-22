@@ -28,6 +28,35 @@ This attribute alone does not permit calls while flash is unavailable.
 Measure the complete path and leave room for stacks and heap; RAM code
 consumes SRAM as well as its load image in flash.
 
+### Whole source files in RAM
+
+When a whole control path should run from RAM, list its project source files
+in `hal_project_config.h` instead of annotating every function. Each C string
+literal names one file, relative to the project directory or absolute:
+
+```c
+#if defined(HAL_TARGET_RP2350_ARM)
+#define HAL_RAM_CODE_SOURCES "control.c" "../common/filter.c"
+#endif
+```
+
+The code of these files runs from SRAM on RP2040/RP2350, from CCM SRAM on
+STM32G474 and from IRAM on ESP32. Their constants stay in flash, and so do
+functions they call in other files, HAL and SDK code included. A condition on
+the target macro limits the list to the targets with room for it.
+
+The build stops when the definition lists no file, or when an entry does not
+exist or is not a source of the firmware. After the link it reads the map and
+stops if any code section of a listed file stayed in flash, or if a listed
+file adds no linked code. List a file that is empty in some variant only
+under that variant's condition. On ESP32 the part of each file name before
+its first dot must be unique among the application sources, because ESP-IDF
+linker fragments select objects by that name. The option applies to firmware
+built through the JaszczurHAL firmware project; the memory maps of
+[RP](../../../link_libraries/rp_pico_lib/MEMORY_MAP.md) and
+[STM32G474](../../../link_libraries/stm32_lib/MEMORY_MAP.md) describe the
+placement.
+
 ## Static buffers for CPU access
 
 `HAL_CPU_ONLY_BSS(name)` from `<hal/core/hal_memory.h>` lets the backend

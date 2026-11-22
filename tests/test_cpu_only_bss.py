@@ -81,6 +81,8 @@ def check_startup(work):
 typedef void (*init_function_t)(void);
 static uint32_t source[2] = {23u, 47u};
 static uint32_t data[2], bss[2], ccm[2], retained[2] = {71u, 93u};
+static uint32_t code_image[2] = {61u, 67u}, code[2];
+static unsigned barriers;
 static unsigned stage;
 #define _sidata source[0]
 #define _sdata data[0]
@@ -89,10 +91,15 @@ static unsigned stage;
 #define _ebss bss[2]
 #define _sccmbss ccm[0]
 #define _eccmbss ccm[CCM_WORDS]
+#define _siccmcode code_image[0]
+#define _sccmcode code[0]
+#define _eccmcode code[2]
+#define JH_STARTUP_CODE_BARRIER() (++barriers)
 static void verify(void) {
     if (data[0] != 23u || data[1] != 47u || bss[0] || bss[1] ||
         ccm[0] != (CCM_WORDS ? 0u : 19u) ||
         ccm[1] != (CCM_WORDS ? 0u : 19u) ||
+        code[0] != 61u || code[1] != 67u || barriers != 1u ||
         retained[0] != 71u || retained[1] != 93u) exit(1);
 }
 void SystemInit(void) { verify(); if (stage++ != 0u) exit(2); }

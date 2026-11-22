@@ -3,7 +3,8 @@
 # 01 - Podstawowe funkcje systemowe
 
 Przykład pokazuje miganie diodą, diagnostykę urządzenia, timery programowe
-oraz regulację PID na symulowanym obiekcie. Nie wymaga dodatkowego sprzętu:
+oraz regulację PID na symulowanym obiekcie. Jego kod działa z RAM dzięki
+`HAL_RAM_CODE_SOURCES` w `hal_project_config.h`. Nie wymaga dodatkowego sprzętu:
 korzysta z diody na płytce i konsoli diagnostycznej.
 
 Callback timera sprzętowego zapisuje czas i liczbę ticków w kolejce zdarzeń.

@@ -28,6 +28,35 @@ wywołań przy niedostępnym flash. Zmierz całą ścieżkę i zostaw miejsce na
 stosy oraz heap; kod w RAM zajmuje SRAM, a jego obraz do załadowania także
 flash.
 
+### Całe pliki źródłowe w RAM
+
+Gdy z RAM ma działać cała ścieżka sterowania, wypisz jej pliki źródłowe
+projektu w `hal_project_config.h` zamiast oznaczać każdą funkcję. Każdy
+literał C to jeden plik, ze ścieżką względem katalogu projektu albo
+bezwzględną:
+
+```c
+#if defined(HAL_TARGET_RP2350_ARM)
+#define HAL_RAM_CODE_SOURCES "control.c" "../common/filter.c"
+#endif
+```
+
+Kod tych plików działa z SRAM na RP2040/RP2350, z CCM SRAM na STM32G474
+i z IRAM na ESP32. Ich stałe zostają we flashu, podobnie jak funkcje
+wywoływane z innych plików, w tym kod HAL i SDK. Warunek na makrze targetu
+ogranicza listę do targetów, na których starczy pamięci.
+
+Build zatrzymuje się, gdy definicja nie wymienia żadnego pliku, a także gdy
+wpis nie istnieje albo nie jest źródłem firmware. Po linkowaniu czyta mapę
+i przerywa, jeśli którakolwiek sekcja kodu z tych plików została we flashu
+albo plik z listy nie wnosi linkowanego kodu. Plik pusty w którymś wariancie
+wymieniaj tylko pod warunkiem tego wariantu. Na ESP32 część nazwy pliku przed
+pierwszą kropką musi być unikalna wśród źródeł aplikacji, bo fragmenty linkera
+ESP-IDF wybierają obiekty po tej nazwie. Opcja działa w firmware budowanym przez
+projekt firmware JaszczurHAL; rozmieszczenie opisują mapy pamięci
+[RP](../../../link_libraries/rp_pico_lib/MEMORY_MAP.md)
+i [STM32G474](../../../link_libraries/stm32_lib/MEMORY_MAP.md).
+
 ## Bufory statyczne dostępne przez CPU
 
 `HAL_CPU_ONLY_BSS(name)` z `<hal/core/hal_memory.h>` pozwala backendowi

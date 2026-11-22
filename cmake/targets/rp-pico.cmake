@@ -37,7 +37,11 @@ target_include_directories(firmware PRIVATE
 if(JH_LINK_LIBRARIES)
     target_link_libraries(firmware PRIVATE ${JH_LINK_LIBRARIES})
 endif()
-jh_add_rp_pico_firmware(firmware)
+# HAL_RAM_CODE_SOURCES: project files whose code runs from SRAM.
+include("${JH_ROOT}/cmake/jh_ram_code.cmake")
+jh_ram_code_from_project(_jh_ram_code_sources
+    BASE_DIR "${JH_PROJECT_DIR}" SOURCES ${_sources})
+jh_add_rp_pico_firmware(firmware RAM_CODE_SOURCES ${_jh_ram_code_sources})
 target_sources(JaszczurHAL PRIVATE
     "${JH_BOARD_GENERATED_DIR}/jh_link_contract_definition.c")
 target_include_directories(JaszczurHAL PUBLIC "${JH_BOARD_GENERATED_DIR}")

@@ -1972,6 +1972,12 @@ add_test(NAME test_littlefs_architecture
         -P ${CMAKE_CURRENT_SOURCE_DIR}/test_littlefs_architecture.cmake
 )
 
+add_test(NAME test_ram_code
+    COMMAND ${CMAKE_COMMAND}
+        -DJH_ROOT=${CMAKE_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/test_ram_code.cmake
+)
+
 add_test(NAME test_gps_architecture
     COMMAND ${CMAKE_COMMAND}
         -DJH_ROOT=${CMAKE_CURRENT_SOURCE_DIR}/..

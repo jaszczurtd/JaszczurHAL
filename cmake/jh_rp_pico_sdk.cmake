@@ -427,8 +427,60 @@ function(jh_add_rp_ota_boot_target BOOT_TARGET)
     jh_rp_check_flash_range("${BOOT_TARGET}" 0 "${_jh_rp_ota_boot_size}")
 endfunction()
 
+# jh_rp_apply_ram_code(<target> [<ram source>...]): run the code of the given
+# project sources of <target>, and of the kernel objects HAL_FREERTOS_RAM_CODE
+# selects, from SRAM. The SDK linker script includes default_text_excludes.incl;
+# the .text it excludes from flash lands in .data, which startup copies to
+# SRAM. A map check after the link stops the build if any of it stayed in flash.
+function(jh_rp_apply_ram_code TARGET_NAME)
+    include("${JH_ROOT}/cmake/jh_ram_code.cmake")
+    set(_jh_patterns "")
+    if(TARGET JaszczurHAL)
+        get_target_property(_jh_kernel JaszczurHAL JH_RP_RAM_CODE_PATTERNS)
+        if(_jh_kernel)
+            list(APPEND _jh_patterns ${_jh_kernel})
+        endif()
+    endif()
+    if(ARGN)
+        get_target_property(_jh_sources "${TARGET_NAME}" SOURCES)
+        jh_ram_code_object_patterns(_jh_project
+            RAM_SOURCES ${ARGN} SOURCES ${_jh_sources})
+        list(APPEND _jh_patterns ${_jh_project})
+    endif()
+    if(NOT _jh_patterns)
+        return()
+    endif()
+    set(_jh_sdk_excludes
+        "${PICO_SDK_PATH}/src/rp2_common/pico_standard_link/script_include/default_text_excludes.incl")
+    file(READ "${_jh_sdk_excludes}" _jh_excludes)
+    if(NOT _jh_excludes MATCHES "EXCLUDE_FILE\\(")
+        message(FATAL_ERROR "Pico SDK text exclusion hook has changed")
+    endif()
+    jh_ram_code_quoted_patterns(_jh_quoted ${_jh_patterns})
+    string(REPLACE "EXCLUDE_FILE(" "EXCLUDE_FILE(${_jh_quoted} "
+        _jh_excludes "${_jh_excludes}")
+    set(_jh_dir "${CMAKE_CURRENT_BINARY_DIR}/jh_ram_code/${TARGET_NAME}")
+    file(CONFIGURE OUTPUT "${_jh_dir}/default_text_excludes.incl"
+        CONTENT "${_jh_excludes}")
+    set_property(TARGET "${TARGET_NAME}" APPEND PROPERTY
+        PICO_TARGET_LINKER_SCRIPT_OVERRIDE_PATHS "${_jh_dir}")
+    set_property(TARGET "${TARGET_NAME}" APPEND PROPERTY LINK_DEPENDS
+        "${_jh_dir}/default_text_excludes.incl")
+    set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+        "${_jh_sdk_excludes}")
+    set(_jh_objects "")
+    foreach(_jh_pattern IN LISTS _jh_patterns)
+        string(SUBSTRING "${_jh_pattern}" 1 -1 _jh_object)
+        list(APPEND _jh_objects "${_jh_object}")
+    endforeach()
+    jh_ram_code_add_map_check(TARGET "${TARGET_NAME}"
+        MAP "$<TARGET_FILE:${TARGET_NAME}>.map"
+        OBJECTS ${_jh_objects}
+        FLASH 0x10000000 0x20000000)
+endfunction()
+
 function(jh_add_rp_pico_firmware TARGET_NAME)
-    cmake_parse_arguments(JH_NATIVE "CUSTOM_ENTRY" "" "" ${ARGN})
+    cmake_parse_arguments(JH_NATIVE "CUSTOM_ENTRY" "" "RAM_CODE_SOURCES" ${ARGN})
     if(NOT TARGET "${TARGET_NAME}")
         message(FATAL_ERROR
             "jh_add_rp_pico_firmware: target '${TARGET_NAME}' does not exist")
@@ -490,4 +542,5 @@ function(jh_add_rp_pico_firmware TARGET_NAME)
                 --output "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}.uf2"
             VERBATIM)
     endif()
+    jh_rp_apply_ram_code("${TARGET_NAME}" ${JH_NATIVE_RAM_CODE_SOURCES})
 endfunction()

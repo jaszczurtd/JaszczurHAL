@@ -1326,6 +1326,10 @@ def resolve_build_model(
         "componentDependencies": component_dependencies,
         "privateComponentDependencies": private_component_dependencies,
         "compileDefinitions": sorted(compile_definitions),
+        # Passed through unparsed; cmake/jh_ram_code.cmake reads it. None
+        # when undefined, "" for a definition without a value.
+        "projectDir": project_dir,
+        "ramCodeSources": build.config.value("HAL_RAM_CODE_SOURCES"),
         "targetDescriptor": target_descriptor,
         "boardDescriptor": board_descriptor,
         "boards": boards,
@@ -1527,6 +1531,15 @@ def _render_project_cmake(
     if model.get("deviceTree") is not None:
         # The components then name the generated jh_hardware.h for the hook.
         lines.append("set(JH_ESP_IDF_DEVICE_TREE TRUE)")
+    lines.append(
+        "set(JH_ESP_IDF_PROJECT_DIR "
+        f"{_cmake_quote(_canonical_path(model['projectDir']).as_posix())})"
+    )
+    if model["ramCodeSources"] is not None:
+        lines.append(
+            "set(JH_ESP_IDF_RAM_CODE_SOURCES "
+            f"{_cmake_quote(model['ramCodeSources'])})"
+        )
     lines.extend(
         _render_cmake_list(
             "JH_ESP_IDF_PROJECT_SOURCES",

@@ -16,14 +16,26 @@
 #include <stdint.h>
 
 /* Symbols provided by the linker script. */
-extern uint32_t _sidata;  /* .data init values in flash      */
-extern uint32_t _sdata;   /* .data start in RAM              */
-extern uint32_t _edata;   /* .data end in RAM                */
-extern uint32_t _sbss;    /* .bss start                      */
-extern uint32_t _ebss;    /* .bss end                        */
-extern uint32_t _sccmbss; /* zero-initialized CCM start      */
-extern uint32_t _eccmbss; /* zero-initialized CCM end        */
-extern uint32_t _estack;  /* top of stack                    */
+extern uint32_t _sidata;    /* .data init values in flash      */
+extern uint32_t _sdata;     /* .data start in RAM              */
+extern uint32_t _edata;     /* .data end in RAM                */
+extern uint32_t _sbss;      /* .bss start                      */
+extern uint32_t _ebss;      /* .bss end                        */
+extern uint32_t _sccmbss;   /* zero-initialized CCM start      */
+extern uint32_t _eccmbss;   /* zero-initialized CCM end        */
+extern uint32_t _siccmcode; /* CCM code image in flash     */
+extern uint32_t _sccmcode;  /* CCM code start               */
+extern uint32_t _eccmcode;  /* CCM code end                 */
+extern uint32_t _estack;    /* top of stack                    */
+
+/* Completes the CCM code copy before the first instruction fetch from it. */
+#ifndef JH_STARTUP_CODE_BARRIER
+#define JH_STARTUP_CODE_BARRIER()                                              \
+  do {                                                                         \
+    __asm volatile("dsb" ::: "memory");                                        \
+    __asm volatile("isb" ::: "memory");                                        \
+  } while (0)
+#endif
 
 typedef void (*init_function_t)(void);
 extern init_function_t __preinit_array_start[];
@@ -206,6 +218,14 @@ void Reset_Handler(void) {
   for (dst = &_sccmbss; dst < &_eccmbss;) {
     *dst++ = 0u;
   }
+
+  /* Copy the code of HAL_RAM_CODE_SOURCES to CCM SRAM, then make the
+   * instruction fetch see it before anything calls it. */
+  src = &_siccmcode;
+  for (dst = &_sccmcode; dst < &_eccmcode;) {
+    *dst++ = *src++;
+  }
+  JH_STARTUP_CODE_BARRIER();
 
   SystemInit();
 

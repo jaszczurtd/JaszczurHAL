@@ -31,6 +31,7 @@ set(_JH_STM32_MODULE_DIR "${CMAKE_CURRENT_LIST_DIR}" CACHE INTERNAL "")
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_project_features.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_stack_protector.cmake")
 include("${CMAKE_CURRENT_LIST_DIR}/jh_stm32g474_memory.cmake")
+include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_ram_code.cmake")
 
 # The architecture flags every firmware unit compiles with; they come last on
 # the command line and therefore fix the ABI.
@@ -48,7 +49,7 @@ set(JH_STM32G474_ARCH_FLAGS -mcpu=cortex-m4 -mthumb -mfpu=fpv4-sp-d16 -mfloat-ab
 # Produces an executable <target> named "<target>.elf" plus <target>.bin/.hex.
 function(jh_add_stm32g474_firmware TARGET)
     cmake_parse_arguments(ARG "" "JH_ROOT"
-        "SOURCES;INCLUDES;DEFINES;FEATURES;RESOLVED_FEATURES;OPTIONS;LIBRARIES"
+        "SOURCES;INCLUDES;DEFINES;FEATURES;RESOLVED_FEATURES;OPTIONS;LIBRARIES;RAM_CODE_SOURCES"
         ${ARGN})
 
     jh_normalize_feature_defines(ARG_DEFINES ${ARG_DEFINES})
@@ -199,6 +200,28 @@ function(jh_add_stm32g474_firmware TARGET)
     if(_jh_sx126x_sources)
         set_source_files_properties(${_jh_sx126x_sources}
             PROPERTIES COMPILE_OPTIONS "-w")
+    endif()
+
+    if(ARG_RAM_CODE_SOURCES)
+        # HAL_RAM_CODE_SOURCES: their code runs from CCM SRAM.
+        include("${ARG_JH_ROOT}/cmake/jh_ram_code.cmake")
+        get_target_property(_jh_target_sources ${TARGET} SOURCES)
+        jh_ram_code_object_patterns(_jh_ram_patterns
+            RAM_SOURCES ${ARG_RAM_CODE_SOURCES} SOURCES ${_jh_target_sources})
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS
+            "${_ldscript}")
+        jh_ram_code_stm32_script(_ldscript "${_ldscript}"
+            "${CMAKE_CURRENT_BINARY_DIR}/jh_ram_code/${TARGET}/STM32G474RETx_FLASH.ld"
+            ${_jh_ram_patterns})
+        set(_jh_ram_objects "")
+        foreach(_jh_pattern IN LISTS _jh_ram_patterns)
+            string(SUBSTRING "${_jh_pattern}" 1 -1 _jh_object)
+            list(APPEND _jh_ram_objects "${_jh_object}")
+        endforeach()
+        jh_ram_code_add_map_check(TARGET ${TARGET}
+            MAP "$<TARGET_FILE_DIR:${TARGET}>/${TARGET}.map"
+            OBJECTS ${_jh_ram_objects}
+            FLASH 0x08000000 0x10000000)
     endif()
 
     target_link_options(${TARGET} PRIVATE

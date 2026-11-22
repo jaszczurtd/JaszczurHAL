@@ -89,9 +89,15 @@ if(_adapter)
     list(APPEND _sources "${_adapter}")
 endif()
 
+# HAL_RAM_CODE_SOURCES: project files whose code runs from CCM SRAM.
+include("${JH_ROOT}/cmake/jh_ram_code.cmake")
+jh_ram_code_from_project(_jh_ram_code_sources
+    BASE_DIR "${JH_PROJECT_DIR}" SOURCES ${_sources})
+
 jh_add_stm32g474_firmware(firmware
     JH_ROOT "${JH_ROOT}"
     SOURCES ${_sources}
+    RAM_CODE_SOURCES ${_jh_ram_code_sources}
     INCLUDES "${JH_PROJECT_DIR}" "${JH_BOARD_GENERATED_DIR}"
         ${JH_EXTRA_INCLUDES} ${_extra_lib_includes}
     DEFINES ${_defines}

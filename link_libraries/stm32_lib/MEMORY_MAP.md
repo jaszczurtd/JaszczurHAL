@@ -10,7 +10,7 @@ FreeRTOS backends. The authoritative source is
 |---|---:|---:|---|
 | Internal flash | `0x08000000` - `0x08080000` | 512 KB | STM32G474RE |
 | SRAM1 + SRAM2 | `0x20000000` - `0x20018000` | 96 KB | STM32G474RE |
-| CCM SRAM | `0x10000000` - `0x10008000` | 32 KB | CPU-only BSS, TLS workspace, emergency fault stack |
+| CCM SRAM | `0x10000000` - `0x10008000` | 32 KB | Code of `HAL_RAM_CODE_SOURCES`, CPU-only BSS, TLS workspace, emergency fault stack |
 
 Normal heap and application-stack allocation stays in the 96 KB SRAM window at
 `0x20000000`. CPU-only objects may use `.ccmram`; fault handling reserves a
@@ -20,6 +20,14 @@ section when TLS is disabled. Both STM32 CMake helpers keep these objects in
 ordinary SRAM when `HAL_ENABLE_TLS` is enabled, leaving CCM for TLS storage.
 The direct `0x10000000` mapping is for CPU access. The device also has a DMA
 alias at `0x20018000`; the HAL keeps it outside the normal SRAM allocation.
+
+The code of the project files in `HAL_RAM_CODE_SOURCES` runs from the start of
+CCM SRAM, in `.ccmram_code`. The firmware build then links a copy of
+`STM32G474RETx_FLASH.ld` that excludes these objects from `.text` and lists them
+in `.ccmram_code`; without the option the section stays empty. `Reset_Handler`
+copies it from its flash load address after zeroing `.ccmram_bss`. The other
+CCM sections follow it, so this code reduces the CCM space they have. A map
+check after the link stops the build if any of that code stayed in flash.
 The switch happens after Cortex-M exception entry; if the core
 cannot create even the initial exception frame on an exhausted MSP, software
 cannot guarantee capture without a larger Thread-mode PSP redesign.
@@ -97,6 +105,8 @@ Important symbols and sections:
 | `_estack` | `ORIGIN(RAM) + LENGTH(RAM)` | Initial MSP; default `0x20018000` |
 | `.data` | RAM, loaded from flash | Initialized globals copied by `Reset_Handler` |
 | `.bss` | RAM | Zeroed globals |
+| `.ccmram_code` | CCMRAM, loaded from flash | Code of `HAL_RAM_CODE_SOURCES`, copied by `Reset_Handler` |
+| `_siccmcode` / `_sccmcode` / `_eccmcode` | flash / CCMRAM | Load address and bounds of the startup copy |
 | `.ccmram_bss` | CCMRAM | CPU-only globals, zeroed before constructors |
 | `_sccmbss` / `_eccmbss` | CCMRAM | Bounds of the startup zeroing range |
 | `.noinit` | RAM | Retained across reset; used for fault handoff data |
@@ -162,6 +172,7 @@ RAM-backed sections:
 
 ```text
 .data        -> RAM, initialized from flash
+.ccmram_code -> CCMRAM, copied from flash at startup
 .bss         -> RAM
 .ccmram_bss  -> CCMRAM, zeroed at startup
 .ccmram      -> CCMRAM, initialized by its owner

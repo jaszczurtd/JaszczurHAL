@@ -3,7 +3,8 @@
 # 01 - Core system functions
 
 This example blinks the board LED, reports system diagnostics, uses software
-timers, and runs a PID controller against a simulated process. It needs only
+timers, and runs a PID controller against a simulated process. Its code runs
+from RAM through `HAL_RAM_CODE_SOURCES` in `hal_project_config.h`. It needs only
 the board LED and a debug console, with no additional hardware.
 
 The hardware-timer callback records timestamps and tick counts in a fixed
