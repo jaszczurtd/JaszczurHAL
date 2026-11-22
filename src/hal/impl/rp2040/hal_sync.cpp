@@ -66,6 +66,10 @@ void hal_mutex_lock(hal_mutex_t mutex) {
     return;
   }
 
+  // An uncontended mutex does not need a separate SMP scheduler-state lock.
+  if (xSemaphoreTake(mutex->handle, 0u) == pdTRUE) {
+    return;
+  }
   const BaseType_t scheduler_state = xTaskGetSchedulerState();
   const TickType_t wait_ticks =
       (scheduler_state == taskSCHEDULER_RUNNING) ? portMAX_DELAY : 0u;

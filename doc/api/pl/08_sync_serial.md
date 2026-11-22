@@ -210,6 +210,12 @@ void hal_serial_println(const char *s);
 int  hal_serial_available(void);   // liczba bajtów oczekujących w buforze RX
 int  hal_serial_read(void);        // odczytaj jeden bajt lub -1, gdy pusto
 
+// Opcjonalne buforowane wyjście (zob. "Diagnostyka poza kodem krytycznym czasowo")
+hal_status_t hal_serial_buffered_init(uint8_t *storage, size_t capacity);
+hal_status_t hal_serial_buffered_write(const char *data, size_t length);
+hal_status_t hal_serial_buffered_poll(size_t byte_budget, size_t *out_written);
+hal_status_t hal_serial_buffered_status(size_t *out_pending, uint32_t *out_dropped);
+
 hal_debug_rate_limit_t hal_debug_rate_limit_defaults(void);
 const hal_debug_rate_limit_t *hal_debug_get_rate_limit(void);
 
@@ -240,6 +246,62 @@ i odbioru danych w mocku.
 Rekordy odroczone z ISR są nadal celowo ograniczone przez `HAL_DEBUG_ISR_TEXT_MAX`,
 ponieważ ścieżka ISR nie może alokować, blokować ani korzystać z transportu
 szeregowego.
+
+### Diagnostyka poza kodem krytycznym czasowo
+
+`hal_debug_events.h` udostępnia kolejkę rekordów aplikacji w statycznym buforze
+właściciela. Zainicjalizuj ją przed uruchomieniem obu stron. Jeden producent
+wywołuje `hal_debug_events_publish()` z przechwyconymi wartościami i czasem
+zdarzenia. Funkcja kopiuje rekord o stałym rozmiarze bez formatowania, alokacji,
+mutexów i czekania na miejsce. Pełna kolejka odrzuca nowy rekord i zwiększa
+`hal_debug_events_dropped()`; sterowanie musi działać niezależnie od wyniku.
+Równoległym producentom przydziel osobne kolejki.
+
+Zadanie konsoli wywołuje `hal_debug_events_poll(queue, budget, callback, context)`.
+Odbiera najwyżej `budget` rekordów obecnych na wejściu. Callback formatuje rekord;
+`HAL_OK` usuwa go, inny status zachowuje do ponowienia. Budżet ogranicza liczbę
+wywołań, nie czas callbacku. Zapisuj wartości zamiast wskaźników do danych
+tymczasowych lub zmienianych przez producenta.
+
+Bufor transmisji włącza `hal_serial_buffered_init(storage, capacity)`
+(8..65535 bajtów). Dotychczasowe funkcje druku kolejkują wtedy całe komunikaty.
+Nadal formatują i biorą locki, więc wywołuj je poza producentem krytycznym.
+Rekord zajmuje długość komunikatu plus cztery bajty. Przepełnienie odrzuca cały
+nowy komunikat i zwiększa licznik `hal_serial_buffered_status()`.
+Domyślnie wyjście pozostaje synchroniczne. Przy wyłączonym buforze funkcje
+buforowane zwracają `HAL_ESTATE` bez sięgania po lock TX.
+
+Wywołuj cyklicznie `hal_serial_buffered_poll(byte_budget, &written)` z zadania
+konsoli. Funkcja próbuje zająć lock TX i przekazać portowi jeden ciągły fragment,
+bez czekania na odbiorcę. Częściowy zapis zachowuje pozycję do ponowienia.
+RP USB używa zapisu z zerowym timeoutem; osobny worker obsługuje stos USB.
+Na RP przerwanie USB budzi worker po zapisaniu zdarzenia przez TinyUSB.
+Bare-metal korzysta z przerwania programowego i okresowego timera ponowień.
+FreeRTOS używa powiadomienia zadania i ograniczonego timeoutu oczekiwania.
+Oba workery próbują przejąć mutex USB bez czekania; zajęty ponawiają później.
+ESP32-S3 przekazuje najwyżej 512 bajtów do atomowej kolejki TX sterownika
+i przy braku miejsca zmniejsza fragment o połowę, aż do jednego bajtu
+(najwyżej dziesięć wywołań z zerowym timeoutem). Pozwala to opróżniać kolejkę
+także przy mniejszym buforze sterownika zainstalowanym przez aplikację.
+`hal_serial_buffered_write()` przyjmuje gotowe bajty w całości albo wcale.
+Przy `HAL_EAGAIN` nadawca zachowuje dane do ponowienia; licznik strat nie rośnie.
+Ta funkcja zapisuje tylko do portu szeregowego. Dotychczasowe funkcje druku
+zachowują niezależne kopiowanie do konsoli sieciowej.
+
+Bufor nie gwarantuje dostarczenia każdego komunikatu. Protokoły wymagające
+dostarczenia zachowują rekord do udanego zakolejkowania. Wyłączenie lub wymiana
+bufora wymaga pustej kolejki. Asercje krytyczne omijają bufor, ponieważ następny
+poll może się nie wykonać. Sesja ramek szeregowych zachowuje jedną odpowiedź przy
+pełnym TX i wstrzymuje RX do jej zakolejkowania. Bufor musi mieć co najmniej
+`HAL_SERIAL_FRAME_LINE_MAX + 4` bajty. Osobno wywołuj poll kolejki TX. Buforowane
+odpowiedzi mają zakończenie LF i trafiają tylko do portu szeregowego. Bez bufora
+odpowiedzi idą synchronicznym transportem i czekają na lock TX jak inne wydruki.
+`hal_serial_session_tx_status()` zgłasza dane oczekujące w sesji lub wspólnym TX.
+Komenda bootloadera czeka najwyżej 500 ms na przekazanie ich portowi, a potem
+zaczyna 50 ms opóźnienia rebootu. Zatrzymany host ani ciągłe logi nie wstrzymają
+więc restartu.
+Przykład [01_core_runtime](../../../examples/01_core_runtime/README.pl.md)
+pokazuje producenta timera i konsumenta konsoli z budżetami rekordów i bajtów.
 
 <a id="logowanie-debug-odroczone-z-isr"></a>
 
@@ -554,6 +616,7 @@ void     hal_serial_session_println(hal_serial_session_t *session,
                                     const char *payload);
 hal_status_t hal_serial_session_println_ex(hal_serial_session_t *session,
                                            const char *payload);
+hal_status_t hal_serial_session_tx_status(const hal_serial_session_t *session);
 ```
 
 Format ramek jest taki sam w obu kierunkach:
@@ -587,7 +650,8 @@ Polecenia sterowane słownikiem (R1.0 + R1.6 + R1.7):
   (`reply_auth_ok` przy sukcesie, jeden z rodziny `reply_auth_failed_*` przy
   niepowodzeniu, `reply_not_ready_hello_required`, jeśli HELLO nie zostało jeszcze odebrane).
 - `cmd_reboot_bootloader` - wymaga uwierzytelnienia. Po powodzeniu wysyła
-  `reply_reboot_ok`, przez około 50 ms opróżnia bufory, a następnie przechodzi do ROM-u
+  `reply_reboot_ok`, czeka najwyżej 500 ms, aż odpowiedź i zakolejkowane wyjście
+  szeregowe trafią do portu, potem jeszcze 50 ms, a następnie przechodzi do ROM-u
   rozruchowego w trybie pamięci masowej BOOTSEL/UF2. Bez uwierzytelnienia wysyła
   `reply_not_authorized`.
 
@@ -640,6 +704,10 @@ Ograniczenie wysyłania odpowiedzi:
   dużego payloadu oraz niedozwolonych znaków ramki.
   `hal_serial_session_current_request_seq()` zwraca aktywne
   `<seq>` wyłącznie podczas obsługi tego samego żądania.
+- Przy buforowanym wyjściu odpowiedź, która się nie mieści, zostaje zachowana
+  i wysłana przez późniejsze `hal_serial_session_poll()`. Sesja przechowuje
+  jedną taką odpowiedź: druga odpowiedź w tym samym żądaniu zwraca `HAL_EAGAIN`,
+  a `hal_serial_session_println()` bez statusu ją pomija.
 
 Opcjonalna obsługa AUTH (Faza 3):
 - Cała obsługa AUTH jest dołączana do kompilacji wyłącznie po zdefiniowaniu

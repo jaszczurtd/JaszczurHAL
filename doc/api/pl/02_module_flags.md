@@ -405,6 +405,7 @@ Domyślne parametry zadań tworzonych przez HAL w integracji FreeRTOS:
 | `HAL_FREERTOS_TASK0_PRIORITY` | `tskIDLE_PRIORITY + 1` | Priorytet FreeRTOS dla `app_task0()` |
 | `HAL_FREERTOS_TASK1_PRIORITY` | `tskIDLE_PRIORITY + 1` | Priorytet FreeRTOS dla `app_task1()` |
 | `HAL_FREERTOS_HEAP_SIZE` | RP `164 * 1024`, STM32G474 `24 * 1024` | Rozmiar puli `heap_4` w bajtach; kernel czyta go z `hal_project_config.h` |
+| `HAL_FREERTOS_RAM_CODE` | `0` | Tylko natywne RP: `1` umieszcza kod zadań, kolejek, list i portu kernela w SRAM, aby ograniczyć opóźnienia cache XIP; zajmuje dodatkowy statyczny SRAM. Ustaw w `hal_project_config.h` jako `0` lub `1`; definicja bez wartości zatrzymuje konfigurację. Działa w firmware linkowanym przez projekt firmware JaszczurHAL; zainstalowany pakiet biblioteki statycznej nie przenosi zmiany skryptu linkera. |
 | `HAL_USB_FREERTOS_TASK_STACK` | `512` | Stos zadania USB rdzenia 0 RP w słowach FreeRTOS |
 | `HAL_USB_FREERTOS_TASK_PRIORITY` | `tskIDLE_PRIORITY + 2` | Priorytet zadania USB rdzenia 0 RP |
 

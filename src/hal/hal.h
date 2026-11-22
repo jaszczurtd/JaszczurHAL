@@ -88,6 +88,7 @@
 #endif
 #include "hal/control/hal_pid_controller.h"
 #include "hal/core/hal_status.h"
+#include "hal/debug/hal_debug_events.h"
 #include "hal/serial/hal_serial.h"
 #include "hal/serial/hal_serial_session.h"
 #ifdef HAL_ENABLE_SERIAL_COMMANDS

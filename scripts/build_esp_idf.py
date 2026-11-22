@@ -1266,6 +1266,10 @@ def resolve_build_model(
         component_dependencies,
         private_component_dependencies,
     ) = resolve_component_build_inputs(resolved_features, feature_model)
+    # Classic serial uses UART even when the optional HAL UART API is disabled.
+    if (target_descriptor["id"] == "esp32" and
+            "esp_driver_uart" not in private_component_dependencies):
+        private_component_dependencies.append("esp_driver_uart")
     # The header defines its own features; a required feature it leaves out
     # reaches the compiler as a definition, like the variant's definitions.
     header_features = {macro.name for macro in build.config.features()}

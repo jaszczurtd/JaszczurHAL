@@ -23,6 +23,14 @@ bool jh_adc_scan_completed(hal_adc_scan_block_t *block);
 /* Newest sample at the given frame position. */
 hal_status_t jh_adc_scan_latest(uint8_t position, uint16_t *raw);
 
+/* Called after the backend has published all completion metadata. */
+static inline void jh_adc_scan_notify(const hal_adc_scan_config_t *config,
+                                      bool from_isr) {
+  if (config->notify != NULL) {
+    config->notify(config->notify_user, from_isr);
+  }
+}
+
 /* Describe a completed half for the facade; the same shape on every backend. */
 static inline void
 jh_adc_scan_describe(hal_adc_scan_block_t *block, const uint16_t *samples,

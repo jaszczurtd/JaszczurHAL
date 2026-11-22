@@ -14,6 +14,9 @@ static unsigned char s_mock_rx_buf[HAL_DEBUG_BUF_SIZE] = {};
 static int s_mock_rx_len = 0;
 static int s_mock_rx_pos = 0;
 static bool s_capture_debug = false;
+static size_t s_tx_limit = SIZE_MAX;
+static void (*s_write_hook)(void *user) = NULL;
+static void *s_write_hook_user = NULL;
 
 static void mock_capture_clear(char *dst, size_t dst_size) {
   if (dst_size > 0u) {
@@ -56,6 +59,9 @@ void jh_serial_port_write(const char *data, size_t len) {
   if (data == NULL || len == 0u) {
     return;
   }
+  if (s_write_hook != NULL) {
+    s_write_hook(s_write_hook_user);
+  }
 
   (void)fwrite(data, 1u, len, stdout);
   mock_capture_append(s_last_serial_line, sizeof(s_last_serial_line), data,
@@ -65,10 +71,37 @@ void jh_serial_port_write(const char *data, size_t len) {
   }
 }
 
-size_t jh_serial_port_finish_line(char line_ending[2]) {
+void hal_mock_serial_set_tx_limit(size_t limit) { s_tx_limit = limit; }
+
+void hal_mock_serial_set_write_hook(void (*hook)(void *user), void *user) {
+  s_write_hook = hook;
+  s_write_hook_user = user;
+}
+
+hal_status_t jh_serial_port_try_write(const char *data, size_t len,
+                                      size_t *written) {
+  if (written == NULL || (data == NULL && len != 0u)) {
+    return HAL_EINVAL;
+  }
+  *written = len < s_tx_limit ? len : s_tx_limit;
+  mock_capture_append(s_last_serial_line, sizeof(s_last_serial_line), data,
+                      *written);
+  if (s_capture_debug) {
+    mock_capture_append(s_last_deb_line, sizeof(s_last_deb_line), data,
+                        *written);
+  }
+  return *written == len ? HAL_OK : HAL_EAGAIN;
+}
+
+size_t jh_serial_port_line_ending(char line_ending[2]) {
   line_ending[0] = '\n';
-  (void)fputc('\n', stdout);
   return 1u;
+}
+
+size_t jh_serial_port_finish_line(char line_ending[2]) {
+  const size_t count = jh_serial_port_line_ending(line_ending);
+  (void)fputc('\n', stdout);
+  return count;
 }
 
 void jh_serial_port_flush(void) {}
@@ -87,6 +120,9 @@ const char *hal_mock_serial_last_line(void) { return s_last_serial_line; }
 const char *hal_mock_deb_last_line(void) { return s_last_deb_line; }
 
 void hal_mock_serial_reset(void) {
+  s_tx_limit = SIZE_MAX;
+  s_write_hook = NULL;
+  s_write_hook_user = NULL;
   mock_capture_clear(s_last_serial_line, sizeof(s_last_serial_line));
   mock_capture_clear(s_last_deb_line, sizeof(s_last_deb_line));
   s_mock_rx_pos = 0;

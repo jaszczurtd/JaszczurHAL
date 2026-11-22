@@ -6,6 +6,11 @@ Przykład pokazuje miganie diodą, diagnostykę urządzenia, timery programowe
 oraz regulację PID na symulowanym obiekcie. Nie wymaga dodatkowego sprzętu:
 korzysta z diody na płytce i konsoli diagnostycznej.
 
+Callback timera sprzętowego zapisuje czas i liczbę ticków w kolejce zdarzeń.
+`app_task0()` formatuje rekordy i opróżnia statyczny bufor TX z budżetem bajtów.
+Zatrzymana konsola może stracić rekordy diagnostyczne, co pokazuje licznik
+w logu; timer nadal działa bez czekania na transmisję.
+
 
 Wariant `CAPTURE` mierzy okresowy sygnał, korzystając ze sprzętowych
 znaczników czasu. Włącza `HAL_ENABLE_PULSE_CAPTURE` i wymaga zewnętrznego

@@ -11,6 +11,7 @@
 #include "hal/system/jh_board_runtime.h"
 #include "hal/usb/hal_usb.h"
 
+#include <hardware/irq.h>
 #include <pico/bootrom.h>
 #include <pico/time.h>
 #include <tusb.h>
@@ -18,8 +19,6 @@
 #if defined(HAL_ENABLE_FREERTOS) && defined(__FREERTOS)
 #include <FreeRTOS.h>
 #include <task.h>
-#else
-#include <hardware/irq.h>
 #endif
 #include <pico/multicore.h>
 
@@ -51,6 +50,7 @@ hal_mutex_t s_usb_mutex;
 #if JH_RP_USB_FREERTOS
 TaskHandle_t s_worker_task;
 volatile bool s_worker_stop;
+volatile bool s_worker_ready;
 #else
 repeating_timer_t s_task_timer;
 bool s_task_timer_active;
@@ -73,9 +73,13 @@ uintptr_t flash_owner_token() {
 
 class UsbLock {
 public:
-  UsbLock() : mutex_(usb_mutex()) {
+  explicit UsbLock(bool wait = true) : mutex_(usb_mutex()) {
     if (mutex_ != nullptr) {
-      hal_mutex_lock(mutex_);
+      if (wait) {
+        hal_mutex_lock(mutex_);
+      } else if (!hal_mutex_try_lock(mutex_)) {
+        mutex_ = nullptr;
+      }
     }
   }
 
@@ -103,10 +107,16 @@ void usb_worker_irq(void) {
   hal_mutex_unlock(mutex);
 }
 
-bool usb_task_timer(repeating_timer_t *) {
+void usb_queue_worker(void) {
   const int worker_irq = HAL_ATOMIC_LOAD(&s_worker_irq, HAL_ATOMIC_ACQUIRE);
   if (HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE) && worker_irq >= 0) {
     irq_set_pending((uint)worker_irq);
+  }
+}
+
+bool usb_task_timer(repeating_timer_t *) {
+  if (HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE)) {
+    usb_queue_worker();
     return true;
   }
   return false;
@@ -125,7 +135,23 @@ void usb_task_locked(void) {
 }
 
 #if JH_RP_USB_FREERTOS
+// Runs after TinyUSB has queued the controller's completions. The task owns
+// stack processing; no USB mutex or formatting belongs in this interrupt.
+void usb_queue_worker(void) {
+  TaskHandle_t worker = HAL_ATOMIC_LOAD(&s_worker_task, HAL_ATOMIC_ACQUIRE);
+  if (HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE) &&
+      worker != nullptr &&
+      HAL_ATOMIC_LOAD(&s_worker_ready, HAL_ATOMIC_ACQUIRE)) {
+    BaseType_t woken = pdFALSE;
+    vTaskNotifyGiveFromISR(worker, &woken);
+    portYIELD_FROM_ISR(woken);
+  }
+}
+
 void usb_worker_task(void *) {
+  // Scheduler-state queries take a task critical section in SMP and cannot
+  // run in the USB ISR. Publish readiness only after this task has started.
+  HAL_ATOMIC_STORE(&s_worker_ready, true, HAL_ATOMIC_RELEASE);
   TickType_t delay_ticks =
       pdMS_TO_TICKS((HAL_USB_TASK_INTERVAL_US + 999u) / 1000u);
   if (delay_ticks == 0u) {
@@ -134,16 +160,19 @@ void usb_worker_task(void *) {
 
   while (!HAL_ATOMIC_LOAD(&s_worker_stop, HAL_ATOMIC_ACQUIRE)) {
     hal_mutex_t mutex = usb_mutex();
-    if (mutex != nullptr) {
-      hal_mutex_lock(mutex);
+    if (mutex != nullptr && hal_mutex_try_lock(mutex)) {
       if (HAL_ATOMIC_LOAD(&s_initialized, HAL_ATOMIC_ACQUIRE)) {
         usb_task_locked();
       }
       hal_mutex_unlock(mutex);
     }
-    vTaskDelay(delay_ticks);
+    // The timeout retries a busy USB lock and services work queued outside
+    // the IRQ. Packet completions wake us immediately, including a wake
+    // that arrives between stack processing and this wait.
+    (void)ulTaskNotifyTake(pdTRUE, delay_ticks);
   }
 
+  HAL_ATOMIC_STORE(&s_worker_ready, false, HAL_ATOMIC_RELEASE);
   HAL_ATOMIC_STORE(&s_worker_task, nullptr, HAL_ATOMIC_RELEASE);
   vTaskDelete(nullptr);
 }
@@ -187,6 +216,7 @@ hal_status_t hal_usb_init(void) {
   }
 
 #if JH_RP_USB_FREERTOS
+  HAL_ATOMIC_STORE(&s_worker_ready, false, HAL_ATOMIC_RELEASE);
   HAL_ATOMIC_STORE(&s_worker_stop, false, HAL_ATOMIC_RELEASE);
   HAL_ATOMIC_STORE(&s_initialized, true, HAL_ATOMIC_RELEASE);
   TaskHandle_t worker = nullptr;
@@ -208,6 +238,8 @@ hal_status_t hal_usb_init(void) {
     return HAL_ENOMEM;
   }
   HAL_ATOMIC_STORE(&s_worker_task, worker, HAL_ATOMIC_RELEASE);
+  irq_add_shared_handler(USBCTRL_IRQ, usb_queue_worker,
+                         PICO_SHARED_IRQ_HANDLER_LOWEST_ORDER_PRIORITY);
 #else
   s_worker_irq = user_irq_claim_unused(false);
   if (s_worker_irq < 0) {
@@ -219,10 +251,16 @@ hal_status_t hal_usb_init(void) {
   irq_set_enabled((uint)s_worker_irq, true);
 
   HAL_ATOMIC_STORE(&s_initialized, true, HAL_ATOMIC_RELEASE);
+  // TinyUSB queues completions in its shared USB handler. Wake the worker
+  // afterwards so CDC can submit the next packet without a 1 ms timer wait.
+  // The timer still retries work when the nonblocking worker finds USB busy.
+  irq_add_shared_handler(USBCTRL_IRQ, usb_queue_worker,
+                         PICO_SHARED_IRQ_HANDLER_LOWEST_ORDER_PRIORITY);
   s_task_timer_active = add_repeating_timer_us(
       HAL_USB_TASK_INTERVAL_US, usb_task_timer, nullptr, &s_task_timer);
   if (!s_task_timer_active) {
     HAL_ATOMIC_STORE(&s_initialized, false, HAL_ATOMIC_RELEASE);
+    irq_remove_handler(USBCTRL_IRQ, usb_queue_worker);
     irq_set_enabled((uint)s_worker_irq, false);
     irq_remove_handler((uint)s_worker_irq, usb_worker_irq);
     user_irq_unclaim((uint)s_worker_irq);
@@ -253,6 +291,7 @@ hal_status_t hal_usb_deinit(void) {
   }
   HAL_ATOMIC_STORE(&s_worker_stop, true, HAL_ATOMIC_RELEASE);
   HAL_ATOMIC_STORE(&s_initialized, false, HAL_ATOMIC_RELEASE);
+  irq_remove_handler(USBCTRL_IRQ, usb_queue_worker);
   if (worker != nullptr) {
     if (xTaskGetSchedulerState() == taskSCHEDULER_RUNNING) {
       while (HAL_ATOMIC_LOAD(&s_worker_task, HAL_ATOMIC_ACQUIRE) != nullptr) {
@@ -265,6 +304,7 @@ hal_status_t hal_usb_deinit(void) {
   }
 #else
   HAL_ATOMIC_STORE(&s_initialized, false, HAL_ATOMIC_RELEASE);
+  irq_remove_handler(USBCTRL_IRQ, usb_queue_worker);
   if (s_worker_irq >= 0) {
     irq_set_enabled((uint)s_worker_irq, false);
   }
@@ -382,11 +422,13 @@ hal_status_t hal_usb_cdc_write(const uint8_t *data, size_t length,
     return HAL_OK;
   }
 
-  HAL_USB_LOCK_GUARD(lock);
+  UsbLock lock(timeout_ms != 0u);
   if (!HAL_USB_LOCK_OK(lock)) {
     return HAL_EBUSY;
   }
-  usb_task_locked();
+  if (timeout_ms != 0u) {
+    usb_task_locked();
+  }
   if (!usb_connected_locked()) {
     return HAL_EAGAIN;
   }
@@ -399,7 +441,9 @@ hal_status_t hal_usb_cdc_write(const uint8_t *data, size_t length,
   const uint64_t timeout_us = (uint64_t)timeout_ms * 1000u;
 
   while (written_total < length) {
-    usb_task_locked();
+    if (timeout_ms != 0u) {
+      usb_task_locked();
+    }
     if (!usb_connected_locked()) {
       break;
     }
@@ -411,10 +455,15 @@ hal_status_t hal_usb_cdc_write(const uint8_t *data, size_t length,
     if (chunk != 0u) {
       const uint32_t written = tud_cdc_write(data + written_total, chunk);
       (void)tud_cdc_write_flush();
-      usb_task_locked();
+      if (timeout_ms != 0u) {
+        usb_task_locked();
+      }
       if (written != 0u) {
         written_total += written;
         last_progress_us = time_us_64();
+        if (timeout_ms == 0u) {
+          break;
+        }
         continue;
       }
     } else {
@@ -439,11 +488,13 @@ hal_status_t hal_usb_cdc_flush(uint32_t timeout_ms) {
     return HAL_EUNINIT;
   }
 
-  HAL_USB_LOCK_GUARD(lock);
+  UsbLock lock(timeout_ms != 0u);
   if (!HAL_USB_LOCK_OK(lock)) {
     return HAL_EBUSY;
   }
-  usb_task_locked();
+  if (timeout_ms != 0u) {
+    usb_task_locked();
+  }
   if (!usb_connected_locked()) {
     return HAL_EAGAIN;
   }
@@ -451,7 +502,9 @@ hal_status_t hal_usb_cdc_flush(uint32_t timeout_ms) {
   const uint64_t start_us = time_us_64();
   const uint64_t timeout_us = (uint64_t)timeout_ms * 1000u;
   for (;;) {
-    usb_task_locked();
+    if (timeout_ms != 0u) {
+      usb_task_locked();
+    }
     if (!usb_connected_locked()) {
       return HAL_EAGAIN;
     }

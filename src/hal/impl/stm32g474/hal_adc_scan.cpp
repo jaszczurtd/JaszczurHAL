@@ -87,6 +87,7 @@ void complete_block(uint8_t index, uint32_t finished) {
   s.completed_us = hal_micros();
   s.completed = index;
   s.sequence = s.sequence + finished;
+  jh_adc_scan_notify(&s.config, true);
 }
 
 // Which half the circular channel is filling right now: CNDTR counts down

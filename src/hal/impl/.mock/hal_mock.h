@@ -382,6 +382,14 @@ void hal_mock_fault_diagnostics_reset(void);
 const char *hal_mock_serial_last_line(void);
 const char *hal_mock_deb_last_line(void);
 void hal_mock_serial_reset(void);
+/** @brief Limit bytes accepted by one buffered-output poll; zero simulates
+ * a stalled receiver. SIZE_MAX restores unlimited writes. Reset also restores
+ * that default. Does not affect the legacy synchronous transport. */
+void hal_mock_serial_set_tx_limit(size_t limit);
+/** @brief Call @p hook with @p user at the start of each synchronous serial
+ * write, while the caller holds the serial TX lock. NULL removes the hook;
+ * hal_mock_serial_reset() removes it too. Lets tests hold that lock. */
+void hal_mock_serial_set_write_hook(void (*hook)(void *user), void *user);
 void hal_mock_serial_inject_rx(const char *data, int len);
 
 // ── USB CDC ─────────────────────────────────────────────────────────────────

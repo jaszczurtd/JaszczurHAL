@@ -75,15 +75,21 @@ hal_status_t hal_usb_cdc_read(uint8_t *data, size_t capacity, size_t *out_read);
  * @brief Write bytes to CDC with bounded backpressure handling.
  *
  * @param timeout_ms Maximum time without transmit progress. Zero performs one
- *        nonblocking attempt.
+ *        nonblocking attempt without pumping the stack. The USB worker or
+ *        hal_usb_task() supplies progress independently.
  * @return HAL_OK when every byte was accepted, HAL_EAGAIN when disconnected,
- *         HAL_ETIMEOUT after partial/no progress, or another status on failure.
+ *         HAL_ETIMEOUT after partial/no progress, HAL_EBUSY when the
+ * zero-timeout attempt cannot acquire the USB mutex, or another status on
+ * failure.
  */
 hal_status_t hal_usb_cdc_write(const uint8_t *data, size_t length,
                                uint32_t timeout_ms, size_t *out_written);
 
 /**
  * @brief Flush queued CDC data while continuing to pump the USB device.
+ * @param timeout_ms Maximum wait [ms]. Zero only tries the lock and submits
+ * queued data once, without pumping the stack or waiting for the receiver.
+ * @return HAL_OK, HAL_EBUSY, HAL_ETIMEOUT, or a USB state error.
  */
 hal_status_t hal_usb_cdc_flush(uint32_t timeout_ms);
 

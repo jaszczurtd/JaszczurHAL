@@ -6,6 +6,7 @@
 #include "hal/system/hal_sync.h"
 #include "hal/timers/hal_timer.h"
 #include "hardware/timer.h"
+#include <hardware/sync.h>
 #include <new>
 #include <pico/time.h>
 
@@ -254,6 +255,10 @@ hal_alarm_id_t hal_timer_pool_add_alarm_us_ex(
   }
 
   rp_alarm_dispatch_s *dispatch = resolve_dispatch(pool);
+  // The SDK pends the pool IRQ before returning the allocated ID. On this
+  // core a short alarm must not preempt its publisher and retry every 1 us.
+  // Other-core pools retain the publication handshake in the dispatcher.
+  const uint32_t saved_irq = save_and_disable_interrupts();
   HAL_ATOMIC_ADD_FETCH(&dispatch->publishing, 1u, HAL_ATOMIC_SEQ_CST);
   alarm_id_t id = alarm_pool_add_alarm_in_us(
       target_pool, delay_us, timer_dispatch_callback, dispatch, fire_if_past);
@@ -262,6 +267,7 @@ hal_alarm_id_t hal_timer_pool_add_alarm_us_ex(
     if (!dispatch || index < 0 || (uint16_t)index >= dispatch->entry_count) {
       (void)alarm_pool_cancel_alarm(target_pool, id);
       HAL_ATOMIC_SUB_FETCH(&dispatch->publishing, 1u, HAL_ATOMIC_SEQ_CST);
+      restore_interrupts(saved_irq);
       timer_store_result(out_result, HAL_TIMER_ERR_INTERNAL);
       return HAL_ALARM_INVALID;
     }
@@ -277,11 +283,13 @@ hal_alarm_id_t hal_timer_pool_add_alarm_us_ex(
                      HAL_ATOMIC_RELEASE);
     HAL_ATOMIC_STORE(&entry.active_id, (hal_alarm_id_t)id, HAL_ATOMIC_RELEASE);
     HAL_ATOMIC_SUB_FETCH(&dispatch->publishing, 1u, HAL_ATOMIC_SEQ_CST);
+    restore_interrupts(saved_irq);
     timer_store_result(out_result, HAL_TIMER_OK);
     return (hal_alarm_id_t)id;
   }
 
   HAL_ATOMIC_SUB_FETCH(&dispatch->publishing, 1u, HAL_ATOMIC_SEQ_CST);
+  restore_interrupts(saved_irq);
 
   if (id == 0) {
     timer_store_result(out_result, HAL_TIMER_ERR_TIME_PASSED);

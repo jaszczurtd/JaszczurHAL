@@ -55,6 +55,8 @@ ascending order whatever the configured order, STM32G474 and ESP32-S3 keep
 the configured order. `hal_adc_scan_frame_period_ns()` is the time between two
 samples of one pin as the converter actually runs; backends round the
 requested conversion period up to what they can do.
+The period getter reads an atomic snapshot without taking the scan mutex;
+it returns zero after the scan stops.
 
 `hal_adc_scan_take()` hands out the newest completed block once and returns
 `HAL_EAGAIN` until the next one completes. The block stays valid until the
@@ -84,6 +86,15 @@ pause, but the ring never writes past its buffer. The scan takes four DMA
 channels. On STM32G474 the circular DMA channel keeps the ring going the same
 way; a late interrupt with both half-transfer flags pending publishes the half
 the channel is not filling.
+
+The optional `notify(notify_user, from_isr)` hook runs after completion
+metadata is published. Use it only for a nonblocking task notification;
+choose the ISR-safe API when `from_isr` is true. Do not call scan APIs, take
+locks, format output or process samples in this hook. Its context must remain
+alive until stop returns. RP and STM32 call it from the DMA interrupt; ESP32
+calls it while a task collects the stream, so it does not replace polling
+on ESP32. The mock calls it from the completion caller. A notification does
+not extend the completed buffer's lifetime or queue skipped blocks.
 
 ## Ownership
 

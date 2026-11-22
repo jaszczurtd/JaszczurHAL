@@ -54,11 +54,21 @@ void jh_serial_port_write(const char *data, size_t len) {
                                       jh_tx_timeout_ms(), &written));
 }
 
-size_t jh_serial_port_finish_line(char line_ending[2]) {
+hal_status_t jh_serial_port_try_write(const char *data, size_t len,
+                                      size_t *written) {
+  return hal_usb_cdc_write((const uint8_t *)data, len, 0u, written);
+}
+
+size_t jh_serial_port_line_ending(char line_ending[2]) {
   line_ending[0] = '\r';
   line_ending[1] = '\n';
-  jh_serial_port_write(line_ending, 2u);
   return 2u;
+}
+
+size_t jh_serial_port_finish_line(char line_ending[2]) {
+  const size_t count = jh_serial_port_line_ending(line_ending);
+  jh_serial_port_write(line_ending, count);
+  return count;
 }
 
 void jh_serial_port_flush(void) {

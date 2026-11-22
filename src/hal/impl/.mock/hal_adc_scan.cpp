@@ -96,6 +96,7 @@ hal_status_t hal_mock_adc_scan_complete(const uint16_t *samples,
   s.completed = s.next;
   s.next = (uint8_t)(1u - s.next);
   ++s.sequence;
+  jh_adc_scan_notify(&s.config, false);
   return HAL_OK;
 }
 

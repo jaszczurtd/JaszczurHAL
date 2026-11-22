@@ -4,6 +4,7 @@
 // channel is not filling, so a late interrupt never hands out the half being
 // overwritten.
 
+#include "adc_scan_notification.h"
 #include "hal/analog/jh_adc_scan_backend.h"
 #include "hal/impl/stm32g474/port/stm32g474_regs.h"
 #include "hal/impl/stm32g474/stm32g474_adc_shared.h"
@@ -220,8 +221,19 @@ void test_latest_follows_the_transfer_count_not_the_interrupt(void) {
   TEST_ASSERT_FALSE(s_reader(0x11u, &raw));
 }
 
+static void feed_notification_block(void) {
+  dma_at(BLOCK);
+  interrupt(DMA_FLAG_HTIF(CHANNEL));
+}
+
+static void test_completion_wakes_the_current_consumer(void) {
+  hal_adc_scan_config_t cfg = config();
+  adc_scan_notification_case(&cfg, feed_notification_block, true);
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_completion_wakes_the_current_consumer);
   RUN_TEST(test_start_programs_a_circular_ring_and_stop_releases_it);
   RUN_TEST(test_each_flag_publishes_its_half_and_clears_itself);
   RUN_TEST(test_both_flags_pending_publish_the_half_not_being_written);

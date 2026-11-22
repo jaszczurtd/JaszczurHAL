@@ -18,6 +18,7 @@
 
 #include "hal/core/hal_config.h"
 #include "hal/core/hal_status.h"
+#include "hal/serial/hal_serial_frame.h"
 #include "hal/serial/hal_serial_session_vocabulary.h"
 #include "hal/system/hal_system.h"
 #ifdef HAL_ENABLE_CRYPTO
@@ -77,6 +78,10 @@ typedef struct {
   void *unknown_user;
   bool in_request;
   uint16_t request_seq;
+  uint16_t reply_length;
+  char reply[HAL_SERIAL_FRAME_LINE_MAX];
+  bool reboot_pending;
+  uint32_t reboot_started_ms;
   const hal_serial_session_vocabulary_t *vocab;
 #ifdef HAL_ENABLE_CRYPTO
   uint8_t uid_bytes[HAL_DEVICE_UID_BYTES];
@@ -181,11 +186,30 @@ bool hal_serial_session_should_mute_debug_for_line(const char *line);
 void hal_serial_session_println(hal_serial_session_t *session,
                                 const char *payload);
 
-/** @brief Status-first form of @ref hal_serial_session_println. */
+/**
+ * @brief Accept one reply for transmission, retaining it during TX
+ * backpressure.
+ *
+ * Returns HAL_OK once accepted by the session, HAL_EAGAIN if an earlier reply
+ * is still retained, or a validation/transport error. Call poll regularly to
+ * retry a retained reply. A buffered serial transport must hold at least
+ * HAL_SERIAL_FRAME_LINE_MAX + 4 bytes. Buffered replies use LF termination.
+ */
 hal_status_t hal_serial_session_println_ex(hal_serial_session_t *session,
                                            const char *payload);
 
-/** @brief Consume and dispatch every currently available serial frame. */
+/**
+ * @brief Report whether the session and shared serial TX queue are empty.
+ * @param session Initialized session; NULL returns HAL_EINVAL.
+ * @return HAL_OK when empty, HAL_EAGAIN while data remains, or a lock error.
+ * This does not prove that bytes accepted by the port reached the peer.
+ */
+hal_status_t hal_serial_session_tx_status(const hal_serial_session_t *session);
+
+/**
+ * @brief Retry a retained reply, then dispatch available serial frames.
+ * RX pauses while a reply is retained. Buffered TX must be polled separately.
+ */
 void hal_serial_session_poll(hal_serial_session_t *session);
 
 #ifdef __cplusplus

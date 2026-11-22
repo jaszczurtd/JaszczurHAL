@@ -49,6 +49,18 @@ extern "C" {
  */
 typedef uint32_t (*hal_adc_scan_marker_fn)(void *user);
 
+/**
+ * @brief Notify a consumer after publishing a completed block.
+ * @param user Opaque pointer from the configuration.
+ * @param from_isr True in an interrupt (RP, STM32), false in a collecting
+ * task (ESP32) or the mock completion caller.
+ * @note Only a nonblocking notification is allowed. Do not call scan APIs,
+ * take locks, format output or access the buffer here. The consumer must
+ * take/copy the block before the next completion. ESP32 collects blocks
+ * during take/latest; this hook does not start an ESP32 collection task.
+ */
+typedef void (*hal_adc_scan_notify_fn)(void *user, bool from_isr);
+
 /** @brief Scan configuration, copied by the driver at start. */
 typedef struct {
   uint8_t pins[HAL_ADC_SCAN_MAX_PINS]; /**< Distinct ADC-capable HAL pins, or
@@ -68,6 +80,8 @@ typedef struct {
                                     HAL_ADC_SCAN_MAX_BLOCK_SAMPLES. */
   hal_adc_scan_marker_fn marker; /**< Optional completion hook; NULL skips. */
   void *marker_user;             /**< Passed to the hook. */
+  hal_adc_scan_notify_fn notify; /**< Optional notification; NULL skips. */
+  void *notify_user;             /**< Alive until stop returns. */
 } hal_adc_scan_config_t;
 
 /** @brief One completed block. Frame-major: the sample of the pin at frame
@@ -129,6 +143,7 @@ hal_status_t hal_adc_scan_latest(uint8_t pin, uint16_t *raw);
 /**
  * @brief Time between consecutive frames, i.e. between two samples of the
  * same pin, in nanoseconds, as the converter actually runs.
+ * @note Reads the published period without acquiring the scan mutex.
  * @return 0 when not running.
  */
 uint32_t hal_adc_scan_frame_period_ns(void);

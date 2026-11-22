@@ -6,6 +6,11 @@ This example blinks the board LED, reports system diagnostics, uses software
 timers, and runs a PID controller against a simulated process. It needs only
 the board LED and a debug console, with no additional hardware.
 
+The hardware-timer callback records timestamps and tick counts in a fixed
+event queue. `app_task0()` formats these records and drains a static TX buffer
+with a byte budget. A stalled console can lose diagnostic records, counted
+in the log, while the timer keeps running without waiting for transmission.
+
 
 The `CAPTURE` variant measures a periodic signal using hardware timestamps.
 It enables `HAL_ENABLE_PULSE_CAPTURE` and needs an external digital source

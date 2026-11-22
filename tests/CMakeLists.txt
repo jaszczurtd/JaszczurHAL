@@ -431,6 +431,7 @@ add_test(NAME test_rp2040_adc_shared COMMAND test_rp2040_adc_shared)
 # reader against every interleaving the DMA can produce.
 add_executable(test_rp_adc_scan_backend
     test_rp_adc_scan_backend.cpp
+    adc_scan_notification.c
     fakes/host_sync/hal_sync_host.cpp
     fakes/rp2040_adc_sdk/rp2040_dma_fake.cpp
     ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/hal_adc_scan.cpp
@@ -445,6 +446,30 @@ target_compile_definitions(test_rp_adc_scan_backend PRIVATE
 jh_enable_host_warnings(test_rp_adc_scan_backend ERRORS)
 target_link_libraries(test_rp_adc_scan_backend PRIVATE Threads::Threads)
 add_test(NAME test_rp_adc_scan_backend COMMAND test_rp_adc_scan_backend)
+
+# The pool IRQ can run before the SDK returns an alarm's allocated ID.
+add_executable(test_rp_timer_publication test_rp_timer_publication.c
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/hal_timer.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_rp_timer_publication PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/rp_timer_sdk ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_rp_timer_publication PRIVATE
+    HAL_TARGET_RP2040=1 HAL_BOARD_PROFILE_RP_PICO=1
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_rp_timer_publication ERRORS)
+add_test(NAME test_rp_timer_publication COMMAND test_rp_timer_publication)
+add_executable(test_rp_sync_rtos test_rp_sync_rtos.c
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/hal_sync.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_rp_sync_rtos PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/rp_sync_rtos
+    ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/freertos
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/rp_timer_sdk ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_rp_sync_rtos PRIVATE
+    HAL_TARGET_RP2040=1 HAL_BOARD_PROFILE_RP_PICO=1 HAL_ENABLE_FREERTOS __FREERTOS
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_rp_sync_rtos ERRORS)
+add_test(NAME test_rp_sync_rtos COMMAND test_rp_sync_rtos)
 
 # The flash safe zone's DMA rule on the same simulated registers.
 add_executable(test_rp_flash_dma_guard
@@ -538,6 +563,17 @@ endforeach()
 # The RP debug serial port on a fake hal_usb CDC: a host holding DTR without
 # reading costs one bounded write timeout, then debug writes drop until the
 # host drains data or releases DTR.
+add_executable(test_esp32_serial_tx
+    test_esp32_serial_tx.c
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_esp32_serial_tx PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/fakes/esp_serial
+    ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_esp32_serial_tx PRIVATE
+    HAL_TARGET_MOCK=1 HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_esp32_serial_tx ERRORS)
+add_test(NAME test_esp32_serial_tx COMMAND test_esp32_serial_tx)
+
 add_executable(test_rp_serial_cdc_congestion
     test_rp_serial_cdc_congestion.cpp
     ${CMAKE_SOURCE_DIR}/src/hal/impl/rp2040/hal_serial.cpp
@@ -587,6 +623,29 @@ target_compile_definitions(test_spsc_ring PRIVATE
 jh_enable_host_warnings(test_spsc_ring ERRORS)
 target_link_libraries(test_spsc_ring PRIVATE Threads::Threads)
 add_test(NAME test_spsc_ring COMMAND test_spsc_ring)
+
+add_executable(test_debug_events
+    test_debug_events.c
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_debug_events PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_debug_events PRIVATE
+    HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_debug_events ERRORS)
+add_test(NAME test_debug_events COMMAND test_debug_events)
+
+add_executable(test_hal_serial_buffered test_hal_serial_buffered.c
+    support/serial_mock_c.cpp)
+target_link_libraries(test_hal_serial_buffered PRIVATE hal_mock)
+add_test(NAME test_hal_serial_buffered COMMAND test_hal_serial_buffered)
+
+# Initialization in the portable example must survive HAL_DISABLE_ASSERTS.
+add_executable(test_core_runtime_noassert test_core_runtime_noassert.c
+    support/serial_mock_c.cpp
+    ${CMAKE_SOURCE_DIR}/src/hal/control/hal_pid_controller.cpp)
+target_compile_definitions(test_core_runtime_noassert PRIVATE HAL_DISABLE_ASSERTS)
+target_link_libraries(test_core_runtime_noassert PRIVATE hal_mock)
+jh_enable_host_warnings(test_core_runtime_noassert ERRORS)
+add_test(NAME test_core_runtime_noassert COMMAND test_core_runtime_noassert)
 
 add_executable(test_jh_spi_ticket
     test_jh_spi_ticket.cpp
@@ -668,6 +727,7 @@ endforeach()
 # late. JH_STM32G474_HW selects the register-level code paths on the host.
 add_executable(test_stm32_adc_scan_backend
     test_stm32_adc_scan_backend.cpp
+    adc_scan_notification.c
     fakes/host_sync/hal_sync_host.cpp
     fakes/stm32g474_regs/jh_stm32g474_host_regs.cpp
     ${CMAKE_SOURCE_DIR}/src/hal/impl/stm32g474/hal_adc_scan.cpp
@@ -2720,6 +2780,7 @@ add_test(NAME test_esp32_backend_lifecycle COMMAND test_esp32_backend_lifecycle)
 # that stays fresh without anyone taking blocks.
 add_executable(test_esp32_adc_scan_backend
     test_esp32_adc_scan_backend.cpp
+    adc_scan_notification.c
     fakes/esp_idf/esp_idf_fake.cpp
     fakes/host_sync/hal_sync_host.cpp
     ${_esp32_backend_dir}/hal_adc_scan.cpp
@@ -2768,6 +2829,15 @@ add_hal_test(test_hal_digipot)
 add_hal_test(test_hal_pga2311)
 add_hal_test(test_hal_pcnt)
 add_hal_test(test_hal_adc_scan)
+target_sources(test_hal_adc_scan PRIVATE adc_scan_notification.c)
+add_executable(test_adc_scan_metadata test_adc_scan_metadata.c
+    ${CMAKE_SOURCE_DIR}/src/hal/analog/hal_adc_scan.cpp
+    ${CMAKE_SOURCE_DIR}/src/utils/unity.c)
+target_include_directories(test_adc_scan_metadata PRIVATE ${CMAKE_SOURCE_DIR}/src)
+target_compile_definitions(test_adc_scan_metadata PRIVATE
+    HAL_TARGET_MOCK=1 HAL_ENABLE_ADC_SCAN HAL_ENABLE_UNITY UNITY_INCLUDE_CONFIG_H)
+jh_enable_host_warnings(test_adc_scan_metadata ERRORS)
+add_test(NAME test_adc_scan_metadata COMMAND test_adc_scan_metadata)
 add_hal_test(test_adc_scan_ring)
 add_hal_test(test_hal_pulse_capture)
 add_hal_test(test_hal_pulse_capture_lifecycle)
@@ -2850,6 +2920,7 @@ endforeach()
 add_hal_test(test_hal_serial)
 add_hal_test(test_hal_sc_auth)
 add_hal_test(test_hal_serial_session)
+target_link_libraries(test_hal_serial_session PRIVATE Threads::Threads)
 add_hal_test(test_hal_serial_commands)
 add_hal_test(test_hal_serial_session_vocabulary)
 add_hal_test(test_jh_security_primitives)

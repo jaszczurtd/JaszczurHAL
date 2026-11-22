@@ -90,7 +90,7 @@ hal_status_t hal_adc_scan_start(const hal_adc_scan_config_t *config) {
   for (uint8_t i = 0u; i < HAL_ADC_SCAN_MAX_PINS; ++i) {
     s_positions[i] = positions[i];
   }
-  s_frame_period_ns = period_ns;
+  HAL_ATOMIC_STORE(&s_frame_period_ns, period_ns, HAL_ATOMIC_RELEASE);
   s_running = true;
   hal_mutex_unlock(s_mutex);
   return HAL_OK;
@@ -104,7 +104,7 @@ hal_status_t hal_adc_scan_stop(void) {
   const hal_status_t status = jh_adc_scan_stop();
   if (status == HAL_OK) {
     s_running = false;
-    s_frame_period_ns = 0u;
+    HAL_ATOMIC_STORE(&s_frame_period_ns, 0u, HAL_ATOMIC_RELEASE);
   }
   hal_mutex_unlock(s_mutex);
   return status;
@@ -166,13 +166,7 @@ hal_status_t hal_adc_scan_latest(uint8_t pin, uint16_t *raw) {
 }
 
 uint32_t hal_adc_scan_frame_period_ns(void) {
-  if (!ensure_mutex()) {
-    return 0u;
-  }
-  hal_mutex_lock(s_mutex);
-  const uint32_t period = s_running ? s_frame_period_ns : 0u;
-  hal_mutex_unlock(s_mutex);
-  return period;
+  return HAL_ATOMIC_LOAD(&s_frame_period_ns, HAL_ATOMIC_ACQUIRE);
 }
 
 uint8_t hal_adc_scan_pin_position(uint8_t pin) {

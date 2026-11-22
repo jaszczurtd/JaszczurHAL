@@ -1,3 +1,4 @@
+#include "adc_scan_notification.h"
 #include "hal/analog/hal_adc_scan.h"
 #include "hal/impl/.mock/hal_mock.h"
 #include "hal/system/hal_system.h"
@@ -166,8 +167,19 @@ void test_scan_hands_out_each_completed_block_once_with_its_marker(void) {
   TEST_ASSERT_EQUAL_INT(HAL_ESTATE, hal_mock_adc_scan_complete(frames, FRAMES));
 }
 
+static void feed_notification_block(void) {
+  static uint16_t frames[FRAMES * PINS];
+  TEST_ASSERT_EQUAL_INT(HAL_OK, hal_mock_adc_scan_complete(frames, FRAMES));
+}
+
+static void test_completion_wakes_the_current_consumer(void) {
+  hal_adc_scan_config_t cfg = base_config();
+  adc_scan_notification_case(&cfg, feed_notification_block, false);
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_completion_wakes_the_current_consumer);
   RUN_TEST(test_scan_rejects_invalid_configuration);
   RUN_TEST(test_scan_lifecycle_and_frame_geometry);
   RUN_TEST(test_scan_hands_out_each_completed_block_once_with_its_marker);

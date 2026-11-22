@@ -397,6 +397,7 @@ Default parameters for FreeRTOS application tasks created by HAL:
 | `HAL_FREERTOS_TASK0_PRIORITY` | `tskIDLE_PRIORITY + 1` | FreeRTOS priority for `app_task0()` |
 | `HAL_FREERTOS_TASK1_PRIORITY` | `tskIDLE_PRIORITY + 1` | FreeRTOS priority for `app_task1()` |
 | `HAL_FREERTOS_HEAP_SIZE` | RP `164 * 1024`, STM32G474 `24 * 1024` | `heap_4` pool size in bytes; the kernel reads it from `hal_project_config.h` |
+| `HAL_FREERTOS_RAM_CODE` | `0` | Native RP only: `1` places the kernel task, queue, list and port code in SRAM to reduce XIP cache latency; consumes additional static SRAM. Set in `hal_project_config.h` as `0` or `1`; a definition without a value stops the configuration. Applies to firmware linked through the JaszczurHAL firmware project; an installed static library package does not carry the linker override. |
 | `HAL_USB_FREERTOS_TASK_STACK` | `512` | RP core-0 USB worker stack in FreeRTOS words |
 | `HAL_USB_FREERTOS_TASK_PRIORITY` | `tskIDLE_PRIORITY + 2` | RP core-0 USB worker priority |
 

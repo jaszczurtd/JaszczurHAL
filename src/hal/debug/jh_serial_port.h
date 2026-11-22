@@ -1,5 +1,6 @@
 #pragma once
 
+#include "hal/core/hal_status.h"
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
@@ -44,6 +45,15 @@ void jh_serial_port_message_begin(jh_serial_port_message_t kind);
 
 /** Write bytes to the target transport. */
 void jh_serial_port_write(const char *data, size_t len);
+
+/** One bounded nonblocking transport operation; report accepted bytes,
+ * including on partial/error results. Never wait for a transport mutex or TX
+ * space. */
+hal_status_t jh_serial_port_try_write(const char *data, size_t len,
+                                      size_t *written);
+
+/** Copy the target line ending without transmitting it. */
+size_t jh_serial_port_line_ending(char line_ending[2]);
 
 /**
  * Emit the target line ending and return its bytes for net-console mirroring.

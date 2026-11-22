@@ -4,6 +4,7 @@
 
 #include "esp_idf_fake.h"
 
+#include "adc_scan_notification.h"
 #include "hal/analog/jh_adc_scan_backend.h"
 #include "hal/impl/esp32/jh_esp32_adc_scan.h"
 #include "hal/system/hal_system.h"
@@ -267,8 +268,20 @@ void test_latest_collects_the_stream_itself_and_stays_fresh(void) {
   TEST_ASSERT_EQUAL_UINT16(3242u, block.samples[(1u * PINS) + 0u]);
 }
 
+static void feed_notification_block(void) {
+  feed_frames(0U, FRAMES);
+  hal_adc_scan_block_t block = {};
+  (void)jh_adc_scan_completed(&block);
+}
+
+static void test_completion_wakes_the_current_consumer(void) {
+  hal_adc_scan_config_t cfg = config();
+  adc_scan_notification_case(&cfg, feed_notification_block, false);
+}
+
 int main(void) {
   UNITY_BEGIN();
+  RUN_TEST(test_completion_wakes_the_current_consumer);
   RUN_TEST(test_start_configures_the_driver_and_stop_releases_it);
   RUN_TEST(test_driver_ring_holds_two_blocks_of_a_large_scan);
   RUN_TEST(test_period_is_clamped_to_the_converter_and_bad_pins_are_refused);

@@ -5,6 +5,7 @@
 // newest complete frame the ring held when the read began, whichever
 // register access the DMA moves between.
 
+#include "adc_scan_notification.h"
 #include "hal/analog/jh_adc_scan_backend.h"
 #include "hal/impl/rp2040/rp2040_adc_shared.h"
 #include "hal/system/hal_system.h"
@@ -370,6 +371,13 @@ void test_latest_reads_the_block_in_progress_and_falls_back_to_the_other(void) {
   TEST_ASSERT_EQUAL_INT(HAL_ESTATE, jh_adc_scan_latest(0u, &raw));
 }
 
+static void feed_notification_block(void) { jh_fake_adc_feed(BLOCK); }
+
+static void test_completion_wakes_the_current_consumer(void) {
+  hal_adc_scan_config_t cfg = config();
+  adc_scan_notification_case(&cfg, feed_notification_block, true);
+}
+
 int main(void) {
   UNITY_BEGIN();
   // First: every later setUp stops the backend, which hides a cold stop.
@@ -381,5 +389,6 @@ int main(void) {
   RUN_TEST(test_masked_interrupts_lose_blocks_but_never_the_buffer);
   RUN_TEST(test_latest_never_serves_an_unwritten_or_stale_sample);
   RUN_TEST(test_latest_reads_the_block_in_progress_and_falls_back_to_the_other);
+  RUN_TEST(test_completion_wakes_the_current_consumer);
   return UNITY_END();
 }

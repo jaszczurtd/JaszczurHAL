@@ -114,16 +114,61 @@ function(jh_rp_enable_freertos TARGET_NAME)
     # sources select the scheduler-aware FreeRTOS SMP implementation too.
     target_link_libraries("${TARGET_NAME}" PUBLIC FreeRTOS-Kernel-Heap4)
 
+    set(_kernel_hot_sources
+        "${JH_FREERTOS_KERNEL_DIR}/list.c"
+        "${JH_FREERTOS_KERNEL_DIR}/queue.c"
+        "${JH_FREERTOS_KERNEL_DIR}/tasks.c"
+        ${_port_sources})
     set(_kernel_sources
         "${JH_FREERTOS_KERNEL_DIR}/croutine.c"
         "${JH_FREERTOS_KERNEL_DIR}/event_groups.c"
-        "${JH_FREERTOS_KERNEL_DIR}/list.c"
-        "${JH_FREERTOS_KERNEL_DIR}/queue.c"
         "${JH_FREERTOS_KERNEL_DIR}/stream_buffer.c"
-        "${JH_FREERTOS_KERNEL_DIR}/tasks.c"
         "${JH_FREERTOS_KERNEL_DIR}/timers.c"
         "${JH_FREERTOS_KERNEL_DIR}/portable/MemMang/heap_4.c"
-        ${_port_sources})
+        ${_kernel_hot_sources})
     set_source_files_properties(${_kernel_sources} PROPERTIES
         COMPILE_OPTIONS "-w")
+
+    jh_hal_define_value(_ram_code HAL_FREERTOS_RAM_CODE)
+    string(REGEX REPLACE "[uUlL]+$" "" _ram_code "${_ram_code}")
+    # A definition without a value reads as empty, like no definition; reject
+    # it instead of silently leaving the option off.
+    set(_ram_code_bare FALSE)
+    if(COMMAND jh_project_defined)
+        jh_project_defined(_ram_code_defined HAL_FREERTOS_RAM_CODE)
+        if(_ram_code_defined AND "${_ram_code}" STREQUAL "")
+            set(_ram_code_bare TRUE)
+        endif()
+    endif()
+    foreach(_definition IN LISTS JH_RP_BOARD_DEFINES)
+        if("${_definition}" MATCHES "^(-D)?HAL_FREERTOS_RAM_CODE=?$")
+            set(_ram_code_bare TRUE)
+        endif()
+    endforeach()
+    if(_ram_code_bare OR
+       (NOT "${_ram_code}" STREQUAL "" AND NOT "${_ram_code}" MATCHES "^[01]$"))
+        message(FATAL_ERROR "HAL_FREERTOS_RAM_CODE must be 0 or 1")
+    endif()
+    if(_ram_code)
+        # Extend the pinned SDK's exclusions; its .data section copies the
+        # remaining text to SRAM at boot. Keep SDK and kernel sources intact.
+        set(_sdk_excludes "${PICO_SDK_PATH}/src/rp2_common/pico_standard_link/script_include/default_text_excludes.incl")
+        file(READ "${_sdk_excludes}" _excludes)
+        if(NOT _excludes MATCHES "EXCLUDE_FILE\\(")
+            message(FATAL_ERROR "Pico SDK text exclusion hook has changed")
+        endif()
+        get_filename_component(_kernel_name "${JH_FREERTOS_KERNEL_DIR}" NAME)
+        set(_objects "")
+        foreach(_source IN LISTS _kernel_hot_sources)
+            file(RELATIVE_PATH _relative "${JH_FREERTOS_KERNEL_DIR}" "${_source}")
+            string(APPEND _objects " \"*${_kernel_name}/${_relative}.o\"")
+        endforeach()
+        string(REPLACE "EXCLUDE_FILE(" "EXCLUDE_FILE(${_objects} " _excludes "${_excludes}")
+        set(_ram_dir "${CMAKE_CURRENT_BINARY_DIR}/jh_freertos_ram/${TARGET_NAME}")
+        file(CONFIGURE OUTPUT "${_ram_dir}/default_text_excludes.incl" CONTENT "${_excludes}")
+        target_link_options("${TARGET_NAME}" INTERFACE "LINKER:-L${_ram_dir}")
+        set_property(TARGET "${TARGET_NAME}" APPEND PROPERTY INTERFACE_LINK_DEPENDS
+            "${_ram_dir}/default_text_excludes.incl")
+        set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${_sdk_excludes}")
+    endif()
 endfunction()

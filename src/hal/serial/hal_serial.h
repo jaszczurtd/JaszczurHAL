@@ -11,6 +11,8 @@
  */
 
 #include "hal/core/hal_layout_check.h"
+#include "hal/core/hal_project_config_hook.h"
+#include "hal/core/hal_status.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -19,6 +21,56 @@
 #ifdef __cplusplus
 extern "C" {
 #endif
+
+/** @brief Enable optional buffering of complete serial/debug messages.
+ * @param storage Caller-owned buffer, alive until buffering is disabled.
+ * @param capacity Buffer bytes, 8..65535. Each message needs four extra bytes.
+ * @return HAL_OK, HAL_EINVAL for invalid storage/size, HAL_ENOMEM if the TX
+ * lock cannot be created, or HAL_EBUSY if pending output or a concurrent
+ * writer prevents reconfiguration. NULL with zero disables an empty buffer.
+ * @note Configure in task context before starting concurrent users. Existing
+ * print functions format and enqueue; they no longer wait for the byte
+ * transport. They still take formatter locks and are not real-time APIs.
+ * Use hal_debug_events.h to capture values from a time-critical producer.
+ * Overflow drops the entire new message, counted by buffered_status(). This
+ * is best-effort output, not a reliable protocol queue. Net-console mirroring
+ * retains its independent behavior. Default output remains synchronous.
+ */
+hal_status_t hal_serial_buffered_init(uint8_t *storage, size_t capacity);
+
+/** @brief Try enqueuing one complete, already formatted message.
+ * @param data Bytes to copy, or NULL only when length is zero.
+ * @param length Bytes, including any desired line ending; no implicit prefix.
+ * @return HAL_OK, HAL_EINVAL, HAL_ESTATE if disabled (checked without the TX
+ * lock), HAL_EBUSY if locked,
+ * HAL_EOVERFLOW if the message exceeds total capacity, or HAL_EAGAIN when
+ * there is temporarily insufficient space. Failure queues nothing and does
+ * not increment the dropped counter: the caller retains ownership for retry.
+ * @note Task context. Does not format, allocate, transmit or wait for locks.
+ * Writes to the serial transport only, without net-console mirroring.
+ */
+hal_status_t hal_serial_buffered_write(const char *data, size_t length);
+
+/** @brief Try sending one contiguous chunk from the oldest queued message.
+ * @param byte_budget Maximum bytes offered to the transport; zero does no I/O.
+ * @param out_written Non-NULL, receives accepted bytes even on a partial write.
+ * @return HAL_OK, HAL_EINVAL, HAL_ESTATE if buffering is disabled, HAL_EBUSY
+ * if the TX lock is occupied, or the transport status. Pending bytes remain
+ * queued on errors; the next poll resumes at the first unaccepted byte.
+ * @note Task/console context only. Performs one bounded nonblocking port call,
+ * never a drain-until-empty loop or a physical flush. Schedule periodically.
+ */
+hal_status_t hal_serial_buffered_poll(size_t byte_budget, size_t *out_written);
+
+/** @brief Read buffered-output counters without waiting for the TX lock.
+ * @param out_pending Non-NULL, receives occupied bytes including record
+ * headers.
+ * @param out_dropped Non-NULL, receives whole messages dropped modulo 2^32.
+ * @return HAL_OK, HAL_EINVAL for NULL, HAL_ESTATE if disabled, or HAL_EBUSY.
+ * @note Output arguments stay unchanged on error. Counters reset on init.
+ */
+hal_status_t hal_serial_buffered_status(size_t *out_pending,
+                                        uint32_t *out_dropped);
 
 /**
  * @brief Legacy debug buffer size used by bounded mock capture/RX helpers.

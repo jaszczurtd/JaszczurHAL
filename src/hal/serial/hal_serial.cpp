@@ -8,6 +8,7 @@
 #include "hal/debug/jh_serial_port.h"
 #include "hal/network/net_console/hal_net_console.h"
 #include "hal/serial/hal_serial.h"
+#include "hal/serial/jh_serial_tx_buffer.h"
 #include "hal/system/hal_sync.h"
 #include "hal/system/hal_system.h"
 
@@ -28,6 +29,10 @@ static hal_mutex_t s_rl_mutex = NULL;
  * serial, debug, error, session, and deferred-ISR messages from interleaving
  * across tasks or RP2040 cores. */
 static hal_mutex_t s_tx_mutex = NULL;
+static jh_serial_tx_buffer_t s_tx_buffer = {};
+/* Published under s_tx_mutex by hal_serial_buffered_init and read without
+ * it, so a disabled queue never contends with synchronous writers. */
+static volatile bool s_tx_buffered = false;
 static volatile bool s_debug_initialized = false;
 static volatile bool s_debug_muted = false;
 static hal_debug_rate_limit_t s_rate_limit_cfg = {5u, 1000u, 30000u};
@@ -260,31 +265,168 @@ void hal_serial_begin(uint32_t baud) { jh_serial_port_begin(baud); }
 
 void hal_serial_set_flush(bool enabled) { jh_serial_port_set_flush(enabled); }
 
+hal_status_t hal_serial_buffered_init(uint8_t *storage, size_t capacity) {
+  if (hal_in_isr() || (storage == NULL && capacity != 0u) ||
+      (storage != NULL && (capacity < 8u || capacity > UINT16_MAX))) {
+    return HAL_EINVAL;
+  }
+  hal_serial_ensure_tx_mutex();
+  if (s_tx_mutex == NULL) {
+    return HAL_ENOMEM;
+  }
+  if (!hal_mutex_try_lock(s_tx_mutex)) {
+    return HAL_EBUSY;
+  }
+  hal_status_t status = HAL_EBUSY;
+  if (s_tx_buffer.used == 0u) {
+    s_tx_buffer = {};
+    s_tx_buffer.storage = storage;
+    s_tx_buffer.capacity = (uint32_t)capacity;
+    HAL_ATOMIC_STORE(&s_tx_buffered, storage != NULL, HAL_ATOMIC_RELEASE);
+    status = HAL_OK;
+  }
+  hal_mutex_unlock(s_tx_mutex);
+  return status;
+}
+
+hal_status_t hal_serial_buffered_write(const char *data, size_t length) {
+  if ((data == NULL && length != 0u) || hal_in_isr()) {
+    return HAL_EINVAL;
+  }
+  if (!HAL_ATOMIC_LOAD(&s_tx_buffered, HAL_ATOMIC_ACQUIRE)) {
+    return HAL_ESTATE;
+  }
+  if (!hal_mutex_try_lock(s_tx_mutex)) {
+    return HAL_EBUSY;
+  }
+  hal_status_t status;
+  if (s_tx_buffer.storage == NULL) {
+    status = HAL_ESTATE;
+  } else if (length == 0u) {
+    status = HAL_OK;
+  } else if (length > s_tx_buffer.capacity - JH_SERIAL_TX_HEADER_SIZE) {
+    status = HAL_EOVERFLOW;
+  } else if (length + JH_SERIAL_TX_HEADER_SIZE >
+             s_tx_buffer.capacity - s_tx_buffer.used) {
+    status = HAL_EAGAIN;
+  } else {
+    jh_serial_tx_begin(&s_tx_buffer, (uint8_t)JH_SERIAL_PORT_MESSAGE_APPEND);
+    jh_serial_tx_append(&s_tx_buffer, data, length);
+    (void)jh_serial_tx_commit(&s_tx_buffer);
+    status = HAL_OK;
+  }
+  hal_mutex_unlock(s_tx_mutex);
+  return status;
+}
+
+hal_status_t hal_serial_buffered_poll(size_t byte_budget, size_t *out_written) {
+  if (out_written == NULL || hal_in_isr()) {
+    return HAL_EINVAL;
+  }
+  *out_written = 0u;
+  if (!HAL_ATOMIC_LOAD(&s_tx_buffered, HAL_ATOMIC_ACQUIRE)) {
+    return HAL_ESTATE;
+  }
+  if (!hal_mutex_try_lock(s_tx_mutex)) {
+    return HAL_EBUSY;
+  }
+  hal_status_t status = HAL_ESTATE;
+  if (s_tx_buffer.storage != NULL) {
+    const char *data = NULL;
+    uint8_t kind = 0u;
+    const size_t count =
+        jh_serial_tx_chunk(&s_tx_buffer, byte_budget, &data, &kind);
+    status = HAL_OK;
+    if (count != 0u) {
+      if (!s_tx_buffer.started) {
+        jh_serial_port_message_begin((jh_serial_port_message_t)kind);
+        s_tx_buffer.started = true;
+      }
+      size_t written = 0u;
+      status = jh_serial_port_try_write(data, count, &written);
+      if (written <= count) {
+        jh_serial_tx_advance(&s_tx_buffer, written);
+        *out_written = written;
+      } else {
+        status = HAL_EIO;
+      }
+    }
+  }
+  hal_mutex_unlock(s_tx_mutex);
+  return status;
+}
+
+hal_status_t hal_serial_buffered_status(size_t *out_pending,
+                                        uint32_t *out_dropped) {
+  if (out_pending == NULL || out_dropped == NULL || hal_in_isr()) {
+    return HAL_EINVAL;
+  }
+  if (!HAL_ATOMIC_LOAD(&s_tx_buffered, HAL_ATOMIC_ACQUIRE)) {
+    return HAL_ESTATE;
+  }
+  if (!hal_mutex_try_lock(s_tx_mutex)) {
+    return HAL_EBUSY;
+  }
+  const hal_status_t status = s_tx_buffer.storage == NULL ? HAL_ESTATE : HAL_OK;
+  if (status == HAL_OK) {
+    *out_pending = s_tx_buffer.used;
+    *out_dropped = s_tx_buffer.dropped;
+  }
+  hal_mutex_unlock(s_tx_mutex);
+  return status;
+}
+
+static void hal_serial_message_begin_locked(jh_serial_port_message_t kind) {
+  if (s_tx_buffer.storage != NULL) {
+    jh_serial_tx_begin(&s_tx_buffer, (uint8_t)kind);
+  } else {
+    jh_serial_port_message_begin(kind);
+  }
+}
+
 static void hal_serial_write_locked(const char *data, size_t len) {
   if (data == NULL || len == 0u) {
     return;
   }
   hal_net_console_write_from_serial(data, len);
-  jh_serial_port_write(data, len);
+  if (s_tx_buffer.storage != NULL) {
+    jh_serial_tx_append(&s_tx_buffer, data, len);
+  } else {
+    jh_serial_port_write(data, len);
+  }
 }
 
 static void hal_serial_finish_line_locked(void) {
   char line_ending[2] = {};
-  size_t line_ending_len = jh_serial_port_finish_line(line_ending);
+  const bool buffered = s_tx_buffer.storage != NULL;
+  size_t line_ending_len = buffered ? jh_serial_port_line_ending(line_ending)
+                                    : jh_serial_port_finish_line(line_ending);
   if (line_ending_len > sizeof(line_ending)) {
     line_ending_len = sizeof(line_ending);
   }
   hal_net_console_write_from_serial(line_ending, line_ending_len);
-  jh_serial_port_flush();
+  if (buffered) {
+    jh_serial_tx_append(&s_tx_buffer, line_ending, line_ending_len);
+    (void)jh_serial_tx_commit(&s_tx_buffer);
+  } else {
+    jh_serial_port_flush();
+  }
 }
 
 #if HAL_TARGET_IS_RP
 extern "C" void hal_rp2040_serial_write_assert_fail(const char *text) {
   const char *safe = text ? text : "(null)";
   jh_serial_port_message_begin(JH_SERIAL_PORT_MESSAGE_ERROR);
-  hal_serial_write_locked("HAL ASSERT FAIL: ", strlen("HAL ASSERT FAIL: "));
-  hal_serial_write_locked(safe, strlen(safe));
-  hal_serial_finish_line_locked();
+  /* A fatal assertion cannot depend on a later application poll. */
+  hal_net_console_write_from_serial("HAL ASSERT FAIL: ",
+                                    strlen("HAL ASSERT FAIL: "));
+  hal_net_console_write_from_serial(safe, strlen(safe));
+  jh_serial_port_write("HAL ASSERT FAIL: ", strlen("HAL ASSERT FAIL: "));
+  jh_serial_port_write(safe, strlen(safe));
+  char ending[2];
+  const size_t ending_length = jh_serial_port_finish_line(ending);
+  hal_net_console_write_from_serial(ending, ending_length);
+  jh_serial_port_flush();
 }
 #endif
 
@@ -300,9 +442,13 @@ void hal_serial_print(const char *s) {
   const char *text = s ? s : "";
   hal_serial_ensure_tx_mutex();
   hal_mutex_lock(s_tx_mutex);
-  jh_serial_port_message_begin(JH_SERIAL_PORT_MESSAGE_APPEND);
+  hal_serial_message_begin_locked(JH_SERIAL_PORT_MESSAGE_APPEND);
   hal_serial_write_locked(text, strlen(text));
-  jh_serial_port_flush();
+  if (s_tx_buffer.storage != NULL) {
+    (void)jh_serial_tx_commit(&s_tx_buffer);
+  } else {
+    jh_serial_port_flush();
+  }
   hal_mutex_unlock(s_tx_mutex);
 }
 
@@ -310,7 +456,7 @@ void hal_serial_println(const char *s) {
   const char *text = s ? s : "";
   hal_serial_ensure_tx_mutex();
   hal_mutex_lock(s_tx_mutex);
-  jh_serial_port_message_begin(JH_SERIAL_PORT_MESSAGE_LINE);
+  hal_serial_message_begin_locked(JH_SERIAL_PORT_MESSAGE_LINE);
   hal_serial_write_locked(text, strlen(text));
   hal_serial_finish_line_locked();
   hal_mutex_unlock(s_tx_mutex);
@@ -414,7 +560,7 @@ void hal_deb(const char *format, ...) {
   va_start(args, format);
   hal_serial_ensure_tx_mutex();
   hal_mutex_lock(s_tx_mutex);
-  jh_serial_port_message_begin(JH_SERIAL_PORT_MESSAGE_DEBUG);
+  hal_serial_message_begin_locked(JH_SERIAL_PORT_MESSAGE_DEBUG);
   hal_debug_format_write_deb_prefix(hal_debug_stream_write, NULL, s_prefix);
   hal_debug_vformat(hal_debug_stream_write, NULL, format, args);
   hal_serial_finish_line_locked();
@@ -453,7 +599,7 @@ void hal_derr(const char *format, ...) {
   va_start(args, format);
   hal_serial_ensure_tx_mutex();
   hal_mutex_lock(s_tx_mutex);
-  jh_serial_port_message_begin(JH_SERIAL_PORT_MESSAGE_ERROR);
+  hal_serial_message_begin_locked(JH_SERIAL_PORT_MESSAGE_ERROR);
   hal_debug_format_write_error_prefix(hal_debug_stream_write, NULL, timestamp);
   hal_debug_vformat(hal_debug_stream_write, NULL, format, args);
   hal_serial_finish_line_locked();
@@ -505,7 +651,7 @@ void hal_derr_limited(const char *source, const char *format, ...) {
     va_start(args, format);
     hal_serial_ensure_tx_mutex();
     hal_mutex_lock(s_tx_mutex);
-    jh_serial_port_message_begin(JH_SERIAL_PORT_MESSAGE_ERROR);
+    hal_serial_message_begin_locked(JH_SERIAL_PORT_MESSAGE_ERROR);
     hal_debug_format_write_error_prefix(hal_debug_stream_write, NULL,
                                         timestamp);
     hal_debug_format_write_source_prefix(hal_debug_stream_write, NULL,
@@ -664,9 +810,9 @@ void hal_debug_loop(void) {
 
     hal_serial_ensure_tx_mutex();
     hal_mutex_lock(s_tx_mutex);
-    jh_serial_port_message_begin(rec.level == HAL_ISR_REC_DERR
-                                     ? JH_SERIAL_PORT_MESSAGE_ERROR
-                                     : JH_SERIAL_PORT_MESSAGE_DEBUG);
+    hal_serial_message_begin_locked(rec.level == HAL_ISR_REC_DERR
+                                        ? JH_SERIAL_PORT_MESSAGE_ERROR
+                                        : JH_SERIAL_PORT_MESSAGE_DEBUG);
     hal_debug_format_write_isr_prefix(hal_debug_stream_write, NULL,
                                       rec.level == HAL_ISR_REC_DERR, s_prefix,
                                       ts);

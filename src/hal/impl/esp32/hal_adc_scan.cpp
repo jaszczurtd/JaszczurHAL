@@ -71,6 +71,7 @@ void complete_block(void) {
   s.writing = (uint8_t)(1u - s.writing);
   s.frame = 0u;
   ++s.sequence;
+  jh_adc_scan_notify(&s.config, false);
 }
 
 /* Decode one chunk of records; returns true when a block completed. */

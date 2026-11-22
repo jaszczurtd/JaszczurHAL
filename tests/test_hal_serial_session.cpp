@@ -5,8 +5,11 @@
 #include "support/serial_session_test_helpers.h"
 #include "utils/unity.h"
 
+#include <atomic>
+#include <chrono>
 #include <stdio.h>
 #include <string.h>
+#include <thread>
 
 /* R1.6: the production HAL default vocabulary is empty (all NULL). The
  * test fixture below stays as the SC_* family so the existing assertions
@@ -713,6 +716,49 @@ void test_reboot_bootloader_after_hello_only_is_rejected(void) {
   TEST_ASSERT_EQUAL_STRING("SC_NOT_AUTHORIZED", reply_payload);
 }
 
+namespace {
+std::atomic<bool> s_tx_held{false};
+std::atomic<bool> s_tx_release{false};
+
+void hold_serial_tx(void *) {
+  s_tx_held = true;
+  while (!s_tx_release.load()) {
+    std::this_thread::yield();
+  }
+}
+} // namespace
+
+/* Without buffered output a reply keeps the synchronous transport: it waits
+ * for another writer's TX lock instead of being retained or refused. */
+void test_unbuffered_replies_wait_for_busy_tx_lock(void) {
+  hal_serial_session_t s;
+  init_session_with_test_vocab(&s, "ECU", "1.0.0", "dev");
+  s_tx_held = false;
+  s_tx_release = false;
+  hal_mock_serial_set_write_hook(hold_serial_tx, nullptr);
+  std::thread writer([] { hal_serial_print("busy"); });
+  while (!s_tx_held.load()) {
+    std::this_thread::yield();
+  }
+  hal_mock_serial_set_write_hook(nullptr, nullptr);
+  std::thread releaser([] {
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+    s_tx_release = true;
+  });
+
+  s.in_request = true;
+  const hal_status_t first = hal_serial_session_println_ex(&s, "FIRST");
+  const hal_status_t second = hal_serial_session_println_ex(&s, "SECOND");
+  s.in_request = false;
+  releaser.join();
+  writer.join();
+
+  TEST_ASSERT_EQUAL_INT(HAL_OK, first);
+  TEST_ASSERT_EQUAL_INT(HAL_OK, second);
+  TEST_ASSERT_EQUAL_UINT16(0u, s.reply_length);
+  TEST_ASSERT_NOT_NULL(strstr(hal_mock_serial_last_line(), ",SECOND*"));
+}
+
 void test_reboot_bootloader_after_auth_acks_and_enters_bootloader(void) {
   hal_serial_session_t s;
   uint16_t reply_seq = 0u;
@@ -907,6 +953,7 @@ int main(void) {
   RUN_TEST(test_reboot_bootloader_without_auth_is_rejected);
   RUN_TEST(test_reboot_bootloader_after_hello_only_is_rejected);
   RUN_TEST(test_reboot_bootloader_after_auth_acks_and_enters_bootloader);
+  RUN_TEST(test_unbuffered_replies_wait_for_busy_tx_lock);
   RUN_TEST(test_reboot_bootloader_blocked_after_new_hello_clears_auth);
   RUN_TEST(test_bye_clears_active_and_replies_ok);
   RUN_TEST(test_bye_idempotent_on_inactive_session);

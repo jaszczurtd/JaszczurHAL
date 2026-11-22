@@ -43,17 +43,37 @@ void jh_serial_port_write(const char *data, size_t len) {
 #endif
 }
 
-size_t jh_serial_port_finish_line(char line_ending[2]) {
+hal_status_t jh_serial_port_try_write(const char *data, size_t len,
+                                      size_t *written) {
+  if (written == NULL || (data == NULL && len != 0u)) {
+    return HAL_EINVAL;
+  }
+  *written = 0u;
+#ifdef JH_STM32G474_HW
+  while (*written < len && g474_debug_uart_try_putc(data[*written])) {
+    ++*written;
+  }
+  return *written == len ? HAL_OK : HAL_EAGAIN;
+#else
+  return len == 0u ? HAL_OK : HAL_EUNSUPPORTED;
+#endif
+}
+
+size_t jh_serial_port_line_ending(char line_ending[2]) {
 #ifdef JH_STM32G474_HW
   line_ending[0] = '\r';
   line_ending[1] = '\n';
-  jh_serial_port_write(line_ending, 2u);
   return 2u;
 #else
   line_ending[0] = '\n';
-  jh_serial_port_write(line_ending, 1u);
   return 1u;
 #endif
+}
+
+size_t jh_serial_port_finish_line(char line_ending[2]) {
+  const size_t count = jh_serial_port_line_ending(line_ending);
+  jh_serial_port_write(line_ending, count);
+  return count;
 }
 
 void jh_serial_port_flush(void) {

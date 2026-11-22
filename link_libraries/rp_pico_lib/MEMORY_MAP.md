@@ -102,6 +102,15 @@ words. All three are dynamic allocations from the FreeRTOS `heap_4` pool.
 Projects with a different feature/SRAM budget can override the corresponding
 heap and stack macros at build time.
 
+`HAL_FREERTOS_RAM_CODE=1` places the kernel task, queue, list and native port
+code in SRAM. The default is `0`. The build extends the pinned SDK's text
+exclusion include, and the normal `.data` startup copy loads that code from
+flash. SDK and kernel sources remain unchanged. Inspect the ELF map for the
+static SRAM cost; this option does not resize the FreeRTOS heap or make every
+function called by the kernel safe while XIP is disabled. The override exists
+only in firmware linked through the JaszczurHAL firmware project; an installed
+static library package keeps the kernel in flash.
+
 `jh-vscode` prints an ELF section overview after supported build and upload
 actions. It reports FLASH/XIP, SRAM, reserved heap/stack, and load addresses
 from the final artifact.

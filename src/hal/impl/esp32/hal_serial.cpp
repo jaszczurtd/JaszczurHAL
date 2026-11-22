@@ -8,10 +8,15 @@
 #include "hal/system/hal_sync.h"
 
 #if HAL_TARGET_IS_ESP32_S3
+#include "hal/impl/esp32/jh_esp32_serial_tx.h"
 #include <driver/usb_serial_jtag.h>
 #include <driver/usb_serial_jtag_vfs.h>
 #endif
 #include <sdkconfig.h>
+#if HAL_TARGET_IS_ESP32
+#include <driver/uart.h>
+#include <hal/uart_ll.h>
+#endif
 
 #include <fcntl.h>
 #include <limits.h>
@@ -148,13 +153,53 @@ void jh_serial_port_write(const char *data, size_t len) {
   }
 }
 
-size_t jh_serial_port_finish_line(char line_ending[2]) {
+hal_status_t jh_serial_port_try_write(const char *data, size_t len,
+                                      size_t *written) {
+  if (written == nullptr || (data == nullptr && len != 0u)) {
+    return HAL_EINVAL;
+  }
+  *written = 0u;
+  if (len == 0u) {
+    return HAL_OK;
+  }
+  if (!HAL_ATOMIC_LOAD(&s_started, HAL_ATOMIC_ACQUIRE)) {
+    return HAL_EUNINIT;
+  }
+#if HAL_TARGET_IS_ESP32_S3
+  const int count = jh_esp32_usb_try_write(data, len);
+#else
+  /* The startup console uses the UART FIFO without an installed driver.
+   * uart_tx_chars() requires that driver and waits indefinitely for its
+   * mutex. Refuse an application-owned driver instead of racing its ISR. */
+  if (uart_is_driver_installed(UART_NUM_0)) {
+    return HAL_EBUSY;
+  }
+  uart_dev_t *const uart = UART_LL_GET_HW(UART_NUM_0);
+  const size_t room = (size_t)uart_ll_get_txfifo_len(uart);
+  const size_t count = len < room ? len : room;
+  uart_ll_write_txfifo(uart, (const uint8_t *)data, (uint32_t)count);
+#endif
+#if HAL_TARGET_IS_ESP32_S3
+  if (count < 0) {
+    return HAL_EIO;
+  }
+#endif
+  *written = (size_t)count;
+  return *written == len ? HAL_OK : HAL_EAGAIN;
+}
+
+size_t jh_serial_port_line_ending(char line_ending[2]) {
   if (line_ending == nullptr) {
     return 0u;
   }
   line_ending[0] = '\n';
-  jh_serial_port_write(line_ending, 1u);
   return 1u;
+}
+
+size_t jh_serial_port_finish_line(char line_ending[2]) {
+  const size_t count = jh_serial_port_line_ending(line_ending);
+  jh_serial_port_write(line_ending, count);
+  return count;
 }
 
 void jh_serial_port_flush(void) {

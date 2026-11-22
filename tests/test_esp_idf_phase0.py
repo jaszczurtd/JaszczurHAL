@@ -345,7 +345,7 @@ class ProjectModelTests(unittest.TestCase):
             }.issubset(model["integrationSources"])
         )
         self.assertTrue(
-            {"bt", "esp_hid", "nvs_flash"}.issubset(
+            {"bt", "esp_hid", "nvs_flash", "esp_driver_uart"}.issubset(
                 model["privateComponentDependencies"]
             )
         )

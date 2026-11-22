@@ -24,6 +24,9 @@ void g474_debug_uart_init(void);
 /** Blocking write of one byte; sets the console up first if needed. */
 void g474_debug_uart_putc(char c);
 
+/** Try one byte without waiting or initializing; 1 if accepted, 0 otherwise. */
+int g474_debug_uart_try_putc(char c);
+
 /** Wait until every queued byte has left the USART transmitter. */
 void g474_debug_uart_flush(void);
 

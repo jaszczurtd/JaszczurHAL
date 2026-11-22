@@ -110,6 +110,15 @@ void test_ready_host_gets_bounded_blocking_writes(void) {
   TEST_ASSERT_EQUAL_UINT32(HAL_USB_CDC_WRITE_TIMEOUT_MS,
                            s_last_write_timeout_ms);
   TEST_ASSERT_EQUAL_UINT64(0u, s_blocked_ms_total);
+  // The optional buffered port must never inherit the blocking fallback.
+  s_fifo_free = 2u;
+  size_t accepted = 99u;
+  TEST_ASSERT_EQUAL_INT(HAL_ETIMEOUT,
+                        jh_serial_port_try_write("1234", 4u, &accepted));
+  TEST_ASSERT_EQUAL_UINT32(0u, s_last_write_timeout_ms);
+  TEST_ASSERT_EQUAL_UINT32(2u, accepted);
+  TEST_ASSERT_EQUAL_UINT64(0u, s_blocked_ms_total);
+  TEST_ASSERT_EQUAL_UINT32(UINT32_MAX, s_last_flush_timeout_ms);
 }
 
 void test_stuck_host_pays_one_timeout_then_drops(void) {

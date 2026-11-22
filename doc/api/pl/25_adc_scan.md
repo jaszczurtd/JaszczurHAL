@@ -54,6 +54,8 @@ STM32G474 i ESP32-S3 zachowują kolejność z konfiguracji.
 `hal_adc_scan_frame_period_ns()` to czas między dwiema próbkami jednego pinu,
 tak jak przetwornik naprawdę pracuje; backendy zaokrąglają żądany okres
 konwersji w górę do tego, co potrafią.
+Getter okresu odczytuje atomową migawkę bez zajmowania mutexa skanowania;
+po zatrzymaniu skanowania zwraca zero.
 
 `hal_adc_scan_take()` wydaje najnowszy ukończony blok raz i zwraca `HAL_EAGAIN`
 do chwili ukończenia następnego. Blok pozostaje ważny do ukończenia kolejnego,
@@ -83,6 +85,15 @@ widać w `completed_us`, ale pierścień nigdy nie wychodzi poza bufor. Skan
 zajmuje cztery kanały DMA. Na STM32G474 kołowy kanał DMA prowadzi pierścień
 tak samo; spóźnione przerwanie z obiema flagami połówek publikuje połowę,
 której kanał akurat nie wypełnia.
+
+Opcjonalny hook `notify(notify_user, from_isr)` działa po publikacji metadanych
+gotowego bloku. Służy tylko do nieblokującego powiadomienia zadania;
+przy `from_isr=true` używaj API dozwolonego w ISR. Nie wywołuj API skanu,
+nie bierz blokad, nie formatuj komunikatów ani nie przetwarzaj próbek w hooku.
+Kontekst musi pozostać ważny do powrotu ze stop. RP i STM32 wywołują hook
+z przerwania DMA; ESP32 podczas odbioru strumienia przez zadanie, więc hook
+nie zastępuje tam pollingu. Mock wywołuje go z funkcji kończącej blok.
+Powiadomienie nie przedłuża ważności bufora i nie kolejkuje pominiętych bloków.
 
 ## Własność
 

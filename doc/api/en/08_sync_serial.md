@@ -196,6 +196,12 @@ void hal_serial_println(const char *s);
 int  hal_serial_available(void);   // bytes waiting in RX buffer
 int  hal_serial_read(void);        // read one byte, or -1 if empty
 
+// Optional buffered output (see "Diagnostics outside time-critical work")
+hal_status_t hal_serial_buffered_init(uint8_t *storage, size_t capacity);
+hal_status_t hal_serial_buffered_write(const char *data, size_t length);
+hal_status_t hal_serial_buffered_poll(size_t byte_budget, size_t *out_written);
+hal_status_t hal_serial_buffered_status(size_t *out_pending, uint32_t *out_dropped);
+
 hal_debug_rate_limit_t hal_debug_rate_limit_defaults(void);
 const hal_debug_rate_limit_t *hal_debug_get_rate_limit(void);
 
@@ -224,6 +230,62 @@ Literals and `%s` arguments are streamed in chunks without a buffer for the enti
 remains a compatibility sizing knob for mock capture/RX helpers. ISR-deferred
 records are intentionally still bounded by `HAL_DEBUG_ISR_TEXT_MAX`, because
 the ISR path must not allocate, lock or touch the serial transport.
+
+### Diagnostics outside time-critical work
+
+`hal_debug_events.h` provides a queue of application-defined records in static,
+caller-owned storage. Initialize it before starting either owner. A single
+producer calls `hal_debug_events_publish()` with captured values and an
+occurrence timestamp. Publishing copies one fixed-size record without formatting,
+allocation, mutexes or waiting for room. A full queue drops the new record and
+increments `hal_debug_events_dropped()`; control must continue regardless of
+that result. Give concurrent producers separate queues.
+
+The console task calls `hal_debug_events_poll(queue, budget, callback, context)`.
+It delivers at most `budget` records present on entry. The callback formats the
+record; `HAL_OK` consumes it, while any other status retains it for retry.
+The budget limits callback count, not callback duration. Store values rather
+than pointers to temporary or mutable data.
+
+For transport backpressure, opt in with
+`hal_serial_buffered_init(storage, capacity)` (8..65535 bytes). Existing print
+functions then enqueue complete messages; they still format and take locks,
+so keep them outside the critical producer. Each record consumes its payload
+plus four bytes. Overflow discards the entire new message, counted by
+`hal_serial_buffered_status()`. Default output remains synchronous. While
+buffering is disabled, the buffered functions return `HAL_ESTATE` without
+touching the TX lock.
+
+Call `hal_serial_buffered_poll(byte_budget, &written)` periodically from the
+console task. It tries the TX lock and offers one contiguous chunk to the port,
+without waiting for the receiver. Partial writes retain their offset. RP USB
+uses a zero-timeout write; the USB worker services the stack independently.
+On RP targets, USB interrupts wake that worker after TinyUSB queues the event.
+Bare-metal uses a software IRQ and a periodic retry timer. FreeRTOS uses a
+task notification and a bounded wait timeout. Both workers try the USB mutex
+without waiting and retry later if it is busy.
+ESP32-S3 offers at most 512 bytes to the driver's atomic TX queue and halves
+the chunk on backpressure, down to one byte (at most ten zero-timeout calls).
+This also permits progress with a smaller driver buffer installed by an app.
+`hal_serial_buffered_write()` accepts already formatted bytes with all-or-none
+enqueue semantics. On `HAL_EAGAIN` the caller keeps its data for retry, without
+incrementing the drop counter. This function targets the serial port only;
+existing print functions retain their separate net-console mirroring.
+
+The buffer is best-effort output. Protocols requiring delivery must retain
+records until enqueue succeeds. Disabling/replacing storage requires an empty
+queue. Fatal assertions bypass buffering because no later poll is guaranteed.
+Framed serial sessions retain one reply during backpressure and pause RX until
+it is enqueued. Their TX buffer needs at least `HAL_SERIAL_FRAME_LINE_MAX + 4`
+bytes. Keep polling the serial TX queue independently. Buffered replies use LF
+and go only to the serial port. Without buffering, replies use the synchronous
+transport and wait for the TX lock like other prints.
+`hal_serial_session_tx_status()` reports pending session or shared TX data.
+Bootloader commands wait for this data to reach the port for at most 500 ms,
+then start their 50 ms reboot delay, so a stalled host or steady logging cannot
+hold the reboot.
+See [01_core_runtime](../../../examples/01_core_runtime/README.md) for a timer
+producer and a console consumer with bounded event and byte budgets.
 
 ### ISR-deferred debug logging
 
@@ -518,6 +580,7 @@ void     hal_serial_session_println(hal_serial_session_t *session,
                                     const char *payload);
 hal_status_t hal_serial_session_println_ex(hal_serial_session_t *session,
                                            const char *payload);
+hal_status_t hal_serial_session_tx_status(const hal_serial_session_t *session);
 ```
 
 Wire protocol (both directions):
@@ -551,7 +614,8 @@ Vocabulary-driven commands (R1.0 + R1.6 + R1.7):
   (`reply_auth_ok` on success, one of the `reply_auth_failed_*` family on
   failure, `reply_not_ready_hello_required` if HELLO has not been seen).
 - `cmd_reboot_bootloader` - auth-gated. Successful path emits
-  `reply_reboot_ok`, drains for ~50 ms, then jumps to the boot ROM
+  `reply_reboot_ok`, waits up to 500 ms for the reply and queued serial
+  output to reach the port, then 50 ms more, and jumps to the boot ROM
   (BOOTSEL/UF2 mass-storage mode); unauthenticated path emits
   `reply_not_authorized`.
 
@@ -601,6 +665,10 @@ Reply gating:
   dispatch windows, oversized payloads and forbidden frame characters through
   `hal_status_t`. `hal_serial_session_current_request_seq()` returns the active
   `<seq>` only within the same dispatch window.
+- With buffered output, a reply that does not fit is retained and sent by a
+  later `hal_serial_session_poll()`. One reply is retained at a time: a second
+  reply in the same request returns `HAL_EAGAIN`, and the void
+  `hal_serial_session_println()` drops it.
 
 Authentication (Phase 3) - opt-in:
 - The whole AUTH path is compiled in only when `HAL_ENABLE_CRYPTO` is

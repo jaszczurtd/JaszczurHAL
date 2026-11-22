@@ -35,6 +35,14 @@ void g474_debug_uart_init(void) {
   s_initialised = 1;
 }
 
+int g474_debug_uart_try_putc(char c) {
+  if (!s_initialised || s_app_owned || (USART2_ISR & USART_ISR_TXE) == 0u) {
+    return 0;
+  }
+  USART2_TDR = (uint32_t)(uint8_t)c;
+  return 1;
+}
+
 void g474_debug_uart_putc(char c) {
   if (s_app_owned) {
     return;

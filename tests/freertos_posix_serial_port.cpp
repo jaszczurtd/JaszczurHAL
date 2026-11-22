@@ -42,6 +42,21 @@ extern "C" void jh_serial_port_write(const char *data, size_t len) {
   capture_append(data, len);
 }
 
+extern "C" hal_status_t jh_serial_port_try_write(const char *data, size_t len,
+                                                 size_t *written) {
+  if (written == NULL || (data == NULL && len != 0u)) {
+    return HAL_EINVAL;
+  }
+  capture_append(data, len);
+  *written = len;
+  return HAL_OK;
+}
+
+extern "C" size_t jh_serial_port_line_ending(char line_ending[2]) {
+  line_ending[0] = '\n';
+  return 1u;
+}
+
 extern "C" size_t jh_serial_port_finish_line(char line_ending[2]) {
   line_ending[0] = '\n';
   capture_append(line_ending, 1u);

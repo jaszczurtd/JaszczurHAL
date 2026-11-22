@@ -82,6 +82,7 @@ void dma_irq0_handler(void) {
   s.completed_us = hal_micros();
   s.completed = newest;
   s.sequence = s.sequence + finished;
+  jh_adc_scan_notify(&s.config, true);
 }
 
 // Looks at the ring until the snapshot is settled: the gap between two

@@ -10,6 +10,43 @@
 
 namespace {
 
+/* Upper bound for draining the acknowledgement and queued TX before the
+ * bootloader jump. A stalled host or steady logging must not keep the session
+ * waiting forever; the jump then follows the former fixed 50 ms delay. */
+constexpr uint32_t kRebootDrainTimeoutMs = 500u;
+
+hal_status_t send_reply(hal_serial_session_t *session) {
+  if (session->reply_length == 0u) {
+    return HAL_OK;
+  }
+  hal_status_t status =
+      hal_serial_buffered_write(session->reply, session->reply_length);
+  if (status == HAL_ESTATE) {
+    session->reply[session->reply_length - 1u] = '\0';
+    hal_serial_println(session->reply);
+    status = HAL_OK;
+  }
+  if (status == HAL_OK) {
+    jh_secure_zeroize(session->reply, sizeof(session->reply));
+    session->reply_length = 0u;
+  }
+  return status;
+}
+
+void process_reboot(hal_serial_session_t *session) {
+  if (!session->reboot_pending) {
+    return;
+  }
+  if (hal_serial_session_tx_status(session) != HAL_OK &&
+      !hal_millis_deadline_expired(session->reboot_started_ms,
+                                   kRebootDrainTimeoutMs)) {
+    return;
+  }
+  session->reboot_pending = false;
+  hal_delay_ms(50u);
+  hal_enter_bootloader();
+}
+
 void emit_hello(hal_serial_session_t *session) {
   char response[192] = {0};
   snprintf(response, sizeof(response),
@@ -165,10 +202,11 @@ void handle_reboot_bootloader(hal_serial_session_t *session) {
         session, HAL_SERIAL_SESSION_VOCAB(session, reply_not_authorized));
     return;
   }
-  hal_serial_session_println(
-      session, HAL_SERIAL_SESSION_VOCAB(session, reply_reboot_ok));
-  hal_delay_ms(50u);
-  hal_enter_bootloader();
+  session->reboot_pending =
+      hal_serial_session_println_ex(
+          session, HAL_SERIAL_SESSION_VOCAB(session, reply_reboot_ok)) ==
+      HAL_OK;
+  session->reboot_started_ms = hal_millis();
 }
 
 #endif /* HAL_ENABLE_CRYPTO */
@@ -385,6 +423,9 @@ hal_status_t hal_serial_session_println_ex(hal_serial_session_t *session,
   if (!session->in_request) {
     return HAL_ESTATE;
   }
+  if (session->reply_length != 0u) {
+    return HAL_EAGAIN;
+  }
   const size_t payload_length = strlen(payload);
   if (payload_length > HAL_SERIAL_FRAME_PAYLOAD_MAX) {
     return HAL_EOVERFLOW;
@@ -395,19 +436,50 @@ hal_status_t hal_serial_session_println_ex(hal_serial_session_t *session,
       return HAL_EPROTO;
     }
   }
-  char framed[HAL_SERIAL_FRAME_LINE_MAX] = {0};
-  if (!hal_serial_frame_encode(session->request_seq, payload, framed,
-                               sizeof(framed), nullptr)) {
-    jh_secure_zeroize(framed, sizeof(framed));
+  size_t length = 0u;
+  if (!hal_serial_frame_encode(session->request_seq, payload, session->reply,
+                               sizeof(session->reply) - 1u, &length)) {
+    jh_secure_zeroize(session->reply, sizeof(session->reply));
     return HAL_EINTERNAL;
   }
-  hal_serial_println(framed);
-  jh_secure_zeroize(framed, sizeof(framed));
-  return HAL_OK;
+  session->reply[length++] = '\n';
+  session->reply_length = static_cast<uint16_t>(length);
+  const hal_status_t status = send_reply(session);
+  if (status == HAL_EAGAIN || status == HAL_EBUSY) {
+    return HAL_OK;
+  }
+  if (status != HAL_OK) {
+    jh_secure_zeroize(session->reply, sizeof(session->reply));
+    session->reply_length = 0u;
+  }
+  return status;
+}
+
+hal_status_t hal_serial_session_tx_status(const hal_serial_session_t *session) {
+  if (session == nullptr) {
+    return HAL_EINVAL;
+  }
+  if (session->reply_length != 0u) {
+    return HAL_EAGAIN;
+  }
+  size_t pending = 0u;
+  uint32_t dropped = 0u;
+  const hal_status_t status = hal_serial_buffered_status(&pending, &dropped);
+  if (status == HAL_ESTATE) {
+    return HAL_OK;
+  }
+  return status == HAL_OK && pending != 0u ? HAL_EAGAIN : status;
 }
 
 void hal_serial_session_poll(hal_serial_session_t *session) {
   if (session == nullptr || session->module_tag == nullptr) {
+    return;
+  }
+  if (send_reply(session) != HAL_OK) {
+    return;
+  }
+  process_reboot(session);
+  if (session->reboot_pending) {
     return;
   }
 
@@ -461,5 +533,9 @@ void hal_serial_session_poll(hal_serial_session_t *session) {
     }
     jh_secure_zeroize(inner, sizeof(inner));
     jh_secure_zeroize(session->line, sizeof(session->line));
+    process_reboot(session);
+    if (session->reply_length != 0u || session->reboot_pending) {
+      return;
+    }
   }
 }
