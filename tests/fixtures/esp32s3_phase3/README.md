@@ -13,7 +13,7 @@ to separate hardware gates and must not be inferred from this build.
 Build it with:
 
 ```sh
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/fixtures/esp32s3_phase3 \
   --target esp32s3 \
   --board waveshare-esp32-s3-zero \

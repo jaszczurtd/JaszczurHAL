@@ -28,7 +28,7 @@ Remaining options are passed to the selected runner unchanged.
 
 Targets with a library runner:
 USAGE
-    python3 "${REPO_ROOT}/scripts/board_registry.py" list-targets |
+    "$(jh_tool_path "${REPO_ROOT}")" target list --root "${REPO_ROOT}" |
         sed 's/^/  /'
 }
 

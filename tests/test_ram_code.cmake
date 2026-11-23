@@ -6,8 +6,9 @@ if(NOT JH_ROOT)
     message(FATAL_ERROR "JH_ROOT is required")
 endif()
 include("${JH_ROOT}/cmake/jh_ram_code.cmake")
+include("${JH_ROOT}/tests/jh_test_artifacts.cmake")
 
-set(_work "${CMAKE_CURRENT_BINARY_DIR}/test_ram_code_work")
+jh_test_artifact_dir(_work ram-code)
 set(_proj "${_work}/proj")
 set(CMAKE_C_OUTPUT_EXTENSION ".o")
 set(CMAKE_CXX_OUTPUT_EXTENSION ".obj")
@@ -154,7 +155,6 @@ foreach(_case IN ITEMS unquoted empty missing foreign twice esp_stem stm32_marke
         COMMAND "${CMAKE_COMMAND}" "-DJH_ROOT=${JH_ROOT}"
             "-DJH_RAM_CODE_CASE=${_case}"
             -P "${CMAKE_CURRENT_LIST_FILE}"
-        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
         RESULT_VARIABLE _result OUTPUT_VARIABLE _out ERROR_VARIABLE _err)
     if(_result EQUAL 0 OR NOT "${_err}" MATCHES "JH-RAM-CODE")
         _fail("case ${_case} must stop: ${_out}${_err}")

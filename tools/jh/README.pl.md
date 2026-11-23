@@ -19,6 +19,9 @@ projektów. `jh board` sprawdza i wypisuje rejestr płytek oraz zapisuje
 konfigurację jednej kompilacji, a `jh clock` sprawdza i wypisuje rejestr drzew
 zegarów.
 `jh firmware read` zapisuje kopię całego flash wybranego urządzenia do ponownego reflasha.
+`jh target` wypisuje targety z biblioteką linkowalną i ich fakty builda,
+a `jh library` kompiluje, instaluje i sprawdza tę bibliotekę; `jh esp`
+kompiluje i ponownie sprawdza firmware ESP-IDF.
 
 Przed konfiguracją przygotuj zależności hosta w wersjach wskazanych przez repozytorium:
 
@@ -827,6 +830,85 @@ entrypoint i kody zakończenia.
 Executable oraz licencje PCRE2, jhbase, Ryu, utf8proc i JaszczurHAL instaluje
 `cmake --install <build> --config Release --component jh --prefix <destination>`. Program można przenieść wraz z prefixem
 instalacji; do uruchomienia nie potrzebuje drzewa źródeł.
+
+## Biblioteki linkowalne
+
+`jh target list --root <checkout>` wypisuje `<id> <provider> <status>` dla
+każdego targetu rejestru, który ma provider biblioteki linkowalnej
+(`pico-sdk`, `jh-stm32-baremetal`, `esp-idf`), w kolejności ID.
+`jh target facts --root <checkout> --target <id>` wypisuje fakty czytane przez
+runner biblioteki, po jednej linii `KEY=VALUE`: `provider`, `defaultBoard`,
+`isa`, `status` i `supportedFeatures` (rozdzielone spacjami, bez końcowego
+`=1`). Nieznany target kończy się kodem 2 i listą znanych ID. Oba polecenia
+przyjmują `--boards-root` i `--json`.
+
+`jh library build --root <checkout> --target <id> [opcje]` kompiluje
+`libJaszczurHAL.a` targetu Pico SDK, STM32 albo ESP-IDF projektem z
+`link_libraries/`. `scripts/build_rp_pico_lib.sh`, `scripts/build_stm32_lib.sh`
+i `scripts/build_esp32_lib.sh` uruchamiają to polecenie; zachowują swoje
+opcje, domyślny target i kontrolę providera. Polecenie przyjmuje opcje runnerów w długiej postaci: `--board`,
+`--assembly`, `--variant`, `--project-config`, wielokrotne `--define`,
+`--all-features` (włącza też FreeRTOS), `--freertos`, `--library-only`,
+`--output`, `--clean` i `--jobs`. Ścieżka Pico SDK dodaje `--sdk-dir`,
+`--toolchain` (katalog toolchaina), `--picotool-dir`, `--picotool-build-dir`
+i `--example`; STM32 dodaje `--toolchain` (plik toolchaina CMake) oraz
+`--freertos-kernel`, a ESP-IDF dodaje `--idf-dir`. Dla ESP-IDF polecenie
+kompiluje aplikację kontrolną z `link_libraries/esp32_lib/` przez
+`jh esp build`, kopiuje archiwum komponentu do `<output>/libJaszczurHAL.a`,
+a wygenerowane nagłówki do `<output>/include/generated/`; `--library-only`
+i `--freertos` niczego tam nie zmieniają.
+
+Względne ścieżki Pico SDK i `--project-config` liczą się od checkoutu na
+ścieżce Pico SDK, a od katalogu roboczego na STM32, tak jak czytały je
+runnery. Katalog kompilacji musi leżeć w `<root>/.build` i nigdy nie może
+być korzeniem systemu plików, checkoutem ani jego katalogiem nadrzędnym,
+także przez dowiązanie `.build`. Domyślnie jest to
+`.build/static/<target>/<board>`, a gdy katalog konfiguracji zawiera
+`device_tree.json`, `.build/static/<target>/<klucz>` (opis przy
+`jh library key`). Przed uruchomieniem CMake polecenie przygotowuje
+zarządzane komponenty przez `scripts/ensure_*.sh` (na Windows przez menedżer
+komponentów, który te skrypty uruchamiają). Postęp i wyjście CMake trafiają
+na stdout, a z `--json` na stderr. Płytka sprzeczna z device tree albo montaż
+lub wariant bez niego kończą się kodem 2. Nieudany proces potomny przekazuje
+swój kod zakończenia, a pozostałe błędy dają kod 1.
+
+`jh library key --config-dir <katalog> [--assembly <nazwa>] [--request <tekst>]...`
+wypisuje klucz katalogu kompilacji biblioteki z device tree,
+`<montaż albo "auto">/<16 cyfr szesnastkowych>`. Cyfry to początek SHA-256
+rozwiązanego katalogu konfiguracji, montażu i posortowanych żądań, więc ten
+sam wybór zawsze kompiluje się w tym samym miejscu.
+
+`jh library install --build-dir <build> --prefix <prefix>` uruchamia
+`cmake --install` dla skonfigurowanej kompilacji biblioteki i wymaga
+`<prefix>/lib/libJaszczurHAL.a`. `jh library inspect --prefix <prefix>`
+wypisuje pliki zainstalowanego pakietu z ich SHA-256. Podaje też rodzaj
+pakietu (`board` albo `device-tree`), a dla pakietu z device tree także
+`JH_CONFIG_SHA256`, `JH_HARDWARE_SHA256` i `JH_HARDWARE_ABI` z jego rekordu.
+
+## Kompilacje ESP-IDF
+
+`jh esp build --root <checkout> --project <katalog> [opcje]` kompiluje projekt
+firmware ESP-IDF w ustalonej wersji ESP-IDF, a `jh esp artifacts` ponownie
+sprawdza istniejący build bez kompilowania. Polecenia zastępują akcje `build`
+i `artifacts` skryptu `scripts/build_esp_idf.py` i przyjmują jego opcje:
+`--target` (domyślnie `esp32s3`), `--board` albo `--assembly`, `--variant`,
+`--name`, `--output`, wielokrotne `--source`, `--include-dir`,
+`--link-library` i `--define`, `--clean` (tylko build), `--all-features`,
+`--project-config` oraz `--idf-dir`. Katalog builda zawiera to, co zapisywał
+skrypt Pythona: wejścia płytki albo device tree w `generated/jaszczurhal/`,
+`sdkconfig.defaults` z jego stemplem, `jh_esp_idf_project.cmake` i `.json`,
+`jh_esp_idf_toolchain.json`, `build.log` oraz manifest
+`jh_esp_idf_artifacts.json`, więc `scripts/build_esp_idf.py flash` przyjmuje
+build wykonany przez `jh esp`. Listy źródeł i zależności komponentów pochodzą
+z `config/tooling/esp_idf_components.json`.
+
+Błąd wypisuje `jh: stage=<etap> failed: <komunikat>` i zapisuje tę samą linię
+do `jh_esp_idf_failure.txt` w katalogu builda. Polecenie kończy się wtedy
+kodem 1, kodem 4 przy braku pamięci i kodem 130 po przerwaniu. Python hosta,
+który eksportuje środowisko ESP-IDF i uruchamia menedżer komponentów, to
+`JH_COMPONENT_PYTHON` albo `python3` (`python` na Windows) z `PATH`, czyli
+interpreter używany przez skrypty `scripts/ensure_*.sh`; jh-vscode ustawia
+`JH_COMPONENT_PYTHON` na swój interpreter.
 
 ## Kontrola pamięci
 

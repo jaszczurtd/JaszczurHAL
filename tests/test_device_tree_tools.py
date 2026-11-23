@@ -153,11 +153,12 @@ class Matrix(unittest.TestCase):
         self.assertEqual(key, device_tree_project.build_key(LIBRARY, "picow", ["all=1", "variant="]))
         self.assertNotEqual(key, device_tree_project.build_key(LIBRARY, "picow", ["variant=X", "all=1"]))
         self.assertEqual("auto/", device_tree_project.build_key(LIBRARY, "", [])[:5])
-        shell = subprocess.run(
-            ["bash", "-c", f'source "{ROOT}/scripts/lib/build_artifacts.sh"; '
-             f'jh_device_tree_build_key "{LIBRARY}" picow variant= all=1'],
+        # The library runners take the key from jh library key.
+        native = subprocess.run(
+            [project_config.jh_executable(), "library", "key", f"--config-dir={LIBRARY}",
+             "--assembly=picow", "--request=variant=", "--request=all=1"],
             capture_output=True, text=True, check=True)
-        self.assertEqual(key, shell.stdout.strip())
+        self.assertEqual(key, native.stdout.strip())
 
 
 class Workflow(unittest.TestCase):

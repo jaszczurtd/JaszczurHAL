@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Build JaszczurHAL and optional portable firmware with the official Pico SDK.
+# The build itself runs in `jh library build`; this launcher keeps the options,
+# the default target and the provider check of the Pico SDK runner.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,12 +11,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/build_artifacts.sh"
 
 RED='\033[0;31m'
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
 NC='\033[0m'
 
-info() { echo -e "${CYAN}[INFO]${NC} $*"; }
-ok()   { echo -e "${GREEN}[OK]${NC} $*"; }
 die()  { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
 usage() {
@@ -52,251 +50,25 @@ USAGE
 }
 
 TARGET="rp2040"
-BOARD=""
-ASSEMBLY=""
-VARIANT=""
-SDK_DIR="${JH_PICO_SDK_DIR:-${REPO_ROOT}/third_party/pico-sdk}"
-TOOLCHAIN_DIR=""
-PICOTOOL_DIR="${REPO_ROOT}/third_party/picotool"
-PICOTOOL_BUILD_DIR="${JH_PICOTOOL_BUILD_DIR:-${REPO_ROOT}/.build/tools/picotool}"
-EXAMPLE=""
-PROJECT_CONFIG_DIR=""
-EXTRA_DEFS=()
-FREERTOS=0
-ALL_FEATURES=0
-LIBRARY_ONLY=0
-OUTPUT_DIR=""
-CLEAN=0
-JOBS="$(nproc 2>/dev/null || echo 4)"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --target) TARGET="$2"; shift 2 ;;
-        --board) BOARD="$2"; shift 2 ;;
-        --assembly) ASSEMBLY="$2"; shift 2 ;;
-        --variant) VARIANT="$2"; shift 2 ;;
-        --sdk-dir) SDK_DIR="$2"; shift 2 ;;
-        --toolchain) TOOLCHAIN_DIR="$2"; shift 2 ;;
-        --picotool-dir) PICOTOOL_DIR="$2"; shift 2 ;;
-        --picotool-build-dir) PICOTOOL_BUILD_DIR="$2"; shift 2 ;;
-        --example) EXAMPLE="$2"; shift 2 ;;
-        --freertos) FREERTOS=1; shift ;;
-        --all-features) ALL_FEATURES=1; FREERTOS=1; shift ;;
-        --library-only) LIBRARY_ONLY=1; shift ;;
-        -p|--project-config) PROJECT_CONFIG_DIR="$2"; shift 2 ;;
-        -D) EXTRA_DEFS+=("$2"); shift 2 ;;
-        -o|--output) OUTPUT_DIR="$2"; shift 2 ;;
-        --clean) CLEAN=1; shift ;;
-        -j|--jobs) JOBS="$2"; shift 2 ;;
+        --board|--assembly|--variant|--sdk-dir|--toolchain|--picotool-dir|\
+        --picotool-build-dir|--example)
+            jh_launcher_option "${1#--}" "$2"; shift 2 ;;
+        --freertos|--all-features|--library-only|--clean)
+            jh_launcher_flag "${1#--}"; shift ;;
+        -p|--project-config) jh_launcher_option project-config "$2"; shift 2 ;;
+        -D) JH_DEFINES+=("--define=$2"); shift 2 ;;
+        -o|--output) jh_launcher_option output "$2"; shift 2 ;;
+        -j|--jobs) jh_launcher_option jobs "$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *) die "Unknown option: $1" ;;
     esac
 done
 
-jh_validate_hal_defines "${EXTRA_DEFS[@]}" || exit 1
-
-TARGET_PROVIDER=""
-TARGET_DEFAULT_BOARD=""
-TARGET_ISA=""
-facts="$(jh_target_facts "${REPO_ROOT}" "${TARGET}")" ||
-    die "Unknown target '${TARGET}'"
-while IFS='=' read -r key value; do
-    case "${key}" in
-        provider) TARGET_PROVIDER="${value}" ;;
-        defaultBoard) TARGET_DEFAULT_BOARD="${value}" ;;
-        isa) TARGET_ISA="${value}" ;;
-    esac
-done <<< "${facts}"
-[[ "${TARGET_PROVIDER}" == "pico-sdk" ]] ||
-    die "Target '${TARGET}' is not built with the Pico SDK; use scripts/build_link_library.sh"
-RISCV=0
-if [[ "${TARGET_ISA}" == "riscv32" ]]; then
-    RISCV=1
-    if [[ -z "${TOOLCHAIN_DIR}" ]]; then
-        TOOLCHAIN_DIR="${JH_RISCV_TOOLCHAIN_DIR:-${REPO_ROOT}/third_party/riscv-toolchain}"
-    fi
-fi
-
-[[ "${SDK_DIR}" == /* ]] || SDK_DIR="${REPO_ROOT}/${SDK_DIR}"
-[[ "${PICOTOOL_DIR}" == /* ]] || PICOTOOL_DIR="${REPO_ROOT}/${PICOTOOL_DIR}"
-[[ "${PICOTOOL_BUILD_DIR}" == /* ]] ||
-    PICOTOOL_BUILD_DIR="${REPO_ROOT}/${PICOTOOL_BUILD_DIR}"
-if [[ -n "${TOOLCHAIN_DIR}" && "${TOOLCHAIN_DIR}" != /* ]]; then
-    TOOLCHAIN_DIR="${REPO_ROOT}/${TOOLCHAIN_DIR}"
-fi
-if [[ -n "${PROJECT_CONFIG_DIR}" && "${PROJECT_CONFIG_DIR}" != /* ]]; then
-    PROJECT_CONFIG_DIR="${REPO_ROOT}/${PROJECT_CONFIG_DIR}"
-fi
-
-if ! PICOTOOL_BUILD_DIR="$(jh_resolve_build_output \
-    "${REPO_ROOT}" "${PICOTOOL_BUILD_DIR}" "tools/picotool")"; then
-    die "picotool build output must be inside ${REPO_ROOT}/.build"
-fi
-
-APP_DIR=""
-if [[ -n "${EXAMPLE}" ]]; then
-    if [[ "${EXAMPLE}" == */* || "${EXAMPLE}" == "." || "${EXAMPLE}" == ".." ]]; then
-        die "Example must be a directory name under examples/: ${EXAMPLE}"
-    fi
-    APP_DIR="${REPO_ROOT}/examples/${EXAMPLE}"
-    [[ -d "${APP_DIR}" ]] || die "Example directory not found: ${APP_DIR}"
-    if [[ -z "${PROJECT_CONFIG_DIR}" ]]; then
-        PROJECT_CONFIG_DIR="${APP_DIR}"
-    elif [[ "${PROJECT_CONFIG_DIR}" != "${APP_DIR}" ]]; then
-        die "--example uses its own hal_project_config.h; remove -p or select ${APP_DIR}"
-    fi
-fi
-if [[ ${LIBRARY_ONLY} -eq 1 && -n "${APP_DIR}" ]]; then
-    die "--library-only cannot be combined with --example"
-fi
-
-DEVICE_TREE=0
-if jh_device_tree_library "${PROJECT_CONFIG_DIR}" "${BOARD}" "${ASSEMBLY}" "${VARIANT}"; then
-    DEVICE_TREE=1
-    OUTPUT_KEY="$(jh_device_tree_build_key "${PROJECT_CONFIG_DIR}" "${ASSEMBLY}" \
-        "variant=${VARIANT}" "all=${ALL_FEATURES}" "freertos=${FREERTOS}" \
-        "${EXTRA_DEFS[@]}")"
-elif [[ $? -ne 1 ]]; then
-    exit 2
-else
-    : "${BOARD:=${TARGET_DEFAULT_BOARD}}"
-    OUTPUT_KEY="${BOARD}"
-fi
-if ! OUTPUT_DIR="$(jh_resolve_build_output \
-    "${REPO_ROOT}" "${OUTPUT_DIR}" "static/${TARGET}/${OUTPUT_KEY}")"; then
-    die "Build output must be inside ${REPO_ROOT}/.build"
-fi
-
-case "${OUTPUT_DIR}" in
-    /|"${REPO_ROOT}"|"$(dirname "${REPO_ROOT}")")
-        die "Refusing unsafe build output directory: ${OUTPUT_DIR}"
-        ;;
-esac
-
-"${REPO_ROOT}/scripts/ensure_pico_sdk.sh" \
-    --enable --repo-root "${REPO_ROOT}" --sdk-dir "${SDK_DIR}"
-"${REPO_ROOT}/scripts/ensure_picotool.sh" \
-    --enable --repo-root "${REPO_ROOT}" \
-    --picotool-dir "${PICOTOOL_DIR}" \
-    --build-dir "${PICOTOOL_BUILD_DIR}" --sdk-dir "${SDK_DIR}"
-
-if [[ ${FREERTOS} -eq 1 ]]; then
-    "${REPO_ROOT}/scripts/ensure_freertos_kernel.sh" \
-        --enable --repo-root "${REPO_ROOT}"
-    EXTRA_DEFS+=("HAL_ENABLE_FREERTOS=1")
-fi
-
-if [[ ${RISCV} -eq 1 ]]; then
-    "${REPO_ROOT}/scripts/ensure_riscv_toolchain.sh" \
-        --enable --repo-root "${REPO_ROOT}" --dir "${TOOLCHAIN_DIR}"
-fi
-
-if [[ ${CLEAN} -eq 1 && -d "${OUTPUT_DIR}" ]]; then
-    info "Cleaning ${OUTPUT_DIR}"
-    rm -rf -- "${OUTPUT_DIR}"
-fi
-
-CMAKE_ARGS=(
-    "-DPICO_SDK_PATH=${SDK_DIR}"
-    "-DJH_TARGET=${TARGET}"
-    "-DJH_BOARD=${BOARD}"
-    "-DJH_ASSEMBLY=${ASSEMBLY}"
-    "-DJH_VARIANT=${VARIANT}"
-    "-DCMAKE_BUILD_TYPE=Release"
-    "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON"
-)
-if [[ ${ALL_FEATURES} -eq 1 ]]; then
-    CMAKE_ARGS+=("-DJH_ENABLE_ALL_FEATURES=ON")
-fi
-if [[ ${LIBRARY_ONLY} -eq 1 ]]; then
-    CMAKE_ARGS+=(
-        "-DJH_RP_PICO_BUILD_ARTIFACT_PROBE=OFF"
-        "-DJH_RP_PICO_BUILD_CORE1_PROBE=OFF"
-    )
-fi
-PICOTOOL_EXECUTABLE="${PICOTOOL_BUILD_DIR}/picotool"
-[[ -x "${PICOTOOL_EXECUTABLE}" ]] ||
-    die "picotool executable not found: ${PICOTOOL_EXECUTABLE}"
-CMAKE_ARGS+=("-DJH_PICOTOOL_EXECUTABLE=${PICOTOOL_EXECUTABLE}")
-if [[ -n "${TOOLCHAIN_DIR}" ]]; then
-    CMAKE_ARGS+=("-DPICO_TOOLCHAIN_PATH=${TOOLCHAIN_DIR}")
-fi
-if [[ -n "${PROJECT_CONFIG_DIR}" ]]; then
-    CMAKE_ARGS+=("-DHAL_PROJECT_CONFIG_DIR=${PROJECT_CONFIG_DIR}")
-fi
-if [[ -n "${APP_DIR}" ]]; then
-    CMAKE_ARGS+=("-DJH_RP_PICO_APP_DIR=${APP_DIR}")
-fi
-if [[ ${#EXTRA_DEFS[@]} -gt 0 ]]; then
-    joined="$(IFS=';'; echo "${EXTRA_DEFS[*]}")"
-    CMAKE_ARGS+=("-DEXTRA_HAL_DEFINES=${joined}")
-fi
-
-info "Configuring Pico SDK build (${TARGET}, $(jh_build_selection "${DEVICE_TREE}" "${BOARD}" "${ASSEMBLY}"))..."
-cmake -S "${REPO_ROOT}/link_libraries/rp_pico_lib" -B "${OUTPUT_DIR}" "${CMAKE_ARGS[@]}"
-
-info "Building with ${JOBS} parallel jobs..."
-if [[ ${LIBRARY_ONLY} -eq 1 ]]; then
-    cmake --build "${OUTPUT_DIR}" --target JaszczurHAL --parallel "${JOBS}"
-else
-    cmake --build "${OUTPUT_DIR}" --parallel "${JOBS}"
-fi
-
-LIB_FILE="${OUTPUT_DIR}/libJaszczurHAL.a"
-jh_collect_generated_headers "${OUTPUT_DIR}" "${TARGET}" "${BOARD}" "${DEVICE_TREE}" ||
-    die "Generated headers are missing from ${OUTPUT_DIR}"
-[[ -f "${LIB_FILE}" ]] || die "Static library not found: ${LIB_FILE}"
-ok "Pico SDK library built: ${LIB_FILE}"
-if [[ ${LIBRARY_ONLY} -eq 0 ]]; then
-    PROBE_BASE="${OUTPUT_DIR}/jh_rp_pico_artifact_probe"
-    CORE1_PROBE_BASE="${OUTPUT_DIR}/jh_rp_pico_core1_probe"
-    for artifact_base in "${PROBE_BASE}" "${CORE1_PROBE_BASE}"; do
-        for extension in elf bin uf2; do
-            [[ -f "${artifact_base}.${extension}" ]] ||
-                die "Native ${extension^^} artifact not found: ${artifact_base}.${extension}"
-        done
-    done
-    if [[ -n "${APP_DIR}" ]]; then
-        FIRMWARE_BASE="${OUTPUT_DIR}/jh_rp_pico_firmware"
-        for extension in elf bin uf2; do
-            [[ -f "${FIRMWARE_BASE}.${extension}" ]] ||
-                die "Native example ${extension^^} not found: ${FIRMWARE_BASE}.${extension}"
-        done
-    fi
-
-    if [[ ${RISCV} -eq 1 ]]; then
-        NM_TOOL="${TOOLCHAIN_DIR}/bin/riscv32-unknown-elf-nm"
-    else
-        NM_TOOL="$(command -v arm-none-eabi-nm || true)"
-    fi
-    [[ -x "${NM_TOOL}" ]] || die "Target nm tool not found: ${NM_TOOL:-unknown}"
-
-    verify_symbol() {
-        local elf_file="$1"
-        local symbol="$2"
-        "${NM_TOOL}" --defined-only "${elf_file}" |
-            awk -v expected="${symbol}" '$NF == expected { found = 1 } END { exit !found }' ||
-            die "Required symbol '${symbol}' not found in ${elf_file}"
-    }
-
-    ENTRY_SYMBOLS=(main app_start app_task0 app_task1)
-    if [[ ${FREERTOS} -eq 1 ]]; then
-        ENTRY_SYMBOLS+=(vTaskStartScheduler xTaskCreateAffinitySet)
-    else
-        ENTRY_SYMBOLS+=(multicore_launch_core1 multicore_lockout_victim_init)
-    fi
-    for symbol in "${ENTRY_SYMBOLS[@]}"; do
-        verify_symbol "${CORE1_PROBE_BASE}.elf" "${symbol}"
-    done
-    if [[ -n "${APP_DIR}" ]]; then
-        for symbol in main app_start app_task0; do
-            verify_symbol "${FIRMWARE_BASE}.elf" "${symbol}"
-        done
-    fi
-
-    ok "Artifacts: ${PROBE_BASE}.{elf,bin,uf2}"
-    ok "Core-1 entry probe: ${CORE1_PROBE_BASE}.{elf,bin,uf2}"
-    if [[ -n "${APP_DIR}" ]]; then
-        ok "Native example ${EXAMPLE}: ${FIRMWARE_BASE}.{elf,bin,uf2}"
-    fi
-fi
+jh_launch_library_build "${REPO_ROOT}" "${TARGET}" pico-sdk \
+    "Target '${TARGET}' is not built with the Pico SDK; use scripts/build_link_library.sh" \
+    board assembly variant sdk-dir toolchain picotool-dir picotool-build-dir \
+    example project-config output jobs freertos all-features library-only clean

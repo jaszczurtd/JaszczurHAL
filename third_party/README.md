@@ -137,7 +137,7 @@ The production runner accepts a project directory, resolves the
 pinned SDK environment, and validates the complete build requirements:
 
 ```bash
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/fixtures/esp32s3_phase3 \
   --target esp32s3 --board waveshare-esp32-s3-zero --clean
 ```
@@ -157,8 +157,8 @@ Python, esptool, and ESP-IDF tool-registry provenance. The default output is
 directory below the project or repository `.build` root.
 
 `scripts/build_esp_idf_phase0.py` remains a thin compatibility wrapper around
-that runner for the isolated Phase 0 fixture. New project and CI commands use
-`scripts/build_esp_idf.py`. ESP32-S3 includes baseline system/sync/GPIO/ADC/
+the Python runner for the isolated Phase 0 fixture. Project and CI builds use
+`jh esp build`; `scripts/build_esp_idf.py` keeps the flash action. ESP32-S3 includes baseline system/sync/GPIO/ADC/
 serial/simple-PWM/timer backends. Its feature-resolved component graph adds
 UART, I2C controller/target, SPI, PWM_FREQ, RMT/RGB, PCNT, stack-guard
 configuration, native connectivity/services, and optional APP_TASK1 dispatch.

@@ -21,13 +21,13 @@ Zbuduj, zmaterializuj artefakty i wgraj przez natywny port USB Serial/JTAG, jak
 dla sondy fazy 2:
 
 ```bash
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/hardware/esp32s3_adc_scan \
   --assembly esp32s3-zero \
   --name jh_esp32_adc_scan_hardware \
   --clean
 
-python3 scripts/build_esp_idf.py artifacts \
+scripts/jh esp artifacts --root . \
   --project tests/hardware/esp32s3_adc_scan \
   --assembly esp32s3-zero \
   --name jh_esp32_adc_scan_hardware

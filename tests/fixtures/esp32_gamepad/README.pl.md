@@ -9,7 +9,7 @@ linkowanie oraz generowanie artefaktów.
 Nie weryfikuje zachowania radia ani parowania z fizycznym kontrolerem.
 
 ```sh
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/fixtures/esp32_gamepad \
   --target esp32 \
   --board esp32-devkitc-v4 \

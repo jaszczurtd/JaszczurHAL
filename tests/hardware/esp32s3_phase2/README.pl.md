@@ -46,13 +46,13 @@ niżej je powtarza. Nic nie trzeba do nich podłączać.
 Skompiluj projekt i wygeneruj przenośny manifest artefaktów:
 
 ```bash
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/hardware/esp32s3_phase2 \
   --assembly esp32s3-zero \
   --name jh_esp32_phase2_hardware \
   --clean
 
-python3 scripts/build_esp_idf.py artifacts \
+scripts/jh esp artifacts --root . \
   --project tests/hardware/esp32s3_phase2 \
   --assembly esp32s3-zero \
   --name jh_esp32_phase2_hardware

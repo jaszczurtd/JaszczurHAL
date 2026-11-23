@@ -18,9 +18,11 @@
 
 > **Part of [JaszczurHAL API Reference](JaszczurHAL_API.md)**
 
-JaszczurHAL uses CMake for host, RP, and STM32 builds. For ESP32, a repository-managed Python script runs the pinned ESP-IDF build system. Embedded builds select a target and physical board from the registry described in [Target and board profiles](boards_profiles_howto.md).
+JaszczurHAL uses CMake for host, RP, and STM32 builds. For ESP32, `jh esp` runs the pinned ESP-IDF build system. Embedded builds select a target and physical board from the registry described in [Target and board profiles](boards_profiles_howto.md).
 
 The linkable-library runners live in [`link_libraries/`](../../link_libraries/README.md), one directory per build family. `scripts/build_link_library.sh --target <id>` reads the target's build provider from the registry and starts the matching family runner with the remaining options. Every runner accepts the same core options: `--target`, `--board`, `--all-features`, `--library-only`, `--freertos`, `-p`/`--project-config`, `-D`, `-o`/`--output`, `--clean` and `-j`/`--jobs`. `-p` names one directory with `hal_project_config.h`. That header and the `-D` definitions are evaluated by `jh config cmake`, the reader that firmware projects use, so the header may test the target selector and those definitions.
+
+For the Pico SDK and STM32 families the runner scripts check the provider and start `jh library build`, which applies the output rules, prepares the managed components, configures and builds the CMake project and checks the result. The options and their meaning stay those of the runners; the [`tools/jh` README](../../tools/jh/README.md) lists them.
 
 | Target | Default board | Build entry | Backend selector |
 |---|---|---|---|
@@ -141,6 +143,8 @@ Template - replace the values in `<...>` before running:
 cmake --install .build/static/<target>/<board> \
   --prefix .build/install/<target>/<board>
 ```
+
+`scripts/jh library install --build-dir <build> --prefix <prefix>` runs the same installation and fails when the installed archive is missing. `scripts/jh library inspect --prefix <prefix>` lists the installed files with their SHA-256 and, for a device tree package, the identity from its record.
 
 The relevant installed files are:
 
@@ -399,7 +403,7 @@ storage, and OTA reservations.
 
 ## ESP32-S3 with ESP-IDF
 
-`scripts/build_esp32_lib.sh` produces the same library layout as the RP and STM32 runners. It builds the minimal ESP-IDF application in `link_libraries/esp32_lib/` through `scripts/build_esp_idf.py` and publishes the JaszczurHAL component archive next to the generated board headers:
+`scripts/build_esp32_lib.sh` produces the same library layout as the RP and STM32 runners. It checks the provider and starts `jh library build`, which builds the minimal ESP-IDF application in `link_libraries/esp32_lib/` with the ESP-IDF backend of `jh esp` and publishes the JaszczurHAL component archive next to the generated board headers:
 
 ```bash
 # Core runtime only, default board.
@@ -428,18 +432,18 @@ Without `-p` the probe's own `hal_project_config.h` requests no features, so the
 
 After building, use `cmake --install` as described under "Installed package and direct compiler use". The installation contains the HAL archive, public and generated headers, the jhbase status package with its revision and ABI profile, and the configuration records from that build. The archive still depends on the ESP-IDF components and `sdkconfig` that produced it. Link a complete firmware from an ESP-IDF project configured for the same target, board and feature set.
 
-Firmware projects use `scripts/build_esp_idf.py` directly. It supports `build`, `artifacts`, and `flash`:
+Firmware projects build with `scripts/jh esp build` and revalidate with `scripts/jh esp artifacts`. Flashing stays in `scripts/build_esp_idf.py flash`, which revalidates the build before it flashes:
 
 Template - replace the values in `<...>` before running:
 
 ```text
 # Clean build using the target's default board.
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/fixtures/esp32s3_phase3 \
   --target esp32s3 --board waveshare-esp32-s3-zero --clean
 
 # Revalidate an existing build without compiling.
-python3 scripts/build_esp_idf.py artifacts \
+scripts/jh esp artifacts --root . \
   --project tests/fixtures/esp32s3_phase3 \
   --target esp32s3 --board waveshare-esp32-s3-zero
 
@@ -476,7 +480,7 @@ Ninja, IDF Python and esptool versions, and the ESP-IDF `tools.json` digest.
 
 ESP32-S3 always enables `HAL_ENABLE_FREERTOS`. It also supports the delivered Phase 2 peripheral flags, the Phase 3 network and service features, and the portable drivers that only need those buses: sensors, displays, touch, NFC, I/O expanders, CAN over MCP2515, GPS and cellular modems, the command router, JSON and image codecs, FatFs over SPI, and PWM audio through DACless. The runner prepares the managed cJSON, LodePNG, TJpgDec and FatFs sources on demand and adds their include directories to the component. The baseline component contains system, synchronization, GPIO, ADC, simple PWM, serial, diagnostics, hardware and software timers, and the PID controller. A directly requested or implied feature outside the descriptor's allowlist fails with `[JH-CFG-UNSUPPORTED]`.
 
-Generated project CMake contains the resolved feature set, source list, and public/private ESP-IDF component dependencies. The component configuration uses these lists instead of maintaining a separate source graph. `scripts/build_esp_idf_phase0.py` remains a compatibility wrapper for the isolated Phase 0 test configuration.
+Generated project CMake contains the resolved feature set, source list, and public/private ESP-IDF component dependencies. The component configuration uses these lists instead of maintaining a separate source graph. The source lists and component dependencies per feature come from `config/tooling/esp_idf_components.json`. `scripts/build_esp_idf_phase0.py` remains a compatibility wrapper for the isolated Phase 0 test configuration.
 
 <a id="repository-workspace-and-vs-code"></a>
 

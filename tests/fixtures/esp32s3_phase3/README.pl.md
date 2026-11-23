@@ -14,7 +14,7 @@ podstawie samej kompilacji.
 Polecenie kompilacji:
 
 ```sh
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/fixtures/esp32s3_phase3 \
   --target esp32s3 \
   --board waveshare-esp32-s3-zero \

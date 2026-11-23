@@ -16,9 +16,11 @@
 
 > **Część [Dokumentacji API JaszczurHAL](JaszczurHAL_API.md)**
 
-JaszczurHAL używa CMake do kompilacji dla komputera, RP i STM32. Dla ESP32 skrypt Pythona z repozytorium uruchamia ESP-IDF w ustalonej wersji. Przy kompilacji na urządzenie wybiera się platformę docelową i fizyczną płytkę z rejestru opisanego w [profilach platform i płytek](boards_profiles_howto.md).
+JaszczurHAL używa CMake do kompilacji dla komputera, RP i STM32. Dla ESP32 `jh esp` uruchamia ESP-IDF w ustalonej wersji. Przy kompilacji na urządzenie wybiera się platformę docelową i fizyczną płytkę z rejestru opisanego w [profilach platform i płytek](boards_profiles_howto.md).
 
 Runnery bibliotek linkowalnych znajdują się w [`link_libraries/`](../../link_libraries/README.pl.md), po jednym katalogu na rodzinę buildów. `scripts/build_link_library.sh --target <id>` odczytuje provider builda targetu z rejestru i uruchamia właściwy runner z pozostałymi opcjami. Każdy runner przyjmuje ten sam zestaw podstawowych opcji: `--target`, `--board`, `--all-features`, `--library-only`, `--freertos`, `-p`/`--project-config`, `-D`, `-o`/`--output`, `--clean` i `-j`/`--jobs`. `-p` wskazuje jeden katalog z `hal_project_config.h`. Ten nagłówek i definicje `-D` przetwarza `jh config cmake`, ten sam mechanizm, którego używają projekty firmware, więc nagłówek może sprawdzać makro platformy i te definicje.
+
+W rodzinach Pico SDK i STM32 skrypty runnerów sprawdzają provider i uruchamiają `jh library build`. To polecenie pilnuje reguł katalogu wyjściowego, przygotowuje zarządzane komponenty, konfiguruje i kompiluje projekt CMake oraz sprawdza wynik. Opcje i ich znaczenie pozostają takie jak w runnerach; wymienia je [README `tools/jh`](../../tools/jh/README.pl.md).
 
 | Target | Domyślna płytka | Punkt wejścia kompilacji | Selektor backendu |
 |---|---|---|---|
@@ -141,6 +143,8 @@ Szablon - przed uruchomieniem zastąp wartości w `<...>`:
 cmake --install .build/static/<target>/<board> \
   --prefix .build/install/<target>/<board>
 ```
+
+`scripts/jh library install --build-dir <build> --prefix <prefix>` wykonuje tę samą instalację i zgłasza błąd, gdy brakuje zainstalowanego archiwum. `scripts/jh library inspect --prefix <prefix>` wypisuje zainstalowane pliki z ich SHA-256, a dla pakietu z device tree także tożsamość z jego rekordu.
 
 Instalacja zawiera między innymi:
 
@@ -395,7 +399,7 @@ flash, SRAM, pamięci trwałej i OTA.
 
 ## ESP32-S3 z ESP-IDF
 
-`scripts/build_esp32_lib.sh` tworzy ten sam układ biblioteki co runnery RP i STM32. Buduje minimalną aplikację ESP-IDF z `link_libraries/esp32_lib/` przez `scripts/build_esp_idf.py` i publikuje archiwum komponentu JaszczurHAL obok wygenerowanych nagłówków płytki:
+`scripts/build_esp32_lib.sh` tworzy ten sam układ biblioteki co runnery RP i STM32. Sprawdza provider i uruchamia `jh library build`, które buduje minimalną aplikację ESP-IDF z `link_libraries/esp32_lib/` backendem ESP-IDF polecenia `jh esp` i publikuje archiwum komponentu JaszczurHAL obok wygenerowanych nagłówków płytki:
 
 ```bash
 # Sam rdzeń runtime, domyślna płytka.
@@ -424,18 +428,18 @@ Bez `-p` własny `hal_project_config.h` aplikacji kontrolnej nie żąda żadnych
 
 Po zbudowaniu użyj `cmake --install` zgodnie z sekcją "Zainstalowany pakiet i bezpośrednie użycie kompilatora". Instalacja zawiera archiwum HAL, nagłówki publiczne i generowane, pakiet statusów jhbase z rewizją i profilem ABI oraz dane konfiguracji tego buildu. Archiwum nadal zależy od komponentów ESP-IDF i `sdkconfig`, które je utworzyły. Cały firmware linkuj z projektu ESP-IDF skonfigurowanego dla tego samego targetu, płytki i zestawu funkcji.
 
-Projekty firmware używają `scripts/build_esp_idf.py` bezpośrednio. Skrypt obsługuje polecenia `build`, `artifacts` i `flash`:
+Projekty firmware kompilują się przez `scripts/jh esp build`, a ponownie sprawdzają przez `scripts/jh esp artifacts`. Wgrywanie zostaje w `scripts/build_esp_idf.py flash`, który przed wgraniem ponownie sprawdza build:
 
 Szablon - przed uruchomieniem zastąp wartości w `<...>`:
 
 ```text
 # Czysty build z domyślną płytką targetu.
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/fixtures/esp32s3_phase3 \
   --target esp32s3 --board waveshare-esp32-s3-zero --clean
 
 # Ponowne sprawdzenie istniejącego buildu bez kompilowania.
-python3 scripts/build_esp_idf.py artifacts \
+scripts/jh esp artifacts --root . \
   --project tests/fixtures/esp32s3_phase3 \
   --target esp32s3 --board waveshare-esp32-s3-zero
 
@@ -476,7 +480,7 @@ esptool oraz skrót pliku `tools.json` ESP-IDF.
 
 ESP32-S3 zawsze włącza `HAL_ENABLE_FREERTOS`. Obsługuje również dostarczone flagi peryferiów fazy 2, funkcje sieciowe i usługi fazy 3 oraz przenośne sterowniki, którym wystarczają te magistrale: czujniki, wyświetlacze, dotyk, NFC, ekspandery I/O, CAN przez MCP2515, GPS i modemy komórkowe, router komend, kodeki JSON i obrazów, FatFs po SPI oraz audio PWM przez DACless. Skrypt przygotowuje na żądanie zarządzane źródła cJSON, LodePNG, TJpgDec i FatFs i dodaje ich katalogi include do komponentu. Podstawowy komponent zawiera system, synchronizację, GPIO, ADC, prosty PWM, komunikację szeregową, diagnostykę, timery sprzętowe i programowe oraz regulator PID. Funkcja żądana bezpośrednio lub przez zależność, lecz nieobecna na liście deskryptora, powoduje `[JH-CFG-UNSUPPORTED]`.
 
-Wygenerowany CMake projektu zawiera wynikowy zestaw funkcji, listę źródeł i publiczne oraz prywatne zależności komponentów ESP-IDF. Konfiguracja komponentu korzysta z tych list, zamiast utrzymywać osobny graf źródeł. `scripts/build_esp_idf_phase0.py` pozostaje skryptem zgodności dla odrębnej konfiguracji testowej fazy 0.
+Wygenerowany CMake projektu zawiera wynikowy zestaw funkcji, listę źródeł i publiczne oraz prywatne zależności komponentów ESP-IDF. Konfiguracja komponentu korzysta z tych list, zamiast utrzymywać osobny graf źródeł. Listy źródeł i zależności komponentów dla poszczególnych funkcji pochodzą z `config/tooling/esp_idf_components.json`. `scripts/build_esp_idf_phase0.py` pozostaje skryptem zgodności dla odrębnej konfiguracji testowej fazy 0.
 
 <a id="workspace-repozytorium-i-vs-code"></a>
 

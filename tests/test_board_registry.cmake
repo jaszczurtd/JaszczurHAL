@@ -364,16 +364,14 @@ endif()
 # ---- Link library runners ----
 
 # Every target outside the host has the runner of its build provider, and the
-# facts scripts/board_registry.py gives the runners are those of the registry.
+# facts jh target facts gives the runners are those of the registry.
 set(_runner_pico-sdk "build_rp_pico_lib.sh;rp_pico_lib")
 set(_runner_jh-stm32-baremetal "build_stm32_lib.sh;stm32_lib")
 set(_runner_esp-idf "build_esp32_lib.sh;esp32_lib")
 string(JSON _target_count LENGTH "${_registry}" targets)
 math(EXPR _target_last "${_target_count} - 1")
 function(target_facts variable target expected_code)
-    execute_process(COMMAND "${CMAKE_COMMAND}" -E env "JH_EXECUTABLE=${_jh}"
-        "JH_EXECUTABLE_ROOT=${JH_ROOT}" "${PYTHON}" "${JH_ROOT}/scripts/board_registry.py"
-        --repo-root "${JH_ROOT}" target-facts ${target}
+    execute_process(COMMAND "${_jh}" target facts --root "${JH_ROOT}" "--target=${target}"
         RESULT_VARIABLE _code OUTPUT_VARIABLE _out ERROR_VARIABLE _err)
     if(NOT _code EQUAL expected_code)
         message(FATAL_ERROR "target-facts ${target}: expected exit ${expected_code}, got ${_code}\n${_out}\n${_err}")

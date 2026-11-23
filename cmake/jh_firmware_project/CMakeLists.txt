@@ -282,7 +282,7 @@ elseif(_jh_rp_rp)
 elseif(JH_TARGET STREQUAL "esp32s3")
     message(FATAL_ERROR
         "JH_TARGET=esp32s3 uses the ESP-IDF pre-project bootstrap. Run "
-        "'scripts/build_esp_idf.py build --project ${JH_PROJECT_DIR} "
+        "'scripts/jh esp build --root ${JH_ROOT} --project ${JH_PROJECT_DIR} "
         "--target ${JH_TARGET} --board ${JH_BOARD}' instead of configuring "
         "cmake/jh_firmware_project directly.")
 else()

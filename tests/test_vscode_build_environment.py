@@ -58,6 +58,7 @@ require(
 require(
     esp32s3_tooling["espIdf"]
     == {
+        "builder": "jh",
         "runner": "${jhRoot}/scripts/build_esp_idf.py",
         "artifactManifest": "${buildDir}/jh_esp_idf_artifacts.json",
     },
@@ -519,6 +520,7 @@ with tempfile.TemporaryDirectory(prefix="jh ESP-IDF VS Code ") as temporary_text
         "board": "waveshare-esp32-s3-zero",
         "buildDir": str(build_dir),
         "espIdf": {
+            "builder": "jh",
             "runner": str(ROOT / "scripts" / "build_esp_idf.py"),
             "artifactManifest": str(
                 build_dir / "jh_esp_idf_artifacts.json"
@@ -574,10 +576,12 @@ with tempfile.TemporaryDirectory(prefix="jh ESP-IDF VS Code ") as temporary_text
     )
     matching_adapter = serial_adapter([matching_record])
     runner_commands: list[list[str]] = []
+    runner_environments: list[dict[str, str] | None] = []
 
     def fake_esp_runner(command, *, verbose=False, environment=None):
-        del verbose, environment
+        del verbose
         runner_commands.append(list(command))
+        runner_environments.append(environment)
         if command[2] == "build":
             write_esp_idf_artifacts(build_dir)
         return 0
@@ -589,12 +593,30 @@ with tempfile.TemporaryDirectory(prefix="jh ESP-IDF VS Code ") as temporary_text
         runtime,
         "load_config_for_action",
         return_value=(project, esp_config, 0),
-    ), mock.patch.object(runtime, "run_command", side_effect=fake_esp_runner):
+    ), mock.patch.object(runtime, "run_command", side_effect=fake_esp_runner), \
+            mock.patch.dict(os.environ, clear=False) as patched_environment:
+        patched_environment.pop("JH_COMPONENT_PYTHON", None)
         require(runtime.command_build(build_args) == 0, "ESP-IDF build failed")
+
+    # jh esp prepares components and exports the ESP-IDF environment with a
+    # host Python; without JH_COMPONENT_PYTHON it would look for python on
+    # PATH, which the Windows launcher environment lacks.
+    require(
+        all(environment is not None
+            and environment.get("JH_COMPONENT_PYTHON") == sys.executable
+            for environment in runner_environments),
+        "ESP-IDF build did not hand jh esp the interpreter of the runtime",
+    )
 
     require(
         [command[2] for command in runner_commands] == ["build", "artifacts"],
         "ESP-IDF build did not materialize and validate its artifact contract",
+    )
+    require(
+        all(command[1] == "esp"
+            and command[command.index("--root") + 1] == str(runtime.jaszczurhal_root())
+            for command in runner_commands),
+        "ESP-IDF build and artifacts did not run the native jh esp backend",
     )
     build_command = runner_commands[0]
     for option, value in (
@@ -676,6 +698,7 @@ with tempfile.TemporaryDirectory(prefix="jh ESP-IDF VS Code ") as temporary_text
     require(
         [command[2] for command in runner_commands]
         == ["build", "artifacts", "flash"]
+        and Path(runner_commands[2][1]).name == "build_esp_idf.py"
         and runner_commands[2][runner_commands[2].index("--port") + 1]
         == "/dev/ttyACM7",
         "ESP-IDF upload did not rebuild or hand the resolved port to the runner",

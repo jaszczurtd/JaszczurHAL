@@ -118,7 +118,7 @@ exactly those. Port numbers live only in the suite sources.
 ## Build, flash and verify
 
 ```bash
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/hardware/esp32s3_network \
   --assembly esp32s3-zero \
   --name jh_esp32_network_hardware

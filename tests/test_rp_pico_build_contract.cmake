@@ -91,7 +91,12 @@ file(READ "${_native_recipe}" _native_recipe_text)
 file(READ "${_sdk_support}" _sdk_support_text)
 file(READ "${_probe}" _probe_text)
 file(READ "${_core1_probe}" _core1_probe_text)
+# The runner is a launcher of jh library build, whose Pico SDK path holds the
+# runner's logic: the contracts below read both.
 file(READ "${_script}" _script_text)
+file(READ "${JH_ROOT}/tools/jh/build/jh_library_build.c" _library_build_text)
+file(READ "${JH_ROOT}/scripts/lib/build_artifacts.sh" _launcher_helper_text)
+string(APPEND _script_text "\n${_library_build_text}\n${_launcher_helper_text}")
 file(READ "${_board_generator}" _board_generator_text)
 file(READ "${_board_cmake}" _board_cmake_text)
 file(READ "${_sources}" _sources_text)
@@ -142,10 +147,11 @@ endforeach()
 # The script takes target facts from the board registry instead of a local
 # target list, and refuses targets that another family runner owns.
 foreach(_registry_contract IN ITEMS
-        "jh_target_facts \"\${REPO_ROOT}\" \"\${TARGET}\""
-        "[[ \"\${TARGET_PROVIDER}\" == \"pico-sdk\" ]]"
-        ": \"\${BOARD:=\${TARGET_DEFAULT_BOARD}}\""
-        "jh_validate_hal_defines")
+        "jh_launch_library_build \"\${REPO_ROOT}\" \"\${TARGET}\" pico-sdk"
+        "jh_target_facts \"\${repo_root}\" \"\${target}\""
+        "[[ \"\${actual}\" == \"\${provider}\" ]]"
+        "*board = (*board)[0] != '\\0' ? *board : default_board;"
+        "validate_defines(&b)")
     string(FIND "${_script_text}" "${_registry_contract}" _registry_at)
     if(_registry_at EQUAL -1)
         message(FATAL_ERROR
@@ -670,7 +676,7 @@ foreach(_script_contract IN ITEMS
         "examples/"
         "JH_RP_PICO_BUILD_ARTIFACT_PROBE=OFF"
         "JH_RP_PICO_BUILD_CORE1_PROBE=OFF"
-        "--target JaszczurHAL"
+        "jh_span(\"JaszczurHAL\")"
         "jh_rp_pico_core1_probe"
         "jh_rp_pico_firmware")
     string(FIND "${_script_text}" "${_script_contract}" _script_contract_at)
@@ -699,10 +705,12 @@ foreach(_core_runtime_contract IN ITEMS app_start app_task0 HAL_LED_BUILTIN)
 endforeach()
 
 include("${_sources}")
+include("${JH_ROOT}/tests/jh_test_artifacts.cmake")
+jh_test_artifact_dir(_artifact_dir rp-pico-build-contract)
 jh_read_library_config(
     ROOT "${JH_ROOT}"
     TARGET rp2040
-    OUTPUT_DIR "${CMAKE_CURRENT_BINARY_DIR}/jh_rp_pico_build_contract"
+    OUTPUT_DIR "${_artifact_dir}"
     DEFINES "HAL_RP_CORE0_STACK_SIZE=3072u")
 set(JH_RP_BOARD_DEFINES "HAL_RP_CORE0_STACK_SIZE=1024u"
     "HAL_RP_CORE1_STACK_SIZE=2048u")

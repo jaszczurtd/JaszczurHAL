@@ -295,9 +295,11 @@ definicji targetu w rejestrze, obsługuje warianty firmware bare-metal i FreeRTO
 oraz wgrywanie przez OpenOCD.
 
 Projekty ESP32-S3 używają `toolchain: "esp-idf"`. Rejestr targetów wskazuje
-`scripts/build_esp_idf.py`, ścieżkę manifestu wyjściowego, strategię wgrywania
-ESP-IDF, wymaganą funkcję FreeRTOS oraz VID/PID interfejsu programującego
-wybranej płytki. Akcja `build` uruchamia produkcyjny skrypt, po czym niezależnie
+narzędzie kompilacji (`espIdf.builder: "jh"`, więc `build` uruchamia
+`jh esp build`), skrypt wgrywania `scripts/build_esp_idf.py` (`espIdf.runner`),
+ścieżkę manifestu wyjściowego, strategię wgrywania ESP-IDF, wymaganą funkcję
+FreeRTOS oraz VID/PID interfejsu programującego wybranej płytki. Akcja `build`
+uruchamia `jh esp build`, po czym niezależnie
 ponownie sprawdza `jh_esp_idf_artifacts.json`. Zachowuje kompletną i
 uporządkowaną listę obrazów bootloadera, tabeli partycji i aplikacji, zamiast
 sprowadzać ją do pojedynczego stabilnego pliku firmware. Akcja `upload`

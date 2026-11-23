@@ -95,8 +95,8 @@ claims of verified hardware operation for this example.
 | `stm32g474` | `nucleo-g474re` | GNU Arm | ELF, BIN, HEX, MAP |
 | `esp32s3` | `waveshare-esp32-s3-zero` | pinned ESP-IDF | ELF, BIN, MAP, bootloader, partition table, `jh_esp_idf_artifacts.json` |
 
-For `esp32s3`, `jh-vscode` runs `scripts/build_esp_idf.py` with the
-project header and the selected variant instead of the CMake dispatcher. An
+For `esp32s3`, `jh-vscode` runs `jh esp build` with the project header and
+the selected variant instead of the CMake dispatcher. An
 example has an `esp32s3` assembly only when every feature it requests is on
 the target's `supportedFeatures` list; that list holds the ESP-IDF backends and
 the portable bus, sensor, display, codec and command drivers, while flash

@@ -66,6 +66,23 @@ typedef enum {
   opt_include_board,
   opt_effective,
   opt_resolution_output,
+  opt_project_config,
+  opt_all_features,
+  opt_freertos,
+  opt_library_only,
+  opt_clean,
+  opt_jobs,
+  opt_sdk_dir,
+  opt_toolchain,
+  opt_picotool_dir,
+  opt_picotool_build_dir,
+  opt_example,
+  opt_freertos_kernel,
+  opt_prefix,
+  opt_name,
+  opt_include_dir,
+  opt_link_library,
+  opt_idf_dir,
   opt_machine,
   opt_json_version,
   opt_help,
@@ -99,7 +116,15 @@ typedef enum {
   cmd_hardware_select,
   cmd_hardware_resolve,
   cmd_hardware_finalize,
-  cmd_hardware_identity
+  cmd_hardware_identity,
+  cmd_target_list,
+  cmd_target_facts,
+  cmd_library_key,
+  cmd_library_build,
+  cmd_library_install,
+  cmd_library_inspect,
+  cmd_esp_build,
+  cmd_esp_artifacts
 } jh_command_id_t;
 
 typedef struct {
@@ -202,6 +227,13 @@ int jh_cli_clock_list(jh_cli_t *ctx);
 int jh_cli_boards(jh_cli_t *ctx);
 int jh_cli_board_config(jh_cli_t *ctx);
 int jh_cli_project_build(jh_cli_t *ctx, bool cmake);
+int jh_cli_target_list(jh_cli_t *ctx);
+int jh_cli_target_facts(jh_cli_t *ctx);
+int jh_cli_library_key(jh_cli_t *ctx);
+int jh_cli_library_build(jh_cli_t *ctx);
+int jh_cli_library_install(jh_cli_t *ctx);
+int jh_cli_library_inspect(jh_cli_t *ctx);
+int jh_cli_esp(jh_cli_t *ctx, jh_command_id_t command);
 
 const char *jh_cli_load_boards(jh_cli_t *ctx, const char *command,
                                jh_board_registry_t *registry);

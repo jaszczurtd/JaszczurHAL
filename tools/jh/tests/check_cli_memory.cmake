@@ -11,7 +11,7 @@ execute_process(COMMAND "${JH_CTEST}" --test-dir "${JH_BUILD}" -C "${JH_CONFIG}"
     --show-only=json-v1 -L "^cli$"
   OUTPUT_VARIABLE inventory COMMAND_ERROR_IS_FATAL ANY)
 string(JSON count LENGTH "${inventory}" tests)
-set(required_suites jh_cli jh_features jh_boards jh_schema_compat jh_device_defaults)
+set(required_suites jh_cli jh_features jh_boards jh_library jh_schema_compat jh_device_defaults)
 if(count GREATER 0)
   math(EXPR last "${count} - 1")
   foreach(index RANGE ${last})

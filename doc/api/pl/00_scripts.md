@@ -24,7 +24,8 @@ Uruchamiaj polecenia z katalogu głównego repozytorium, chyba że instrukcja ws
 | Testy z sanitizerami i fuzzingiem | `scripts/run_sanitizer_fuzz.sh` | Odtwarza konfigurację testów na komputerze i CLI jh z instrumentacją Clang, uruchamia wszystkie testy hosta i natywne testy CLI jh pod ASan/UBSan, natywne testy hosta pod TSan i wykonuje krótkie fuzzowanie parserów sieciowych. |
 | Obsługa projektu firmware | `vscode/entry/jh-vscode <action> --project <dir>` w Uniksie lub `vscode/entry/jh-vscode.cmd ...` w Windows | Udostępnia stały interfejs poleceń do kompilacji, wgrywania, monitorowania, wyboru płytki, konfiguracji IntelliSense i czyszczenia używany przez projekty VS Code. |
 | Kompilacja biblioteki linkowalnej dla dowolnego targetu | `scripts/build_link_library.sh --target <id>` | Wybiera runner rodziny z `link_libraries/` na podstawie providera builda targetu i przekazuje pozostałe opcje. |
-| Kompilacja lub wgrywanie projektu ESP-IDF | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Uruchamia akcję `build`, `artifacts` lub `flash`; ustala metadane targetu i płytki ESP, w razie potrzeby przygotowuje SDK w wersji wskazanej przez repozytorium oraz sprawdza przenośny manifest zawierający wiele obrazów. |
+| Kompilacja lub sprawdzenie projektu ESP-IDF | `scripts/jh esp build --root . --project <dir>` (albo `artifacts`) | Ustala metadane targetu i płytki ESP, w razie potrzeby przygotowuje SDK w wersji wskazanej przez repozytorium, kompiluje albo ponownie sprawdza projekt i zapisuje przenośny manifest zawierający wiele obrazów. |
+| Wgrywanie projektu ESP-IDF | `python3 scripts/build_esp_idf.py flash --project <dir> --port <port>` | Ponownie sprawdza istniejący build i wgrywa jego obrazy pod adresy z manifestu. |
 | Kompilacja przykładów z repozytorium | `scripts/examples_dispatcher.py build --target <target>` | Kompiluje manifesty przykładów za pomocą tego samego mechanizmu `jh-vscode` i CMake, którego używają projekty firmware. |
 | Ręczna kompilacja testów działania na RP | `scripts/build_rp_pico_parity_fixtures.sh` | Kompiluje testy USB wielordzeniowego i SDLogger dla wszystkich obsługiwanych natywnych kombinacji target/runtime. |
 
@@ -379,7 +380,7 @@ manifestu, wykrywania źródeł, targetu, płytki, cache i artefaktów opisuje
 
 Jeden punkt wejścia dla każdej kompilacji biblioteki linkowalnej. `--target <id>`
 wskazuje target z rejestru; skrypt odczytuje jego provider builda przez
-`scripts/board_registry.py target-facts` i uruchamia runner rodziny:
+`jh target facts` i uruchamia runner rodziny:
 `pico-sdk` wybiera `build_rp_pico_lib.sh`, `jh-stm32-baremetal` wybiera
 `build_stm32_lib.sh`, a `esp-idf` wybiera `build_esp32_lib.sh`. Pozostałe
 opcje są przekazywane bez zmian. Mock hosta nie ma runnera i jest odrzucany.
@@ -404,7 +405,9 @@ konfiguracji, wariantu i żądanych definicji. Obok archiwum leży też
 
 ### `scripts/build_rp_pico_lib.sh`
 
-Kompiluje JaszczurHAL przy użyciu oficjalnego Pico SDK dla następujących platform:
+Kompiluje JaszczurHAL przy użyciu oficjalnego Pico SDK dla następujących
+platform. Skrypt sprawdza, czy target korzysta z Pico SDK, i uruchamia
+`jh library build`, które wykonuje opisaną tu kompilację (README `tools/jh`).
 
 | Target skryptu | Platforma Pico SDK | Domyślna płytka |
 |---|---|---|
@@ -428,7 +431,7 @@ Oba katalogi wyjścia kompilacji muszą pozostać poniżej `.build/`.
 
 ### `scripts/build_stm32_lib.sh`
 
-Kompiluje bibliotekę statyczną STM32 przy użyciu narzędzi GNU Arm Embedded. `--target` wybiera target STM32 z rejestru (domyślnie `stm32g474`), a `--board` jego profil płytki. Przyjmuje konfigurację projektu, wielokrotne definicje HAL, niestandardowy plik narzędziowy CMake oraz opcjonalną ścieżkę do FreeRTOS-Kernel.
+Kompiluje bibliotekę statyczną STM32 przy użyciu narzędzi GNU Arm Embedded. Skrypt sprawdza, czy target jest targetem STM32 bare-metal, i uruchamia `jh library build`, które wykonuje kompilację. `--target` wybiera target STM32 z rejestru (domyślnie `stm32g474`), a `--board` jego profil płytki. Przyjmuje konfigurację projektu, wielokrotne definicje HAL, niestandardowy plik narzędziowy CMake oraz opcjonalną ścieżkę do FreeRTOS-Kernel.
 
 Domyślne wyjście:
 
@@ -446,8 +449,9 @@ buduje wyłącznie archiwum.
 ### `scripts/build_esp32_lib.sh`
 
 Kompiluje bibliotekę statyczną ESP-IDF dla targetu z providerem `esp-idf`
-(domyślnie `esp32s3`). Uruchamia `build_esp_idf.py build` na minimalnej
-aplikacji kontrolnej z `link_libraries/esp32_lib/`, a następnie publikuje
+(domyślnie `esp32s3`). Skrypt sprawdza provider i uruchamia
+`jh library build`, które kompiluje minimalną aplikację kontrolną
+z `link_libraries/esp32_lib/` backendem ESP-IDF polecenia `jh esp`, a następnie publikuje
 archiwum komponentu JaszczurHAL jako `libJaszczurHAL.a` i kopiuje
 wygenerowane nagłówki płytki do `include/generated/` w tym samym katalogu
 builda. Bez `--project-config` archiwum zawiera sam rdzeń runtime;
@@ -460,7 +464,7 @@ repozytorium.
 
 ### `scripts/build_esp_idf.py`
 
-Kompiluje, sprawdza i wgrywa projekty korzystające z ESP-IDF. Obsługuje konfiguracje, w których deskryptor płytki wybiera `esp-idf` jako dostawcę środowiska. Dostępne są trzy akcje:
+Kompiluje, sprawdza i wgrywa projekty korzystające z ESP-IDF. Obsługuje konfiguracje, w których deskryptor płytki wybiera `esp-idf` jako dostawcę środowiska. `jh esp build` i `jh esp artifacts` (`scripts/jh`) wykonują akcje `build` i `artifacts` z tymi samymi opcjami, wynikami i diagnostyką; korzystają z nich jh-vscode, runner biblioteki i bramka. Ten skrypt zachowuje akcję `flash` i pozostaje wzorcem obu natywnych akcji do czasu wycofania. Oba czytają listy źródeł i zależności komponentów z `config/tooling/esp_idf_components.json`. Akcje:
 
 | Akcja | Zachowanie |
 |---|---|
@@ -533,9 +537,12 @@ SPI.
 Wewnętrzny moduł powłoki dołączany przez wszystkie trzy skrypty kompilacji.
 Definiuje:
 
-- `jh_build_root <repo>` do normalizacji `<repo>/.build`;
-- `jh_resolve_build_output <repo> <requested> <default-relative>` do
-  normalizacji ścieżki wyjściowej i odrzucania wszystkiego poza `.build/`.
+- `jh_tool_path <repo>` do wyboru CLI `jh`: `JH_EXECUTABLE`, gdy należy do
+  tego checkoutu (bramka przygotowuje go raz), w przeciwnym razie `scripts/jh`;
+- `jh_target_facts <repo> <target>` do wypisania faktów targetu przez
+  `jh target facts`;
+- `jh_link_library_runner <provider>` do wskazania runnera rodziny dla
+  providera builda.
 
 Jest to biblioteka, nie samodzielne polecenie.
 
@@ -923,7 +930,7 @@ oraz obsługa bibliotek w VS Code.
 
 Polecenie `build-key <katalog> <montaż> [żądania...]` wypisuje nazwę katalogu
 kompilacji biblioteki w postaci `<montaż albo "auto">/<16 cyfr szesnastkowych>`.
-`scripts/lib/build_artifacts.sh` używa tej nazwy w skryptach budujących biblioteki.
+Runnery bibliotek biorą tę samą nazwę z `jh library key`; testy porównują oba wyniki.
 
 ### `scripts/device_tree_check.py`
 

@@ -459,6 +459,7 @@ JH_MEMCHECK_REQUIRED_TESTS=(
     jh_clocks
     jh_hardware
     jh_cli_failures
+    jh_library_api
 )
 
 # run_memcheck BUILD LOG REQUIRED...: every native test labelled memcheck in
@@ -740,7 +741,7 @@ stage_esp_idf() {
 
     info "Building the ESP32-S3 Phase 3 fixture with pinned ESP-IDF..."
     run_esp_build "${LOG_ROOT}/jh_esp32s3_phase3.log" "${phase3}" \
-        "${SCRIPT_DIR}/scripts/build_esp_idf.py" build \
+        "${JH_EXECUTABLE}" esp build --root "${SCRIPT_DIR}" \
             --project "${SCRIPT_DIR}/tests/fixtures/esp32s3_phase3" \
             --target esp32s3 \
             --board waveshare-esp32-s3-zero \
@@ -749,7 +750,7 @@ stage_esp_idf() {
 
     info "Building the ESP32 Classic gamepad fixture with pinned ESP-IDF..."
     run_esp_build "${LOG_ROOT}/jh_esp32_gamepad.log" "${gamepad}" \
-        "${SCRIPT_DIR}/scripts/build_esp_idf.py" build \
+        "${JH_EXECUTABLE}" esp build --root "${SCRIPT_DIR}" \
             --project "${SCRIPT_DIR}/tests/fixtures/esp32_gamepad" \
             --target esp32 \
             --board esp32-devkitc-v4 \
@@ -797,7 +798,7 @@ stage_esp_idf() {
     check_library_package "${device_tree_library}"
     info "Building ESP32-S3 firmware from a device tree..."
     run_esp_build "${LOG_ROOT}/jh_esp32s3_device_tree_firmware.log" "${device_tree_firmware}" \
-        python3 "${SCRIPT_DIR}/scripts/build_esp_idf.py" build \
+        "${JH_EXECUTABLE}" esp build --root "${SCRIPT_DIR}" \
             --project "${SCRIPT_DIR}/${DEVICE_TREE_LIBRARY_CONFIG}" \
             --target esp32s3 \
             --output "${device_tree_firmware}" \

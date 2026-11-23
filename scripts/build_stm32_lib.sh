@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Build JaszczurHAL as a linkable static library for the STM32 family.
+# The build itself runs in `jh library build`; this launcher keeps the options,
+# the default target and the provider check of the STM32 runner.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -9,14 +11,8 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 source "${SCRIPT_DIR}/lib/build_artifacts.sh"
 
 RED='\033[0;31m'
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-CYAN='\033[0;36m'
 NC='\033[0m'
 
-info()  { echo -e "${CYAN}[INFO]${NC} $*"; }
-ok()    { echo -e "${GREEN}[OK]${NC} $*"; }
-warn()  { echo -e "${YELLOW}[WARN]${NC} $*"; }
 die()   { echo -e "${RED}[ERROR]${NC} $*" >&2; exit 1; }
 
 usage() {
@@ -50,35 +46,19 @@ USAGE
 }
 
 TARGET="stm32g474"
-PROJECT_CONFIG_DIR=""
-BOARD=""
-ASSEMBLY=""
-VARIANT=""
-EXTRA_DEFS=()
-FREERTOS=0
-ALL_FEATURES=0
-FREERTOS_KERNEL_DIR=""
-OUTPUT_DIR=""
-TOOLCHAIN_FILE="${REPO_ROOT}/link_libraries/stm32_lib/toolchain_stm32g474.cmake"
-CLEAN=0
-JOBS="$(nproc 2>/dev/null || echo 4)"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --target) TARGET="$2"; shift 2 ;;
-        -p|--project-config) PROJECT_CONFIG_DIR="$2"; shift 2 ;;
-        -D) EXTRA_DEFS+=("$2"); shift 2 ;;
-        --board) BOARD="$2"; shift 2 ;;
-        --assembly) ASSEMBLY="$2"; shift 2 ;;
-        --variant) VARIANT="$2"; shift 2 ;;
-        --library-only) shift ;;
-        --freertos) FREERTOS=1; shift ;;
-        --all-features) ALL_FEATURES=1; FREERTOS=1; shift ;;
-        --freertos-kernel) FREERTOS_KERNEL_DIR="$2"; shift 2 ;;
-        -o|--output) OUTPUT_DIR="$2"; shift 2 ;;
-        -t|--toolchain) TOOLCHAIN_FILE="$2"; shift 2 ;;
-        --clean) CLEAN=1; shift ;;
-        -j|--jobs) JOBS="$2"; shift 2 ;;
+        -p|--project-config) jh_launcher_option project-config "$2"; shift 2 ;;
+        -D) JH_DEFINES+=("--define=$2"); shift 2 ;;
+        --board|--assembly|--variant|--freertos-kernel)
+            jh_launcher_option "${1#--}" "$2"; shift 2 ;;
+        --library-only|--freertos|--all-features|--clean)
+            jh_launcher_flag "${1#--}"; shift ;;
+        -o|--output) jh_launcher_option output "$2"; shift 2 ;;
+        -t|--toolchain) jh_launcher_option toolchain "$2"; shift 2 ;;
+        -j|--jobs) jh_launcher_option jobs "$2"; shift 2 ;;
         -h|--help) usage; exit 0 ;;
         *)
             die "Unknown option: $1"
@@ -86,114 +66,7 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
-jh_validate_hal_defines "${EXTRA_DEFS[@]}" || exit 1
-
-TARGET_PROVIDER=""
-TARGET_DEFAULT_BOARD=""
-facts="$(jh_target_facts "${REPO_ROOT}" "${TARGET}")" ||
-    die "Unknown target '${TARGET}'"
-while IFS='=' read -r key value; do
-    case "${key}" in
-        provider) TARGET_PROVIDER="${value}" ;;
-        defaultBoard) TARGET_DEFAULT_BOARD="${value}" ;;
-    esac
-done <<< "${facts}"
-[[ "${TARGET_PROVIDER}" == "jh-stm32-baremetal" ]] ||
-    die "Target '${TARGET}' is not an STM32 bare-metal target; use scripts/build_link_library.sh"
-
-DEVICE_TREE=0
-if jh_device_tree_library "${PROJECT_CONFIG_DIR}" "${BOARD}" "${ASSEMBLY}" "${VARIANT}"; then
-    DEVICE_TREE=1
-    PROJECT_CONFIG_DIR="$(realpath -m -- "${PROJECT_CONFIG_DIR}")"
-    OUTPUT_KEY="$(jh_device_tree_build_key "${PROJECT_CONFIG_DIR}" "${ASSEMBLY}" \
-        "variant=${VARIANT}" "all=${ALL_FEATURES}" "freertos=${FREERTOS}" \
-        "${EXTRA_DEFS[@]}")"
-elif [[ $? -ne 1 ]]; then
-    exit 2
-else
-    : "${BOARD:=${TARGET_DEFAULT_BOARD}}"
-    OUTPUT_KEY="${BOARD}"
-fi
-if ! OUTPUT_DIR="$(jh_resolve_build_output \
-    "${REPO_ROOT}" "${OUTPUT_DIR}" "static/${TARGET}/${OUTPUT_KEY}")"; then
-    die "Build output must be inside ${REPO_ROOT}/.build"
-fi
-
-[[ -f "${TOOLCHAIN_FILE}" ]] || die "Toolchain file not found: ${TOOLCHAIN_FILE}"
-
-if ! command -v arm-none-eabi-g++ >/dev/null 2>&1; then
-    warn "arm-none-eabi-g++ not found in PATH."
-    warn "If you use a custom prefix/path, pass it via CMake cache variables (e.g. -D ARM_GCC_PREFIX=...)."
-fi
-
-if [[ ${CLEAN} -eq 1 ]] && [[ -d "${OUTPUT_DIR}" ]]; then
-    info "Cleaning ${OUTPUT_DIR}"
-    rm -rf "${OUTPUT_DIR}"
-fi
-
-mkdir -p "${OUTPUT_DIR}"
-
-CMAKE_EXTRA_ARGS=()
-
-if [[ ${ALL_FEATURES} -eq 1 ]]; then
-    CMAKE_EXTRA_ARGS+=("-DJH_ENABLE_ALL_FEATURES=ON")
-fi
-
-if [[ -n "${PROJECT_CONFIG_DIR}" ]]; then
-    CMAKE_EXTRA_ARGS+=("-DHAL_PROJECT_CONFIG_DIR=${PROJECT_CONFIG_DIR}")
-fi
-
-has_hal_freertos=0
-for def in "${EXTRA_DEFS[@]}"; do
-    if [[ "${def}" == "HAL_ENABLE_FREERTOS" || "${def}" == HAL_ENABLE_FREERTOS=* ]]; then
-        has_hal_freertos=1
-        break
-    fi
-done
-
-if [[ ${FREERTOS} -eq 1 && ${has_hal_freertos} -eq 0 ]]; then
-    EXTRA_DEFS+=("HAL_ENABLE_FREERTOS")
-    has_hal_freertos=1
-fi
-
-if [[ -n "${FREERTOS_KERNEL_DIR}" ]]; then
-    CMAKE_EXTRA_ARGS+=("-DJH_FREERTOS_KERNEL_DIR=${FREERTOS_KERNEL_DIR}")
-fi
-
-if [[ ${has_hal_freertos} -eq 1 ]]; then
-    ENSURE_ARGS=(--enable --repo-root "${REPO_ROOT}")
-    if [[ -n "${FREERTOS_KERNEL_DIR}" ]]; then
-        ENSURE_ARGS+=(--kernel-dir "${FREERTOS_KERNEL_DIR}")
-    fi
-    "${REPO_ROOT}/scripts/ensure_freertos_kernel.sh" "${ENSURE_ARGS[@]}"
-fi
-
-if [[ ${#EXTRA_DEFS[@]} -gt 0 ]]; then
-    joined=$(IFS=';'; echo "${EXTRA_DEFS[*]}")
-    CMAKE_EXTRA_ARGS+=("-DEXTRA_HAL_DEFINES=${joined}")
-fi
-
-info "Configuring CMake (${TARGET}, $(jh_build_selection "${DEVICE_TREE}" "${BOARD}" "${ASSEMBLY}"))..."
-cmake -S "${REPO_ROOT}/link_libraries/stm32_lib" -B "${OUTPUT_DIR}" \
-    -DCMAKE_TOOLCHAIN_FILE="${TOOLCHAIN_FILE}" \
-    -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
-    -DJH_TARGET="${TARGET}" \
-    -DJH_BOARD="${BOARD}" \
-    -DJH_ASSEMBLY="${ASSEMBLY}" \
-    -DJH_VARIANT="${VARIANT}" \
-    "${CMAKE_EXTRA_ARGS[@]}"
-
-info "Building with ${JOBS} parallel jobs..."
-cmake --build "${OUTPUT_DIR}" --target JaszczurHAL -j "${JOBS}"
-
-LIB_FILE=$(find "${OUTPUT_DIR}" -name "libJaszczurHAL.a" -print -quit 2>/dev/null)
-if [[ -n "${LIB_FILE}" ]]; then
-    jh_collect_generated_headers "${OUTPUT_DIR}" "${TARGET}" "${BOARD}" "${DEVICE_TREE}" ||
-        die "Generated headers are missing from ${OUTPUT_DIR}"
-    SIZE=$(stat --printf="%s" "${LIB_FILE}" 2>/dev/null || stat -f "%z" "${LIB_FILE}" 2>/dev/null || echo "?")
-    ok "Library built: ${LIB_FILE}  (${SIZE} bytes)"
-    echo ""
-    info "Headers in: ${REPO_ROOT}/src/"
-else
-    die "Library not found after build"
-fi
+jh_launch_library_build "${REPO_ROOT}" "${TARGET}" jh-stm32-baremetal \
+    "Target '${TARGET}' is not an STM32 bare-metal target; use scripts/build_link_library.sh" \
+    board assembly variant freertos-kernel project-config output toolchain jobs \
+    library-only freertos all-features clean

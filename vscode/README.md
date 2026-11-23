@@ -272,9 +272,10 @@ UF2. STM32G474 uses the registry's native target recipe, supports bare-metal
 and FreeRTOS firmware variants, and uploads through OpenOCD.
 
 ESP32-S3 projects use `toolchain: "esp-idf"`. The target registry
-provides `scripts/build_esp_idf.py`, the output manifest path, the ESP-IDF upload
-strategy, required FreeRTOS feature, and the selected board's programming USB
-VID/PID. `build` invokes the production runner and then independently
+provides the builder (`espIdf.builder: "jh"`, so `build` runs `jh esp build`),
+the flash runner `scripts/build_esp_idf.py` (`espIdf.runner`), the output
+manifest path, the ESP-IDF upload strategy, required FreeRTOS feature, and the
+selected board's programming USB VID/PID. `build` invokes `jh esp build` and then independently
 revalidates `jh_esp_idf_artifacts.json`; it preserves the complete ordered
 bootloader, partition-table, and application image set rather than reducing it
 to one stable firmware file. `upload` rebuilds, releases the project monitor,

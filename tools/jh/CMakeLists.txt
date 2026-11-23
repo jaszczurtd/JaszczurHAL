@@ -88,7 +88,8 @@ file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/jh_tool_inputs.h" CONTENT "${_
 target_include_directories(jh_host PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(jh_host PUBLIC jh_registry jb::host jb::unicode PRIVATE pcre2-8-static)
 jh_tool_target(jh_host)
-add_library(jh_device STATIC device/jh_firmware_build.c device/jh_firmware_read.c)
+add_library(jh_device STATIC device/jh_firmware_build.c device/jh_firmware_read.c
+  device/jh_build_metadata.c)
 target_include_directories(jh_device PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/device")
 # The firmware tools and their test read integers through HAL's
 # hal/core/jh_endian.h, an alias header of jb/endian.h. Only these targets see
@@ -98,10 +99,25 @@ set(_jh_hal_source_root "${CMAKE_CURRENT_SOURCE_DIR}/../../src")
 target_include_directories(jh_device PRIVATE "${_jh_hal_source_root}")
 target_link_libraries(jh_device PUBLIC jh_files)
 jh_tool_target(jh_device)
+# The library builds of the targets with a linkable-library provider. C11.
+add_library(jh_build STATIC build/jh_library_build.c build/jh_build_support.c)
+target_include_directories(jh_build PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/build")
+target_link_libraries(jh_build PUBLIC jh_registry)
+jh_tool_target(jh_build)
+# The ESP-IDF backend (jh esp, the esp-idf library builds) on the board,
+# hardware and build metadata modules; PCRE2 matches the tools.json version
+# probes. C11.
+target_sources(jh_build PRIVATE build/jh_esp_build.c build/jh_esp_model.c
+  build/jh_esp_artifacts.c build/jh_esp_support.c)
+target_link_libraries(jh_build PUBLIC jh_host jh_device PRIVATE pcre2-8-static)
+if(WIN32)
+  target_link_libraries(jh_build PRIVATE shell32)
+endif()
 add_executable(jh src/main.c src/jh_cli_result.c src/jh_cli_json.c
   src/jh_cli_repository.c src/jh_cli_features.c src/jh_cli_boards.c
-  src/jh_cli_config.c src/jh_cli_firmware.c src/jh_cli_hardware.c)
-target_link_libraries(jh PRIVATE jh_host jh_device)
+  src/jh_cli_config.c src/jh_cli_firmware.c src/jh_cli_hardware.c
+  src/jh_cli_library.c src/jh_cli_esp.c)
+target_link_libraries(jh PRIVATE jh_host jh_device jh_build)
 target_compile_features(jh PRIVATE c_std_11)
 jh_tool_target(jh)
 if(MSVC)
@@ -193,24 +209,32 @@ if(BUILD_TESTING)
   get_target_property(_jh_failure_sources jh SOURCES)
   list(REMOVE_ITEM _jh_failure_sources src/main.c)
   add_library(jh_failure_objects OBJECT ${_jh_failure_sources} json/jh_json_file.c)
-  target_link_libraries(jh_failure_objects PRIVATE jh_host jh_device)
+  target_link_libraries(jh_failure_objects PRIVATE jh_host jh_device jh_build)
   target_compile_definitions(jh_failure_objects PRIVATE
     jb_fs_status=jh_test_fs_status jb_fs_mkdir=jh_test_fs_mkdir
     jh_project_config_read=jh_test_config_read)
   jh_tool_target(jh_failure_objects)
   add_executable(jh_cli_failures_test tests/test_cli_failures.c
     $<TARGET_OBJECTS:jh_failure_objects>)
-  target_link_libraries(jh_cli_failures_test PRIVATE jh_host jh_device)
+  target_link_libraries(jh_cli_failures_test PRIVATE jh_host jh_device jh_build)
   target_compile_definitions(jh_cli_failures_test PRIVATE JH_TOOL_VERSION="${PROJECT_VERSION}")
   jh_tool_target(jh_cli_failures_test)
   add_test(NAME jh_cli_failures COMMAND jh_cli_failures_test "${_jh_hal_root}"
     "${CMAKE_CURRENT_BINARY_DIR}")
+  # The library API around its child processes: the cancellation callback
+  # and its context in jh_library_install over a fixture install.
+  add_executable(jh_library_test tests/test_library.c)
+  target_link_libraries(jh_library_test PRIVATE jh_build)
+  jh_tool_target(jh_library_test)
+  add_test(NAME jh_library_api COMMAND jh_library_test "${CMAKE_CURRENT_BINARY_DIR}"
+    "${CMAKE_COMMAND}")
   # The native test programs run under the memory ceiling of the host tests.
   include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/jh_test_memory_limit.cmake")
   jh_limit_test_memory(jh_schema_test jh_firmware_test jh_settings_test jh_settings_probe
-    jh_config_test jh_c_layer_test jh_clocks_test jh_cli_failures_test jh_hardware_test)
+    jh_config_test jh_c_layer_test jh_clocks_test jh_cli_failures_test jh_hardware_test
+    jh_library_test)
   set_tests_properties(jh_schema jh_schema_compat jh_device_defaults jh_settings
-    jh_settings_compat jh_config jh_c_layer jh_cli_failures PROPERTIES TIMEOUT 120)
+    jh_settings_compat jh_config jh_c_layer jh_cli_failures jh_library_api PROPERTIES TIMEOUT 120)
   # jh_clocks under Valgrind in the gate took 117.7 s of the former 120 s.
   set_tests_properties(jh_clocks PROPERTIES TIMEOUT 300)
   if(CMAKE_C_COMPILER_ID MATCHES "GNU|Clang")
@@ -222,7 +246,7 @@ if(BUILD_TESTING)
   # The native test programs; the gate runs them under Valgrind (memcheck)
   # and the sanitizers (sanitizer-fuzz).
   set_tests_properties(jh_schema jh_settings jh_config jh_c_layer jh_clocks jh_cli_failures
-    PROPERTIES LABELS memcheck)
+    jh_library_api PROPERTIES LABELS memcheck)
   add_test(NAME jh_cli COMMAND "${CMAKE_COMMAND}" "-DJH=$<TARGET_FILE:jh>"
     "-DJH_BUILD=${CMAKE_CURRENT_BINARY_DIR}" "-DJH_CONFIG=$<CONFIG>"
     "-DJH_SUFFIX=${CMAKE_EXECUTABLE_SUFFIX}"
@@ -249,6 +273,14 @@ if(BUILD_TESTING)
     "-DJH_JHBASE=${_jh_cli_jhbase}"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_boards.cmake")
   set_tests_properties(jh_boards PROPERTIES TIMEOUT 300)
+  # The target facts and library commands: registry facts, build directory
+  # keys and the errors of library build, install and inspect that need no
+  # SDK.
+  add_test(NAME jh_library COMMAND "${CMAKE_COMMAND}" "-DJH=$<TARGET_FILE:jh>"
+    "-DJH_HAL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/../.."
+    "-DJH_WORK=${CMAKE_CURRENT_BINARY_DIR}/library check ż"
+    -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_library.cmake")
+  set_tests_properties(jh_library PROPERTIES TIMEOUT 120)
   # The launcher bootstrap: builds this tool from an exported tree with the
   # checkouts of this checkout, so it runs for several minutes.
   add_test(NAME jh_bootstrap COMMAND "${CMAKE_COMMAND}"
@@ -256,8 +288,8 @@ if(BUILD_TESTING)
     "-DJH_WORK=${CMAKE_CURRENT_BINARY_DIR}/bootstrap-check"
     -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_bootstrap.cmake")
   set_tests_properties(jh_bootstrap PROPERTIES TIMEOUT 1800)
-  set_tests_properties(jh_cli jh_features jh_boards jh_schema_compat jh_device_defaults
-    PROPERTIES LABELS cli)
+  set_tests_properties(jh_cli jh_features jh_boards jh_library jh_schema_compat
+    jh_device_defaults PROPERTIES LABELS cli)
   if(TARGET jh_cli_memory_launcher)
     jh_limit_test_memory(jh_cli_memory_launcher)
     set(_jh_valgrind "")
@@ -266,8 +298,8 @@ if(BUILD_TESTING)
       set(_jh_valgrind "${_jh_valgrind_program}")
       # Valgrind repeats startup for each CLI invocation. The feature suite
       # took 1167 s locally; leave room for slower CI hosts.
-      set_tests_properties(jh_cli jh_features jh_boards jh_schema_compat jh_device_defaults
-        PROPERTIES TIMEOUT 3600)
+      set_tests_properties(jh_cli jh_features jh_boards jh_library jh_schema_compat
+        jh_device_defaults PROPERTIES TIMEOUT 3600)
       # The complete hardware suite, including a 2048-node tree, took 1109 s
       # under Debug Memcheck. Leave room for slower CI hosts.
       set_tests_properties(jh_hardware PROPERTIES TIMEOUT 2400)

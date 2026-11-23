@@ -2281,7 +2281,7 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
 - **impl/esp32:** wspólny silnik WireGuard nad natywną warstwą lwIP z ESP-IDF.
   Zapewnia jawne blokowanie stosu i dostęp do `netif`, natywny resolver,
   bezpieczną entropię ESP oraz zsynchronizowany czas libc dla uzgadniania
-  TAI64N. `build_esp_idf.py` włącza `CONFIG_ESP_NETIF_BRIDGE_EN`, więc
+  TAI64N. Build ESP-IDF polecenia `jh esp` włącza `CONFIG_ESP_NETIF_BRIDGE_EN`, więc
   `esp_netif` trzyma swój uchwyt w danych klienta netif i zostawia
   `netif->state` interfejsowi tunelu. Zwiększa też stos wątku lwIP do 6 KiB
   na potrzeby odszyfrowywania ruchu tunelu i odpowiedzi na handshake'i.

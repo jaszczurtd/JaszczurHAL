@@ -19,11 +19,11 @@ Użyj stabilnej ścieżki `/dev/serial/by-id/`, gdy jest dostępna. Skompiluj i
 zwaliduj artefakty za pomocą produkcyjnego skryptu ESP-IDF:
 
 ```bash
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/hardware/esp32s3_phase1 \
   --assembly esp32s3-zero \
   --output .build/hardware/esp32s3_phase1 --clean
-python3 scripts/build_esp_idf.py artifacts \
+scripts/jh esp artifacts --root . \
   --project tests/hardware/esp32s3_phase1 \
   --assembly esp32s3-zero \
   --output .build/hardware/esp32s3_phase1

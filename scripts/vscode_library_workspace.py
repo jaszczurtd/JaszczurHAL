@@ -204,13 +204,34 @@ def save_active_profile(repo_root: Path, profile: LibraryProfile) -> None:
 def profile_paths(repo_root: Path, profile: LibraryProfile) -> ProfilePaths:
     key = profile.board
     if profile.config_dir is not None:
-        import device_tree_project
+        from project_config import jh_executable, ProjectConfigError
 
-        # <assembly>/<digest of the configuration directory and variant>:
-        # two projects or variants never share a build or an installation.
-        key = device_tree_project.build_key(
-            profile.config_dir, str(profile.assembly), [f"variant={profile.variant or ''}"]
-        )
+        # <assembly>/<digest of the configuration directory and variant> from
+        # jh library key, the key of the library runners with the only request
+        # these builds make: two projects or variants never share a build or
+        # an installation.
+        try:
+            completed = subprocess.run(
+                [
+                    jh_executable(),
+                    "library",
+                    "key",
+                    f"--config-dir={profile.config_dir}",
+                    f"--assembly={profile.assembly}",
+                    f"--request=variant={profile.variant or ''}",
+                ],
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+            )
+        except (OSError, ProjectConfigError) as exc:
+            raise WorkspaceError(f"cannot name the library build directory: {exc}", 5) from exc
+        if completed.returncode != 0:
+            raise WorkspaceError(
+                f"cannot name the library build directory: {completed.stderr.strip()}", 5
+            )
+        key = completed.stdout.strip()
     build_dir = repo_root / MANAGED_BUILD_ROOT / profile.target / key
     install_dir = repo_root / MANAGED_INSTALL_ROOT / profile.target / key
     archive_name = "libhal_mock.a" if profile.provider == "host" else "libJaszczurHAL.a"
@@ -463,9 +484,18 @@ def install_profile(repo_root: Path, profile: LibraryProfile) -> ProfilePaths:
         paths.install_dir,
         MANAGED_INSTALL_ROOT,
     )
+    # jh library install runs cmake --install and checks the archive.
+    from project_config import jh_executable, ProjectConfigError
+
+    try:
+        jh = jh_executable()
+    except ProjectConfigError as exc:
+        raise WorkspaceError(str(exc), 5) from exc
     command = [
-        "cmake",
-        "--install",
+        jh,
+        "library",
+        "install",
+        "--build-dir",
         str(paths.build_dir),
         "--prefix",
         str(paths.install_dir),

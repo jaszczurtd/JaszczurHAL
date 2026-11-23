@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "description": "Sources and component dependencies of the jaszczurhal ESP-IDF component. The native backend (jh esp build/artifacts) and scripts/build_esp_idf.py read this file; it is their only copy. baseSources always build; targetSources and featureDependencies apply for each resolved HAL feature, in feature name order; managedDependencies map a dependency of config/features to ESP-IDF components; managedFrameworks map a feature to its component manager id and include directories below the repository root; compilerTools name the tools.json compiler of each ESP-IDF target.",
+  "baseSources": [
+    "src/hal/analog/hal_adc_utils.cpp",
+    "src/hal/codecs/hal_image.cpp",
+    "src/hal/control/hal_pid_controller.cpp",
+    "src/hal/core/hal_assert.cpp",
+    "src/hal/core/hal_config.cpp",
+    "src/hal/core/hal_math.cpp",
+    "src/hal/core/hal_text.cpp",
+    "src/hal/core/jh_endian.cpp",
+    "src/hal/core/jh_handle_pool.cpp",
+    "src/hal/debug/hal_debug_format.cpp",
+    "src/hal/display/hal_pixel.cpp",
+    "src/hal/network/hal_network_utils.cpp",
+    "src/hal/security/jh_secure_random.cpp",
+    "src/hal/serial/hal_serial.cpp",
+    "src/hal/serial/hal_serial_session.cpp",
+    "src/hal/system/hal_board.cpp",
+    "src/hal/system/hal_device_id.cpp",
+    "src/hal/system/hal_periodic_random.cpp",
+    "src/hal/temperature/hal_ntc.cpp",
+    "src/hal/time/hal_time.cpp",
+    "src/hal/timers/hal_soft_timer.cpp",
+    "src/hal/timers/hal_timer.cpp",
+    "src/hal/timers/hal_timer_ext.cpp",
+    "src/hal/timers/smart_timers/SmartTimers.cpp",
+    "src/hal_app_entry.cpp",
+    "src/utils/pidController.cpp",
+    "src/hal/impl/esp32/hal_adc.cpp",
+    "src/hal/impl/esp32/hal_adc_scan.cpp",
+    "src/hal/impl/esp32/esp32_secure_random.cpp",
+    "src/hal/impl/esp32/hal_esp32_build_config.cpp",
+    "src/hal/impl/esp32/hal_gpio.cpp",
+    "src/hal/impl/esp32/hal_pwm.cpp",
+    "src/hal/impl/esp32/hal_serial.cpp",
+    "src/hal/impl/esp32/hal_sync.cpp",
+    "src/hal/impl/esp32/hal_system.cpp",
+    "src/hal/impl/esp32/hal_timer.cpp",
+    "src/hal/impl/esp32/jh_esp32_fault.cpp",
+    "src/hal/impl/esp32/jh_esp32_ledc.cpp"
+  ],
+  "targetSources": {
+    "HAL_ENABLE_BLE": [
+      "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
+      "src/hal/impl/esp32/jh_ble_nimble_backend.c"
+    ],
+    "HAL_ENABLE_BLUETOOTH_CLASSIC": [
+      "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
+      "src/hal/impl/esp32/jh_bluetooth_classic_bluedroid_backend.c"
+    ],
+    "HAL_ENABLE_BLUETOOTH_HID_HOST": [],
+    "HAL_ENABLE_DMA_PWM_AUDIO": ["src/hal/impl/esp32/hal_dma_pwm_audio.cpp"],
+    "HAL_ENABLE_I2C": ["src/hal/impl/esp32/hal_i2c.cpp"],
+    "HAL_ENABLE_I2C_SLAVE": ["src/hal/impl/esp32/hal_i2c_slave.cpp"],
+    "HAL_ENABLE_NETWORK_CORE": [
+      "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
+      "src/hal/impl/esp32/esp32_network_backend.cpp",
+      "src/hal/network/native_sockets/jh_native_sockets.cpp"
+    ],
+    "HAL_ENABLE_OTA": [
+      "src/hal/impl/esp32/esp32_secure_random.cpp",
+      "src/hal/impl/esp32/hal_ota.cpp"
+    ],
+    "HAL_ENABLE_PCNT": ["src/hal/impl/esp32/hal_pcnt.cpp"],
+    "HAL_ENABLE_PULSE_CAPTURE": ["src/hal/impl/esp32/hal_pulse_capture.cpp"],
+    "HAL_ENABLE_PWM_FREQ": ["src/hal/impl/esp32/hal_pwm_freq.cpp"],
+    "HAL_ENABLE_RGB_LED": ["src/hal/impl/esp32/hal_rgb_led.cpp"],
+    "HAL_ENABLE_SPI": ["src/hal/impl/esp32/hal_spi.cpp"],
+    "HAL_ENABLE_TIME": ["src/hal/impl/esp32/hal_time.cpp"],
+    "HAL_ENABLE_TLS": ["src/hal/impl/esp32/esp32_secure_random.cpp"],
+    "HAL_ENABLE_UART": ["src/hal/impl/esp32/hal_uart.cpp"],
+    "HAL_ENABLE_WIREGUARD": [
+      "src/hal/impl/esp32/esp32_secure_random.cpp",
+      "src/hal/impl/esp32/esp32_lwip_extension_port.cpp"
+    ]
+  },
+  "publicDependencies": ["freertos"],
+  "basePrivateDependencies": [
+    "app_update",
+    "esp_adc",
+    "esp_driver_gpio",
+    "esp_driver_gptimer",
+    "esp_driver_ledc",
+    "esp_driver_tsens",
+    "esp_driver_usb_serial_jtag",
+    "esp_hw_support",
+    "esp_psram",
+    "esp_rom",
+    "esp_system",
+    "esp_timer",
+    "heap",
+    "vfs"
+  ],
+  "featureDependencies": {
+    "HAL_ENABLE_BLE": ["bt", "nvs_flash"],
+    "HAL_ENABLE_BLUETOOTH_CLASSIC": ["bt", "nvs_flash"],
+    "HAL_ENABLE_BLUETOOTH_HID_HOST": ["esp_hid"],
+    "HAL_ENABLE_I2C": ["esp_driver_i2c"],
+    "HAL_ENABLE_I2C_SLAVE": ["esp_driver_i2c"],
+    "HAL_ENABLE_NETWORK_CORE": ["esp_event", "esp_netif", "esp_wifi", "lwip", "nvs_flash"],
+    "HAL_ENABLE_OTA": ["app_update", "esp_partition"],
+    "HAL_ENABLE_PCNT": ["esp_driver_pcnt"],
+    "HAL_ENABLE_PULSE_CAPTURE": ["esp_driver_mcpwm"],
+    "HAL_ENABLE_RGB_LED": ["esp_driver_rmt"],
+    "HAL_ENABLE_SPI": ["esp_driver_spi"],
+    "HAL_ENABLE_UART": ["esp_driver_uart"],
+    "HAL_ENABLE_WIREGUARD": ["esp_eth"]
+  },
+  "featureDependencyNotes": {
+    "HAL_ENABLE_WIREGUARD": "The bridge glue esp_netif compiles for WireGuard includes esp_eth."
+  },
+  "managedDependencies": {
+    "bearssl": ["jh_bearssl"]
+  },
+  "managedFrameworks": {
+    "HAL_ENABLE_CJSON": {"component": "cjson", "includeDirs": ["third_party/cJSON"]},
+    "HAL_ENABLE_FAT": {"component": "fatfs", "includeDirs": ["third_party/FatFs/source"]},
+    "HAL_ENABLE_JPEG": {"component": "jpeg", "includeDirs": ["third_party/TJpg_Decoder/src"]},
+    "HAL_ENABLE_PNG": {"component": "lodepng", "includeDirs": ["third_party/lodepng"]}
+  },
+  "compilerTools": {
+    "esp32": "xtensa-esp-elf",
+    "esp32s3": "xtensa-esp-elf"
+  }
+}

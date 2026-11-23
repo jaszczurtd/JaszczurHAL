@@ -18,11 +18,11 @@ Use the stable `/dev/serial/by-id/` path when available. Build and validate the
 artifacts through the production ESP-IDF runner:
 
 ```bash
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/hardware/esp32s3_phase1 \
   --assembly esp32s3-zero \
   --output .build/hardware/esp32s3_phase1 --clean
-python3 scripts/build_esp_idf.py artifacts \
+scripts/jh esp artifacts --root . \
   --project tests/hardware/esp32s3_phase1 \
   --assembly esp32s3-zero \
   --output .build/hardware/esp32s3_phase1

@@ -21,13 +21,13 @@ Build, materialize the artifacts and flash through the native USB Serial/JTAG
 port, as for the Phase 2 probe:
 
 ```bash
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/hardware/esp32s3_adc_scan \
   --assembly esp32s3-zero \
   --name jh_esp32_adc_scan_hardware \
   --clean
 
-python3 scripts/build_esp_idf.py artifacts \
+scripts/jh esp artifacts --root . \
   --project tests/hardware/esp32s3_adc_scan \
   --assembly esp32s3-zero \
   --name jh_esp32_adc_scan_hardware

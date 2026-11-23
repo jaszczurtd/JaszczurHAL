@@ -55,16 +55,17 @@ for provider, (script, _) in RUNNER_BY_PROVIDER.items():
         f"shared helper does not map {provider} to {script}",
     )
     text = (ROOT / "scripts" / script).read_text(encoding="utf-8")
-    for helper_name in (
-        "jh_validate_hal_defines",
-        "jh_target_facts",
-        "jh_resolve_build_output",
-    ):
-        require(helper_name in text, f"{script} does not use {helper_name}")
+    # The runner checks its provider and launches jh library build, which
+    # validates the definitions and constrains the output directory
+    # (tools/jh/tests/check_library.cmake).
+    require("jh_launch_library_build" in text, f"{script} does not launch jh library build")
     require("--platform" not in text, f"{script} still exposes --platform")
     usage = text.split("USAGE", 2)[1]
     for option in COMMON_OPTIONS:
         require(option in usage, f"{script} usage does not document {option}")
+# The shared launcher reads the target facts and starts jh library build.
+for fragment in ("jh_target_facts", "library build"):
+    require(fragment in helper, f"build_artifacts.sh launcher does not use {fragment}")
 
 dispatcher = (ROOT / "scripts" / "build_link_library.sh").read_text(encoding="utf-8")
 require(
@@ -86,13 +87,19 @@ require(
 )
 esp32_runner = (ROOT / "scripts" / "build_esp32_lib.sh").read_text(encoding="utf-8")
 for fragment in (
-    "esp-idf/jaszczurhal/libjaszczurhal.a",
     "libJaszczurHAL.a",
     "include/generated",
     "--project-config",
     "--all-features",
 ):
     require(fragment in esp32_runner, f"ESP32 runner is missing {fragment!r}")
+# The launcher's jh library build publishes the ESP-IDF component archive.
+esp32_library = (ROOT / "tools" / "jh" / "build" / "jh_library_build.c").read_text(
+    encoding="utf-8")
+for fragment in ("/esp-idf/jaszczurhal/libjaszczurhal.a", "/libJaszczurHAL.a",
+                 "/include/generated", "link_libraries/esp32_lib"):
+    require(fragment in esp32_library,
+            f"jh library build of ESP-IDF targets is missing {fragment!r}")
 
 model = build_esp_idf.resolve_build_model(
     ROOT,

@@ -150,7 +150,7 @@ target `esp32s3` i płytkę `waveshare-esp32-s3-zero`, przygotowuje środowisko 
 w ustalonej wersji i sprawdza wszystkie wymagania buildu:
 
 ```bash
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/fixtures/esp32s3_phase3 \
   --target esp32s3 --board waveshare-esp32-s3-zero --clean
 ```
@@ -171,8 +171,9 @@ wyjściowy to `<project>/.build/esp-idf/<target>/<board>/`; `--output` może wyb
 inny katalog poniżej `.build` projektu lub repozytorium.
 
 `scripts/build_esp_idf_phase0.py` pozostaje prostym wrapperem zachowującym
-zgodność dla izolowanego projektu testowego etapu 0. Nowe projekty i CI używają
-`scripts/build_esp_idf.py`. ESP32-S3 obejmuje bazowe implementacje systemu,
+zgodność ze skryptem Pythona dla izolowanego projektu testowego etapu 0.
+Kompilacje projektów i CI używają `jh esp build`; `scripts/build_esp_idf.py`
+zachowuje akcję wgrywania. ESP32-S3 obejmuje bazowe implementacje systemu,
 synchronizacji, GPIO, ADC, portu szeregowego, prostego PWM i timera. Graf
 komponentów wyznaczony na podstawie aktywnych funkcji dodaje UART, I2C w roli
 kontrolera lub targetu, SPI, PWM_FREQ, RMT/RGB, PCNT, konfigurację ochrony stosu,

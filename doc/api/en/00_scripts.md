@@ -24,7 +24,8 @@ Run commands from the repository root unless a section states otherwise. Use `--
 | Run the sanitizer/fuzz gate | `scripts/run_sanitizer_fuzz.sh` | Recreates Clang-instrumented host and jh CLI builds, runs all host tests and the native jh CLI tests under ASan/UBSan and the native host tests under TSan, and smoke-fuzzes the network parsers. |
 | Operate a firmware project | `vscode/entry/jh-vscode <action> --project <dir>` on Unix or `vscode/entry/jh-vscode.cmd ...` on Windows | Provides the stable build, upload, monitor, board-selection, IntelliSense, and clean CLI used by VS Code projects. |
 | Build a linkable library for any target | `scripts/build_link_library.sh --target <id>` | Selects the family runner under `link_libraries/` from the target's build provider and forwards the remaining options. |
-| Build or flash an ESP-IDF project | `python3 scripts/build_esp_idf.py <action> --project <dir>` | Runs the `build`, `artifacts`, or `flash` action; resolves the ESP target/board metadata; prepares the pinned SDK on demand; and validates the relocatable multi-image manifest. |
+| Build or validate an ESP-IDF project | `scripts/jh esp build --root . --project <dir>` (or `artifacts`) | Resolves the ESP target/board metadata, prepares the pinned SDK on demand, builds or revalidates the project and writes the relocatable multi-image manifest. |
+| Flash an ESP-IDF project | `python3 scripts/build_esp_idf.py flash --project <dir> --port <port>` | Revalidates the existing build and flashes its images at the manifest offsets. |
 | Build checked-in examples | `scripts/examples_dispatcher.py build --target <target>` | Builds example manifests through the same `jh-vscode` and CMake dispatcher used by firmware projects. |
 | Build native RP parity fixtures manually | `scripts/build_rp_pico_parity_fixtures.sh` | Builds USB multicore and SDLogger probes for all supported native target/runtime combinations. |
 
@@ -356,7 +357,7 @@ target, board, cache, and artifact semantics belong to
 
 Single entry point for every linkable-library build. `--target <id>` names a
 registry target; the script reads its build provider through
-`scripts/board_registry.py target-facts` and executes the family runner:
+`jh target facts` and executes the family runner:
 `pico-sdk` selects `build_rp_pico_lib.sh`, `jh-stm32-baremetal` selects
 `build_stm32_lib.sh`, and `esp-idf` selects `build_esp32_lib.sh`. All other
 options are forwarded unchanged. The host mock has no runner and is rejected.
@@ -380,7 +381,9 @@ package next to the archive also holds `include/generated/jh_hardware.h`.
 
 ### `scripts/build_rp_pico_lib.sh`
 
-Builds JaszczurHAL with the official Pico SDK for the following targets:
+Builds JaszczurHAL with the official Pico SDK for the following targets. The
+script checks that the target uses the Pico SDK and starts `jh library build`,
+which performs the build described here (see the `tools/jh` README).
 
 | Script target | Pico SDK platform | Default board |
 |---|---|---|
@@ -403,7 +406,7 @@ Both build output directories must remain below `.build/`.
 
 ### `scripts/build_stm32_lib.sh`
 
-Builds the STM32 static library with the GNU Arm Embedded toolchain. `--target` selects the STM32 registry target (`stm32g474` by default) and `--board` its board profile. Accepts a project configuration, repeated HAL definitions, a custom CMake toolchain file, and an optional FreeRTOS-Kernel path.
+Builds the STM32 static library with the GNU Arm Embedded toolchain. The script checks that the target is an STM32 bare-metal target and starts `jh library build`, which performs the build. `--target` selects the STM32 registry target (`stm32g474` by default) and `--board` its board profile. Accepts a project configuration, repeated HAL definitions, a custom CMake toolchain file, and an optional FreeRTOS-Kernel path.
 
 Default output:
 
@@ -421,8 +424,9 @@ archive.
 ### `scripts/build_esp32_lib.sh`
 
 Builds the ESP-IDF static library for an `esp-idf` registry target
-(`esp32s3` by default). It runs `build_esp_idf.py build` on the minimal probe
-application in `link_libraries/esp32_lib/`, then publishes the JaszczurHAL
+(`esp32s3` by default). The script checks the provider and starts
+`jh library build`, which builds the minimal probe application in
+`link_libraries/esp32_lib/` with the ESP-IDF backend of `jh esp`, then publishes the JaszczurHAL
 component archive as `libJaszczurHAL.a` and copies the generated board headers
 to `include/generated/` in the same build directory. Without
 `--project-config` the archive holds the core runtime; `--all-features`
@@ -434,7 +438,7 @@ selects an externally managed checkout.
 
 ### `scripts/build_esp_idf.py`
 
-Builds, validates, and flashes projects whose board descriptor selects the `esp-idf` provider. It supports three actions:
+Builds, validates, and flashes projects whose board descriptor selects the `esp-idf` provider. `jh esp build` and `jh esp artifacts` (`scripts/jh`) perform the `build` and `artifacts` actions with the same options, outputs and diagnostics; jh-vscode, the library runner and the gate use them. This script keeps the `flash` action and remains the reference of the two native actions until it is retired. Both read the component source lists and dependencies from `config/tooling/esp_idf_components.json`. The actions:
 
 | Action | Behavior |
 |---|---|
@@ -503,9 +507,12 @@ physical boards and, for SDLogger, an SPI SD card.
 
 Internal shell module sourced by all three build helpers. It defines:
 
-- `jh_build_root <repo>` to normalize `<repo>/.build`;
-- `jh_resolve_build_output <repo> <requested> <default-relative>` to normalize
-  an output path and reject anything outside `.build/`.
+- `jh_tool_path <repo>` to choose the jh host CLI: `JH_EXECUTABLE` when it
+  belongs to this checkout (the gate prepares it once), otherwise `scripts/jh`;
+- `jh_target_facts <repo> <target>` to print the target facts through
+  `jh target facts`;
+- `jh_link_library_runner <provider>` to name the family runner of a build
+  provider.
 
 It is a library, not a standalone command.
 
@@ -871,8 +878,8 @@ and supplies the assembly × variant build matrix returned by `project_config.py
 use it.
 
 Its `build-key <dir> <assembly> [requests...]` command prints the library build
-directory name as `<assembly or "auto">/<16 hex digits>`.
-`scripts/lib/build_artifacts.sh` uses this name in the library runners.
+directory name as `<assembly or "auto">/<16 hex digits>`. The library runners
+take the same name from `jh library key`; tests compare the two.
 
 ### `scripts/device_tree_check.py`
 

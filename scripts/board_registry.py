@@ -130,8 +130,11 @@ def tooling_target_registry(jh_root: Path) -> dict[str, dict[str, Any]]:
             toolchain = "esp-idf"
             cache = {}
             upload = {"strategy": "esp-idf"}
+            # build and artifacts run in `jh esp`; the runner keeps the
+            # flash action until the device stage moves it to jh.
             provider_config = {
                 "espIdf": {
+                    "builder": "jh",
                     "runner": "${jhRoot}/scripts/build_esp_idf.py",
                     "artifactManifest": (
                         "${buildDir}/jh_esp_idf_artifacts.json"

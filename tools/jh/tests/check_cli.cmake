@@ -805,4 +805,58 @@ endif()
 check_pcre2("source bytes differ")
 file(COPY "${JH_PCRE2}/src/pcre2_compile.c" DESTINATION "${dependency}/src")
 check_pcre2("")
+# jh esp: the failures of scripts/build_esp_idf.py that need no SDK, with its
+# stage names and messages, exit code 1 and the diagnostic in the build
+# directory; a later run replaces the diagnostic of the one before.
+set(esp_project "${JH_WORK}/esp project")
+file(REMOVE_RECURSE "${esp_project}")
+file(MAKE_DIRECTORY "${esp_project}")
+file(WRITE "${esp_project}/app.c" "void app_start(void) {}\n")
+set(esp_build "${esp_project}/.build/esp-idf/esp32s3/waveshare-esp32-s3-zero")
+set(esp_failure "${esp_build}/jh_esp_idf_failure.txt")
+function(esp_fails stage message)
+  invoke(1 ${ARGN})
+  set(stderr "${stderr}" PARENT_SCOPE)
+  set(expected "stage=${stage} failed: ${message}")
+  contains("${stderr}" "jh: ${expected}" "jh ${ARGN}")
+  if(stage STREQUAL "resolve-build-directory" OR stage STREQUAL "resolve-build-model")
+    return()
+  endif()
+  file(READ "${esp_failure}" diagnostic)
+  string(FIND "${diagnostic}" "jh: ${expected}" at)
+  if(NOT at EQUAL 0 OR NOT diagnostic MATCHES "\n$")
+    message(FATAL_ERROR "jh ${ARGN} wrote the diagnostic '${diagnostic}'")
+  endif()
+  # Path.write_text() of the runner: text mode ends lines with \r\n on
+  # Windows and with \n elsewhere, which Python's later checks compare.
+  # file(READ) translates \r\n on Windows, so the bytes are read as hex.
+  file(READ "${esp_failure}" raw HEX)
+  string(REGEX MATCH "^(..)*0d" carriage "${raw}")
+  if(CMAKE_HOST_WIN32 AND NOT raw MATCHES "0d0a$")
+    message(FATAL_ERROR "jh ${ARGN} wrote the diagnostic without the \\r\\n of text mode")
+  elseif(NOT CMAKE_HOST_WIN32 AND carriage)
+    message(FATAL_ERROR "jh ${ARGN} wrote a \\r into the diagnostic")
+  endif()
+endfunction()
+invoke(2 esp build --root "${JH_HAL_SOURCE}")
+contains("${stderr}" "esp build requires --project" "esp build without --project")
+esp_fails(validate-command "--clean is supported only by the build action"
+  esp artifacts --root "${JH_HAL_SOURCE}" --project "${esp_project}" --clean)
+esp_fails(validate-command "--port is supported only by the flash action"
+  esp build --root "${JH_HAL_SOURCE}" --project "${esp_project}" --port /dev/null)
+esp_fails(resolve-build-model "Unknown JaszczurHAL target: 'esp32c3'"
+  esp build --root "${JH_HAL_SOURCE}" --project "${esp_project}" --target esp32c3)
+esp_fails(resolve-build-model "The ESP-IDF dispatcher owns HAL_TARGET_ESP32"
+  esp build --root "${JH_HAL_SOURCE}" --project "${esp_project}" --define HAL_TARGET_ESP32)
+esp_fails(resolve-build-directory "Build directory must be below a managed .build root"
+  esp build --root "${JH_HAL_SOURCE}" --project "${esp_project}" --output "${JH_HAL_SOURCE}/.build")
+# The Python runner's model: the default name of the project directory and
+# the first missing artifact of the build it validates.
+esp_fails(artifact-validation "Missing build artifact: "
+  esp artifacts --root "${JH_HAL_SOURCE}" --project "${esp_project}")
+slashed(missing "${stderr}")
+contains("${missing}" "/esp-idf/esp32s3/waveshare-esp32-s3-zero/esp_project.elf"
+  "esp artifacts of a missing build")
+file(REMOVE_RECURSE "${esp_project}")
+
 message(STATUS "jh CLI: PASS")

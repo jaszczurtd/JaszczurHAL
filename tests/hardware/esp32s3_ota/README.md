@@ -48,10 +48,10 @@ The verifier reads the OTA password from this file.
 Each image builds into its own directory, so both stay available:
 
 ```bash
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/hardware/esp32s3_ota --assembly esp32s3-zero \
   --name jh_esp32_ota --output .build/esp-idf/image-a
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/hardware/esp32s3_ota --assembly esp32s3-zero \
   --name jh_esp32_ota --variant IMAGE_B --output .build/esp-idf/image-b
 

@@ -48,7 +48,8 @@ static const option_spec_t options[] = {
     {"request", "<SYMBOL[=VALUE]>",
      "Request a feature; repeatable (feature resolve)"},
     {"source", "<text>",
-     "Source of the request at the same position; repeatable"},
+     "Source of the request at the same position; repeatable (esp build: a "
+     "project source file)"},
     {"required-feature", "<SYMBOL[=1]>",
      "Feature the target requires; repeatable, needs --target"},
     {"input-root", "<path>",
@@ -103,6 +104,28 @@ static const option_spec_t options[] = {
      "Lint the resolved project, assembly and variant matrix"},
     {"resolution-output", "<path>",
      "Write the effective feature report (requires --effective)"},
+    {"project-config", "<path>",
+     "Directory containing hal_project_config.h (library build)"},
+    {"all-features", NULL, "Enable every feature the target supports"},
+    {"freertos", NULL, "Enable the pinned FreeRTOS kernel (library build)"},
+    {"library-only", NULL, "Build only the libJaszczurHAL.a archive"},
+    {"clean", NULL, "Remove the selected build directory first"},
+    {"jobs", "<count>", "Parallel build jobs (default: online CPUs)"},
+    {"sdk-dir", "<path>", "Pico SDK checkout (library build)"},
+    {"toolchain", "<path>",
+     "Pico SDK: toolchain root with bin/; STM32: CMake toolchain file"},
+    {"picotool-dir", "<path>", "picotool source checkout (library build)"},
+    {"picotool-build-dir", "<path>", "picotool build directory below .build"},
+    {"example", "<name>",
+     "Build examples/<name> through the native app entry (Pico SDK)"},
+    {"freertos-kernel", "<path>", "FreeRTOS-Kernel checkout (STM32)"},
+    {"prefix", "<path>", "Installed library package directory"},
+    {"name", "<name>", "ESP-IDF project name (default: the project directory)"},
+    {"include-dir", "<path>",
+     "Extra header directory of the project; repeatable (esp build)"},
+    {"link-library", "<path>",
+     "Precompiled archive linked into the firmware; repeatable (esp build)"},
+    {"idf-dir", "<path>", "Externally managed ESP-IDF checkout"},
     {"json", NULL, "Write a versioned JSON result on stdout"},
     {"json-version", "<major>",
      "Require a supported JSON result major version (1)"},
@@ -222,6 +245,48 @@ static const jh_command_spec_t commands[] = {
      {opt_root, opt_project_directory, opt_target, opt_assembly,
       opt_variant_option, opt_define, opt_compiler, opt_compiler_flag,
       opt_max_bytes, opt_count}},
+    {"target", "list", "target.list", {opt_root, opt_boards_root, opt_count}},
+    {"target",
+     "facts",
+     "target.facts",
+     {opt_root, opt_boards_root, opt_target, opt_count}},
+    {"library",
+     "key",
+     "library.key",
+     {opt_project_directory, opt_assembly, opt_request, opt_count}},
+    {"library",
+     "build",
+     "library.build",
+     {opt_root,           opt_boards_root,
+      opt_target,         opt_board_option,
+      opt_assembly,       opt_variant_option,
+      opt_project_config, opt_define,
+      opt_all_features,   opt_freertos,
+      opt_library_only,   opt_output,
+      opt_clean,          opt_jobs,
+      opt_sdk_dir,        opt_toolchain,
+      opt_picotool_dir,   opt_picotool_build_dir,
+      opt_example,        opt_freertos_kernel,
+      opt_idf_dir,        opt_count}},
+    {"library",
+     "install",
+     "library.install",
+     {opt_build_dir, opt_prefix, opt_count}},
+    {"library", "inspect", "library.inspect", {opt_prefix, opt_count}},
+    {"esp",
+     "build",
+     "esp.build",
+     {opt_root, opt_project, opt_target, opt_board_option, opt_assembly,
+      opt_name, opt_output, opt_source, opt_include_dir, opt_link_library,
+      opt_variant_option, opt_define, opt_port, opt_clean, opt_all_features,
+      opt_project_config, opt_idf_dir, opt_count}},
+    {"esp",
+     "artifacts",
+     "esp.artifacts",
+     {opt_root, opt_project, opt_target, opt_board_option, opt_assembly,
+      opt_name, opt_output, opt_source, opt_include_dir, opt_link_library,
+      opt_variant_option, opt_define, opt_port, opt_clean, opt_all_features,
+      opt_project_config, opt_idf_dir, opt_count}},
 };
 
 static const char usage[] =
@@ -263,7 +328,17 @@ static const char usage[] =
     "       jh clock check --root <path> [--boards-root <path>]"
     " [--clocks <path>] [--esp-sdkconfig <TARGET=PATH>]...\n"
     "       jh clock list --root <path> [--boards-root <path>]"
-    " [--clocks <path>]\n\n"
+    " [--clocks <path>]\n"
+    "       jh target list --root <path> [--boards-root <path>]\n"
+    "       jh target facts --root <path> [--boards-root <path>]"
+    " --target <id>\n"
+    "       jh library key --config-dir <path> [--assembly <name>]"
+    " [--request <text>]...\n"
+    "       jh library build --root <path> --target <id> [options]\n"
+    "       jh library install --build-dir <path> --prefix <path>\n"
+    "       jh library inspect --prefix <path>\n"
+    "       jh esp (build | artifacts) --root <path> --project <path>"
+    " [options]\n\n"
     "Read JSON, select a value and optionally compare or write it,\n"
     "generate the C defaults of the HAL component types or the feature\n"
     "registry artifacts, evaluate a project's hal_project_config.h as\n"
@@ -271,7 +346,10 @@ static const char usage[] =
     "features one build requests and lint the feature requests of project\n"
     "headers and manifests, validate and list the board registry,\n"
     "generate its artifacts and the configuration of one build, or\n"
-    "check and list the clock tree registry.\n";
+    "check and list the clock tree registry, list the targets with a\n"
+    "linkable library and their build facts, build, install and\n"
+    "inspect the linkable library of a target, or build and verify an\n"
+    "ESP-IDF firmware project.\n";
 
 static void arguments_init(jh_arguments_t *args) {
   memset(args, 0, sizeof *args);
@@ -332,7 +410,8 @@ static void parse_arguments(jh_cli_t *ctx, size_t argc,
                             id == opt_compiler_flag || id == opt_source ||
                             id == opt_required_feature ||
                             id == opt_input_root || id == opt_esp_sdkconfig ||
-                            id == opt_feature_option;
+                            id == opt_feature_option || id == opt_include_dir ||
+                            id == opt_link_library;
     if (parsed.present[id] && !repeatable) {
       (void)jh_cli_error(
           ctx, HAL_EINVAL, 2,
@@ -536,6 +615,21 @@ static int dispatch(jh_cli_t *ctx, size_t argc, const char *const *argv) {
   case cmd_hardware_finalize:
   case cmd_hardware_identity:
     return jh_cli_hardware(ctx, (jh_command_id_t)(ctx->command - commands));
+  case cmd_target_list:
+    return jh_cli_target_list(ctx);
+  case cmd_target_facts:
+    return jh_cli_target_facts(ctx);
+  case cmd_library_key:
+    return jh_cli_library_key(ctx);
+  case cmd_library_build:
+    return jh_cli_library_build(ctx);
+  case cmd_library_install:
+    return jh_cli_library_install(ctx);
+  case cmd_library_inspect:
+    return jh_cli_library_inspect(ctx);
+  case cmd_esp_build:
+  case cmd_esp_artifacts:
+    return jh_cli_esp(ctx, (jh_command_id_t)(ctx->command - commands));
   }
   (void)jh_cli_require(ctx, HAL_EINTERNAL, 3, "unexpected failure");
   return 0;

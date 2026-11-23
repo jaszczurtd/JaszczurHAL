@@ -2928,6 +2928,24 @@ def esp_idf_manifest_path(config: dict[str, Any], project_dir: Path) -> Path:
     return path.resolve()
 
 
+# The actions the native ESP-IDF backend (`jh esp`) runs; flash stays with
+# the registry's Python runner.
+ESP_IDF_NATIVE_ACTIONS = ("build", "artifacts")
+
+
+def esp_idf_builder(config: dict[str, Any]) -> list[str]:
+    """`<jh> esp` of the HAL checkout for the build and artifacts actions."""
+    builder = esp_idf_configuration(config).get("builder")
+    if builder != "jh":
+        raise ValueError(f"ESP-IDF target names an unsupported builder: {builder!r}")
+    project_config = hal_script("project_config")
+    try:
+        jh = project_config.jh_executable(cmake_program(config))
+    except project_config.ProjectConfigError as exc:
+        raise ValueError(str(exc)) from exc
+    return [jh, "esp"]
+
+
 def esp_idf_runner_command(
     config: dict[str, Any],
     project_dir: Path,
@@ -2941,10 +2959,12 @@ def esp_idf_runner_command(
         raise ValueError("ESP-IDF runner requires a resolved target and board")
     # A device tree build names its assembly; the runner resolves the board.
     selector = ["--assembly", str(config["assembly"])] if config.get("assembly") else ["--board", board]
+    if action in ESP_IDF_NATIVE_ACTIONS:
+        program = [*esp_idf_builder(config), action, "--root", str(jaszczurhal_root())]
+    else:
+        program = [sys.executable, str(esp_idf_runner(config, project_dir)), action]
     command = [
-        sys.executable,
-        str(esp_idf_runner(config, project_dir)),
-        action,
+        *program,
         "--project",
         str(project_dir),
         "--target",
@@ -3015,7 +3035,14 @@ def run_esp_idf_action(
     except ValueError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_CONFIG
-    return run_command(command, verbose=as_bool(config.get("verbose")))
+    environment = None
+    if action in ESP_IDF_NATIVE_ACTIONS and not os.environ.get("JH_COMPONENT_PYTHON"):
+        # jh esp runs the component manager and the ESP-IDF environment export
+        # with the interpreter of this runtime, as the Python runner did.
+        environment = {**os.environ, "JH_COMPONENT_PYTHON": sys.executable}
+    return run_command(
+        command, verbose=as_bool(config.get("verbose")), environment=environment
+    )
 
 
 def _esp_idf_artifact_path(

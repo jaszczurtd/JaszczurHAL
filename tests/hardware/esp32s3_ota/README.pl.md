@@ -51,10 +51,10 @@ Weryfikator czyta hasło OTA z tego pliku.
 Każdy obraz buduje się do własnego katalogu, więc oba pozostają dostępne:
 
 ```bash
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/hardware/esp32s3_ota --assembly esp32s3-zero \
   --name jh_esp32_ota --output .build/esp-idf/image-a
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/hardware/esp32s3_ota --assembly esp32s3-zero \
   --name jh_esp32_ota --variant IMAGE_B --output .build/esp-idf/image-b
 

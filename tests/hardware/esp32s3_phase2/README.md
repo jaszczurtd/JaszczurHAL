@@ -42,13 +42,13 @@ the table below repeats them. Nothing needs to be connected to them.
 Build and materialize the relocatable artifact manifest:
 
 ```bash
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/hardware/esp32s3_phase2 \
   --assembly esp32s3-zero \
   --name jh_esp32_phase2_hardware \
   --clean
 
-python3 scripts/build_esp_idf.py artifacts \
+scripts/jh esp artifacts --root . \
   --project tests/hardware/esp32s3_phase2 \
   --assembly esp32s3-zero \
   --name jh_esp32_phase2_hardware

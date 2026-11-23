@@ -22,6 +22,7 @@ import generate_hal_features
 import device_tree_project as hardware_generator
 from device_tree_project import HardwareError
 import project_config
+import tooling_contract
 
 
 MANIFEST_NAME = "jh_esp_idf_artifacts.json"
@@ -54,147 +55,82 @@ PARTITION_PROFILE_SYMBOLS = (
     "CONFIG_PARTITION_TABLE_SINGLE_APP_TEE",
     "CONFIG_PARTITION_TABLE_TWO_OTA_TEE",
 )
-ESP_IDF_BASE_SOURCES = (
-    "src/hal/analog/hal_adc_utils.cpp",
-    "src/hal/codecs/hal_image.cpp",
-    "src/hal/control/hal_pid_controller.cpp",
-    "src/hal/core/hal_assert.cpp",
-    "src/hal/core/hal_config.cpp",
-    "src/hal/core/hal_math.cpp",
-    "src/hal/core/hal_text.cpp",
-    "src/hal/core/jh_endian.cpp",
-    "src/hal/core/jh_handle_pool.cpp",
-    "src/hal/debug/hal_debug_format.cpp",
-    "src/hal/display/hal_pixel.cpp",
-    "src/hal/network/hal_network_utils.cpp",
-    "src/hal/security/jh_secure_random.cpp",
-    "src/hal/serial/hal_serial.cpp",
-    "src/hal/serial/hal_serial_session.cpp",
-    "src/hal/system/hal_board.cpp",
-    "src/hal/system/hal_device_id.cpp",
-    "src/hal/system/hal_periodic_random.cpp",
-    "src/hal/temperature/hal_ntc.cpp",
-    "src/hal/time/hal_time.cpp",
-    "src/hal/timers/hal_soft_timer.cpp",
-    "src/hal/timers/hal_timer.cpp",
-    "src/hal/timers/hal_timer_ext.cpp",
-    "src/hal/timers/smart_timers/SmartTimers.cpp",
-    "src/hal_app_entry.cpp",
-    "src/utils/pidController.cpp",
-    "src/hal/impl/esp32/hal_adc.cpp",
-    "src/hal/impl/esp32/hal_adc_scan.cpp",
-    "src/hal/impl/esp32/esp32_secure_random.cpp",
-    "src/hal/impl/esp32/hal_esp32_build_config.cpp",
-    "src/hal/impl/esp32/hal_gpio.cpp",
-    "src/hal/impl/esp32/hal_pwm.cpp",
-    "src/hal/impl/esp32/hal_serial.cpp",
-    "src/hal/impl/esp32/hal_sync.cpp",
-    "src/hal/impl/esp32/hal_system.cpp",
-    "src/hal/impl/esp32/hal_timer.cpp",
-    "src/hal/impl/esp32/jh_esp32_fault.cpp",
-    "src/hal/impl/esp32/jh_esp32_ledc.cpp",
-)
-ESP_IDF_TARGET_SOURCES = {
-    "HAL_ENABLE_BLE": (
-        "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
-        "src/hal/impl/esp32/jh_ble_nimble_backend.c",
-    ),
-    "HAL_ENABLE_BLUETOOTH_CLASSIC": (
-        "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
-        "src/hal/impl/esp32/jh_bluetooth_classic_bluedroid_backend.c",
-    ),
-    "HAL_ENABLE_BLUETOOTH_HID_HOST": (),
-    "HAL_ENABLE_DMA_PWM_AUDIO": (
-        "src/hal/impl/esp32/hal_dma_pwm_audio.cpp",
-    ),
-    "HAL_ENABLE_I2C": (
-        "src/hal/impl/esp32/hal_i2c.cpp",
-    ),
-    "HAL_ENABLE_I2C_SLAVE": (
-        "src/hal/impl/esp32/hal_i2c_slave.cpp",
-    ),
-    "HAL_ENABLE_NETWORK_CORE": (
-        "src/hal/impl/esp32/jh_esp32_nvs_runtime.cpp",
-        "src/hal/impl/esp32/esp32_network_backend.cpp",
-        "src/hal/network/native_sockets/jh_native_sockets.cpp",
-    ),
-    "HAL_ENABLE_OTA": (
-        "src/hal/impl/esp32/esp32_secure_random.cpp",
-        "src/hal/impl/esp32/hal_ota.cpp",
-    ),
-    "HAL_ENABLE_PCNT": ("src/hal/impl/esp32/hal_pcnt.cpp",),
-    "HAL_ENABLE_PULSE_CAPTURE": ("src/hal/impl/esp32/hal_pulse_capture.cpp",),
-    "HAL_ENABLE_PWM_FREQ": (
-        "src/hal/impl/esp32/hal_pwm_freq.cpp",
-    ),
-    "HAL_ENABLE_RGB_LED": (
-        "src/hal/impl/esp32/hal_rgb_led.cpp",
-    ),
-    "HAL_ENABLE_SPI": (
-        "src/hal/impl/esp32/hal_spi.cpp",
-    ),
-    "HAL_ENABLE_TIME": (
-        "src/hal/impl/esp32/hal_time.cpp",
-    ),
-    "HAL_ENABLE_TLS": (
-        "src/hal/impl/esp32/esp32_secure_random.cpp",
-    ),
-    "HAL_ENABLE_UART": ("src/hal/impl/esp32/hal_uart.cpp",),
-    "HAL_ENABLE_WIREGUARD": (
-        "src/hal/impl/esp32/esp32_secure_random.cpp",
-        "src/hal/impl/esp32/esp32_lwip_extension_port.cpp",
-    ),
-}
-ESP_IDF_PUBLIC_COMPONENT_DEPENDENCIES = ("freertos",)
-ESP_IDF_BASE_PRIVATE_COMPONENT_DEPENDENCIES = (
-    "app_update",
-    "esp_adc",
-    "esp_driver_gpio",
-    "esp_driver_gptimer",
-    "esp_driver_ledc",
-    "esp_driver_tsens",
-    "esp_driver_usb_serial_jtag",
-    "esp_hw_support",
-    "esp_psram",
-    "esp_rom",
-    "esp_system",
-    "esp_timer",
-    "heap",
-    "vfs",
-)
-ESP_IDF_FEATURE_COMPONENT_DEPENDENCIES = {
-    "HAL_ENABLE_BLE": ("bt", "nvs_flash"),
-    "HAL_ENABLE_BLUETOOTH_CLASSIC": ("bt", "nvs_flash"),
-    "HAL_ENABLE_BLUETOOTH_HID_HOST": ("esp_hid",),
-    "HAL_ENABLE_I2C": ("esp_driver_i2c",),
-    "HAL_ENABLE_I2C_SLAVE": ("esp_driver_i2c",),
-    "HAL_ENABLE_NETWORK_CORE": (
-        "esp_event",
-        "esp_netif",
-        "esp_wifi",
-        "lwip",
-        "nvs_flash",
-    ),
-    "HAL_ENABLE_OTA": ("app_update", "esp_partition"),
-    "HAL_ENABLE_PCNT": ("esp_driver_pcnt",),
-    "HAL_ENABLE_PULSE_CAPTURE": ("esp_driver_mcpwm",),
-    "HAL_ENABLE_RGB_LED": ("esp_driver_rmt",),
-    "HAL_ENABLE_SPI": ("esp_driver_spi",),
-    "HAL_ENABLE_UART": ("esp_driver_uart",),
-    # The bridge glue esp_netif compiles for WireGuard includes esp_eth.
-    "HAL_ENABLE_WIREGUARD": ("esp_eth",),
-}
-ESP_IDF_MANAGED_DEPENDENCIES = {
-    "bearssl": ("jh_bearssl",),
-}
+# The component tables of the jaszczurhal ESP-IDF component; the native
+# backend (jh esp) reads the same file.
+ESP_IDF_COMPONENTS_CONTRACT = "esp_idf_components.json"
+
+
+def _load_component_tables() -> dict[str, Any]:
+    source = ESP_IDF_COMPONENTS_CONTRACT
+    document = tooling_contract.load_tooling_contract(source)
+
+    def strings(value: Any, field: str) -> tuple[str, ...]:
+        if not isinstance(value, list) or not all(
+            isinstance(item, str) and item for item in value
+        ):
+            raise tooling_contract.ToolingContractError(
+                f"{source}: {field} must be an array of non-empty strings"
+            )
+        return tuple(value)
+
+    def mapping(field: str) -> dict[str, Any]:
+        return tooling_contract.require_object(document, field, source=source)
+
+    frameworks: dict[str, tuple[str, tuple[str, ...]]] = {}
+    for feature, entry in mapping("managedFrameworks").items():
+        if not isinstance(entry, dict):
+            raise tooling_contract.ToolingContractError(
+                f"{source}: managedFrameworks.{feature} must be an object"
+            )
+        frameworks[feature] = (
+            tooling_contract.require_string(
+                entry.get("component"), f"managedFrameworks.{feature}.component",
+                source=source,
+            ),
+            strings(entry.get("includeDirs"), f"managedFrameworks.{feature}.includeDirs"),
+        )
+    return {
+        "baseSources": strings(document.get("baseSources"), "baseSources"),
+        "targetSources": {
+            feature: strings(value, f"targetSources.{feature}")
+            for feature, value in mapping("targetSources").items()
+        },
+        "publicDependencies": strings(
+            document.get("publicDependencies"), "publicDependencies"
+        ),
+        "basePrivateDependencies": strings(
+            document.get("basePrivateDependencies"), "basePrivateDependencies"
+        ),
+        "featureDependencies": {
+            feature: strings(value, f"featureDependencies.{feature}")
+            for feature, value in mapping("featureDependencies").items()
+        },
+        "managedDependencies": {
+            name: strings(value, f"managedDependencies.{name}")
+            for name, value in mapping("managedDependencies").items()
+        },
+        "managedFrameworks": frameworks,
+        "compilerTools": {
+            target: tooling_contract.require_string(
+                value, f"compilerTools.{target}", source=source
+            )
+            for target, value in mapping("compilerTools").items()
+        },
+    }
+
+
+_COMPONENT_TABLES = _load_component_tables()
+ESP_IDF_BASE_SOURCES = _COMPONENT_TABLES["baseSources"]
+ESP_IDF_TARGET_SOURCES = _COMPONENT_TABLES["targetSources"]
+ESP_IDF_PUBLIC_COMPONENT_DEPENDENCIES = _COMPONENT_TABLES["publicDependencies"]
+ESP_IDF_BASE_PRIVATE_COMPONENT_DEPENDENCIES = _COMPONENT_TABLES[
+    "basePrivateDependencies"
+]
+ESP_IDF_FEATURE_COMPONENT_DEPENDENCIES = _COMPONENT_TABLES["featureDependencies"]
+ESP_IDF_MANAGED_DEPENDENCIES = _COMPONENT_TABLES["managedDependencies"]
 # Managed source frameworks wrapped by src/hal/codecs and src/hal/storage:
 # feature -> (component_manager id, include directories below the repo root).
-ESP_IDF_MANAGED_FRAMEWORKS = {
-    "HAL_ENABLE_CJSON": ("cjson", ("third_party/cJSON",)),
-    "HAL_ENABLE_FAT": ("fatfs", ("third_party/FatFs/source",)),
-    "HAL_ENABLE_JPEG": ("jpeg", ("third_party/TJpg_Decoder/src",)),
-    "HAL_ENABLE_PNG": ("lodepng", ("third_party/lodepng",)),
-}
+ESP_IDF_MANAGED_FRAMEWORKS = _COMPONENT_TABLES["managedFrameworks"]
 GENERATED_BOARD_CONTRACT_INPUTS = (
     "jh_board_resolved.json",
     "jh_board_config.cmake",
@@ -215,10 +151,7 @@ DEVICE_TREE_CONTRACT_INPUTS = (
     "jh_link_contract_definition.c",
     "jh_link_contract_reference.c",
 )
-IDF_TARGET_COMPILER_TOOLS = {
-    "esp32": "xtensa-esp-elf",
-    "esp32s3": "xtensa-esp-elf",
-}
+IDF_TARGET_COMPILER_TOOLS = _COMPONENT_TABLES["compilerTools"]
 
 
 class EspIdfError(RuntimeError):

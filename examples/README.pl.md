@@ -99,8 +99,8 @@ potwierdzenia działania na sprzęcie.
 | `stm32g474` | `nucleo-g474re` | GNU Arm | ELF, BIN, HEX, MAP |
 | `esp32s3` | `waveshare-esp32-s3-zero` | ESP-IDF w ustalonej wersji | ELF, BIN, MAP, bootloader, tabela partycji, `jh_esp_idf_artifacts.json` |
 
-Dla `esp32s3` `jh-vscode` uruchamia `scripts/build_esp_idf.py` z nagłówkiem
-projektu i wybranym wariantem zamiast dispatchera CMake. Przykład ma montaż
+Dla `esp32s3` `jh-vscode` uruchamia `jh esp build` z nagłówkiem projektu
+i wybranym wariantem zamiast dispatchera CMake. Przykład ma montaż
 `esp32s3` tylko wtedy, gdy każda żądana przez niego funkcja jest na liście
 `supportedFeatures` targetu; lista obejmuje backendy ESP-IDF oraz przenośne
 sterowniki magistral, czujników, wyświetlaczy, kodeków i komend, a poza nią

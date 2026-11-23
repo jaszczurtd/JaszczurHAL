@@ -1671,7 +1671,7 @@ class CommandContractTests(unittest.TestCase):
             ROOT / "cmake/jh_firmware_project/CMakeLists.txt"
         ).read_text(encoding="utf-8")
         self.assertIn('JH_TARGET STREQUAL "esp32s3"', dispatcher)
-        self.assertIn("scripts/build_esp_idf.py build --project", dispatcher)
+        self.assertIn("scripts/jh esp build --root", dispatcher)
         self.assertIn("ESP-IDF pre-project bootstrap", dispatcher)
 
         with tempfile.TemporaryDirectory(prefix="jh-esp-dispatch-") as text:

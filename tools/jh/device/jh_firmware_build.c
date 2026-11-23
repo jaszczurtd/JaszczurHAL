@@ -1,4 +1,5 @@
 #include "hal/core/jh_endian.h"
+#include "jh_build_metadata.h"
 #include "jh_firmware_internal.h"
 #include "jh_json_digest.h"
 #include "jh_process_support.h"
@@ -69,68 +70,19 @@ static bool exists(jh_firmware_plan_t *p, const char *path) {
          info.kind == JB_FS_REGULAR;
 }
 
-/* Iterate bounded, borrowed lines, without assuming a terminating NUL. */
-static bool next_line(jb_json_span_t *input, jb_json_span_t *line) {
-  if (input->length == 0)
-    return false;
-  const char *end = memchr(input->data, '\n', input->length);
-  const size_t length = end ? (size_t)(end - input->data) : input->length;
-  *line = (jb_json_span_t){input->data, length};
-  const size_t consumed = length + (end != NULL ? 1u : 0u);
-  input->data += consumed;
-  input->length -= consumed;
-  if (line->length && line->data[line->length - 1] == '\r')
-    --line->length;
-  return true;
-}
-
 static const char *cache_value(jh_firmware_plan_t *p,
                                const jb_file_data_t *cache, const char *key) {
-  jb_json_span_t input = {(const char *)cache->data, cache->length}, line;
-  const size_t n = strlen(key);
-  const char *value = "";
+  jb_json_span_t value = {"", 0};
   bool found = false;
-  while (next_line(&input, &line)) {
-    if (line.length <= n || memcmp(line.data, key, n) != 0 ||
-        line.data[n] != ':')
-      continue;
-    const char *eq = memchr(line.data + n, '=', line.length - n);
-    if (!require(p, eq != NULL && !found ? HAL_OK : HAL_ECONFIG,
-                 "duplicate or malformed CMake cache entry"))
-      break;
-    found = true;
-    const jb_json_span_t text = {eq + 1,
-                                 line.length - (size_t)(eq + 1 - line.data)};
-    if (!require(p,
-                 memchr(text.data, '\0', text.length) == NULL ? HAL_OK
-                                                              : HAL_ECONFIG,
-                 "NUL in CMake cache entry"))
-      break;
-    value = jh_firmware_text(p, text);
-  }
-  return value;
-}
-
-static bool unsigned_value(jb_json_span_t text, uint64_t *out) {
-  unsigned base = 10;
-  size_t i = 0;
-  if (text.length > 2 && text.data[0] == '0' &&
-      (text.data[1] == 'x' || text.data[1] == 'X')) {
-    base = 16;
-    i = 2;
-  }
-  if (i == text.length)
-    return false;
-  uint64_t value = 0;
-  for (; i < text.length; ++i) {
-    const int digit = jh_hex_digit(text.data[i]);
-    if (digit < 0 || (unsigned)digit >= base ||
-        value > (UINT64_MAX - (unsigned)digit) / base)
-      return false;
-    value = value * base + (unsigned)digit;
-  }
-  *out = value;
-  return true;
+  const hal_status_t status = jh_cmake_cache_find(
+      (jb_json_span_t){(const char *)cache->data, cache->length}, key, &value,
+      &found);
+  if (!require(p, status == HAL_EPROTO ? HAL_OK : status,
+               "duplicate or malformed CMake cache entry") ||
+      !require(p, status == HAL_EPROTO ? HAL_ECONFIG : HAL_OK,
+               "NUL in CMake cache entry"))
+    return "";
+  return found ? jh_firmware_text(p, value) : "";
 }
 
 static bool add_region(jh_firmware_plan_t *p, uint64_t start, uint64_t size) {
@@ -176,7 +128,7 @@ static void native_map(jh_firmware_plan_t *p, const char *directory) {
   bool memory = false, flash = false, symbols = false;
   bool have_start = false, have_size = false;
   uint64_t device_start = 0, device_size = 0;
-  while (next_line(&input, &line)) {
+  while (jh_metadata_next_line(&input, &line)) {
     if (jh_span_equal(line, jh_span("Memory Configuration"))) {
       memory = true;
       continue;
@@ -191,8 +143,9 @@ static void native_map(jh_firmware_plan_t *p, const char *directory) {
       const jb_json_span_t number = word(&line), name = word(&line);
       if (jh_span_equal(name, jh_span("__jh_flash_device_start")) ||
           jh_span_equal(name, jh_span("__jh_flash_device_size"))) {
-        if (!require(p, unsigned_value(number, &value) ? HAL_OK : HAL_ECONFIG,
-                     "invalid physical flash symbol"))
+        if (!require(
+                p, jh_metadata_unsigned(number, &value) ? HAL_OK : HAL_ECONFIG,
+                "invalid physical flash symbol"))
           break;
         if (jh_span_equal(name, jh_span("__jh_flash_device_start"))) {
           (void)require(p, !have_start ? HAL_OK : HAL_ECONFIG,
@@ -216,8 +169,8 @@ static void native_map(jh_firmware_plan_t *p, const char *directory) {
       continue;
     uint64_t start = 0, size = 0;
     if (!require(p,
-                 unsigned_value(word(&line), &start) &&
-                         unsigned_value(word(&line), &size)
+                 jh_metadata_unsigned(word(&line), &start) &&
+                         jh_metadata_unsigned(word(&line), &size)
                      ? HAL_OK
                      : HAL_ECONFIG,
                  "invalid memory map address or length"))
@@ -350,13 +303,14 @@ static void esp_map(jh_firmware_plan_t *p, jb_json_tree_view_t manifest) {
     verify_source(p, jh_firmware_text(p, key), jh_firmware_text(p, digest));
   }
   uint64_t app_offset = 0;
-  (void)require(p,
-                unsigned_value(jh_span(json_text(
-                                   p, jh_json_field(flasher, "app"), "offset")),
-                               &app_offset)
-                    ? HAL_OK
-                    : HAL_ECONFIG,
-                "invalid ESP app offset");
+  (void)require(
+      p,
+      jh_metadata_unsigned(
+          jh_span(json_text(p, jh_json_field(flasher, "app"), "offset")),
+          &app_offset)
+          ? HAL_OK
+          : HAL_ECONFIG,
+      "invalid ESP app offset");
   const jb_json_tree_view_t table =
       jh_json_field(jh_json_field(manifest, "configuration"), "partitionTable");
   jb_file_data_t bytes = {0};
@@ -400,7 +354,7 @@ static void esp_map(jh_firmware_plan_t *p, jb_json_tree_view_t manifest) {
   if (require(p,
               capacity_length > 2 &&
                       strcmp(capacity + capacity_length - 2, "MB") == 0 &&
-                      unsigned_value(
+                      jh_metadata_unsigned(
                           (jb_json_span_t){capacity, capacity_length - 2},
                           &megabytes) &&
                       megabytes > 0 && megabytes <= 64
@@ -623,9 +577,9 @@ hal_status_t jh_firmware_prepare(jh_firmware_plan_t *p) {
     uint64_t address = 0, size = 0;
     if (!require(p,
                  o->address && o->size &&
-                         unsigned_value(jh_span(o->address), &address) &&
-                         unsigned_value(jh_span(o->size), &size) && size &&
-                         size <= JH_FIRMWARE_MAX_BYTES &&
+                         jh_metadata_unsigned(jh_span(o->address), &address) &&
+                         jh_metadata_unsigned(jh_span(o->size), &size) &&
+                         size && size <= JH_FIRMWARE_MAX_BYTES &&
                          address <= UINT32_MAX &&
                          size <= UINT64_C(0x100000000) - address
                      ? HAL_OK

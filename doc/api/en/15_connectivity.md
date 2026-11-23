@@ -2165,7 +2165,7 @@ bool hal_wireguard_kick_handshake_text(const char *probe_ip_text,
   HAL-synchronized NTP time.
 - **impl/esp32:** shared WireGuard engine over the native ESP-IDF lwIP underlay,
   with explicit stack locking/netif access, native resolver, secure ESP entropy,
-  and synchronized libc time for TAI64N handshakes. `build_esp_idf.py` enables
+  and synchronized libc time for TAI64N handshakes. The ESP-IDF build of `jh esp` enables
   `CONFIG_ESP_NETIF_BRIDGE_EN`, so `esp_netif` keeps its handle in netif client
   data and leaves `netif->state` to the tunnel interface, and raises lwIP's
   thread stack to 6 KiB for tunnel decryption and handshake responses.

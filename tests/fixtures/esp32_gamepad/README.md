@@ -8,7 +8,7 @@ Bluedroid/HID dependencies, compilation, linking, and artifact generation.
 It does not verify radio behavior or pairing with a physical controller.
 
 ```sh
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/fixtures/esp32_gamepad \
   --target esp32 \
   --board esp32-devkitc-v4 \

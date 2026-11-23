@@ -37,11 +37,21 @@ def workflow_step(body: str, name: str) -> str:
     return step[: next_step.start()] if next_step else step
 
 
-def require_real_esp_build(body: str, context: str) -> None:
+def require_native_esp_build(body: str, context: str) -> None:
+    """The production ESP-IDF build runs in the native backend, jh esp build;
+    scripts/build_esp_idf.py keeps only the flash action."""
     require(
-        re.search(r"build_esp_idf\.py[\"']?\s+build", body) is not None,
-        f"{context} does not invoke the production ESP-IDF build action",
+        re.search(r"\besp build\b", body) is not None and "--root" in body,
+        f"{context} does not invoke the production ESP-IDF build action (jh esp build)",
     )
+    require(
+        "build_esp_idf.py" not in body,
+        f"{context} still builds through the Python ESP-IDF runner",
+    )
+
+
+def require_real_esp_build(body: str, context: str) -> None:
+    require_native_esp_build(body, context)
     for fragment in (
         "--project",
         "tests/fixtures/esp32s3_phase3",
@@ -57,10 +67,7 @@ def require_real_esp_build(body: str, context: str) -> None:
 
 
 def require_gamepad_esp_build(body: str, context: str) -> None:
-    require(
-        re.search(r"build_esp_idf\.py[\"']?\s+build", body) is not None,
-        f"{context} does not invoke the production ESP-IDF build action",
-    )
+    require_native_esp_build(body, context)
     for fragment in (
         "--project",
         "tests/fixtures/esp32_gamepad",
@@ -77,7 +84,8 @@ def require_esp_cache(body: str, context: str) -> None:
         "third_party/esp-idf",
         "~/.espressif",
         "hashFiles('third_party/esp_idf_version.conf', "
-        "'security/esp_idf_tools.json', 'scripts/component_manager.py', 'scripts/build_esp_idf.py')",
+        "'security/esp_idf_tools.json', 'scripts/component_manager.py', 'scripts/build_esp_idf.py', "
+        "'tools/jh/build/jh_esp_build.c', 'config/tooling/esp_idf_components.json')",
     ):
         require(fragment in body, f"{context} ESP-IDF cache is missing {fragment!r}")
     require(
@@ -147,7 +155,7 @@ require_real_esp_build(windows_build, "windows-tooling")
 require("id: esp32_phase3_build" in windows_build,
         "windows-tooling ESP-IDF build step has no stable diagnostic id")
 require("--jobs" not in windows_build,
-        "windows-tooling passes the removed --jobs option to build_esp_idf.py")
+        "windows-tooling passes the removed --jobs option to jh esp build")
 require_esp_cache(windows, "windows-tooling")
 require_uploaded_images(
     workflow_step(windows, "Upload ESP32-S3 Phase 3 build artifacts"), "windows-tooling")
@@ -203,7 +211,7 @@ esp_stage = gate_function("stage_esp_idf")
 require_real_esp_build(esp_stage, "runalltests.sh esp-idf stage")
 require_gamepad_esp_build(esp_stage, "runalltests.sh esp-idf stage")
 require("--jobs" not in esp_stage,
-        "the esp-idf stage passes the removed --jobs option to build_esp_idf.py")
+        "the esp-idf stage passes the removed --jobs option to jh esp build")
 for fragment in (
     '"${GATE_BUILD_ROOT}/esp-idf/esp32s3-phase3"',
     '"${LOG_ROOT}/jh_esp32s3_phase3.log"',

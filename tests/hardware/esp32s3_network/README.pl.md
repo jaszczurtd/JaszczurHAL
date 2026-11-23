@@ -118,7 +118,7 @@ dokładnie je. Numery portów istnieją tylko w źródłach zestawów.
 ## Build, wgranie i weryfikacja
 
 ```bash
-python3 scripts/build_esp_idf.py build \
+scripts/jh esp build --root . \
   --project tests/hardware/esp32s3_network \
   --assembly esp32s3-zero \
   --name jh_esp32_network_hardware

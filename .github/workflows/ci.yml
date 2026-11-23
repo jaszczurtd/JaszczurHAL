@@ -33,7 +33,7 @@ jobs:
           path: |
             third_party/esp-idf
             ~/.espressif
-          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf', 'security/esp_idf_tools.json', 'scripts/component_manager.py', 'scripts/build_esp_idf.py') }}
+          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf', 'security/esp_idf_tools.json', 'scripts/component_manager.py', 'scripts/build_esp_idf.py', 'tools/jh/build/jh_esp_build.c', 'config/tooling/esp_idf_components.json') }}
 
       - name: Cache authenticated Windows tools
         uses: actions/cache@v5
@@ -97,10 +97,13 @@ jobs:
         id: esp32_phase3_build
         shell: powershell
         run: |
-          $python = '.\.build\windows\venv\Scripts\python.exe'
+          # jh esp runs the component manager and idf_tools.py export with
+          # the venv interpreter, as the Python runner did with its own.
+          $env:JH_COMPONENT_PYTHON = (Resolve-Path '.\.build\windows\venv\Scripts\python.exe').Path
           $output = Join-Path $env:GITHUB_WORKSPACE `
             '.build\ci\esp-idf\esp32s3-phase3'
-          & $python scripts/build_esp_idf.py build `
+          & .\scripts\jh.ps1 esp build `
+            --root $env:GITHUB_WORKSPACE `
             --project tests/fixtures/esp32s3_phase3 `
             --target esp32s3 `
             --board waveshare-esp32-s3-zero `
@@ -539,7 +542,7 @@ jobs:
           path: |
             third_party/esp-idf
             ~/.espressif
-          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf', 'security/esp_idf_tools.json', 'scripts/component_manager.py', 'scripts/build_esp_idf.py') }}
+          key: esp-idf-${{ runner.os }}-${{ hashFiles('third_party/esp_idf_version.conf', 'security/esp_idf_tools.json', 'scripts/component_manager.py', 'scripts/build_esp_idf.py', 'tools/jh/build/jh_esp_build.c', 'config/tooling/esp_idf_components.json') }}
 
       # The NVD mirror is not always reachable. A daily cache keeps the full
       # download to one per day, and restore-keys hand the scan the last good

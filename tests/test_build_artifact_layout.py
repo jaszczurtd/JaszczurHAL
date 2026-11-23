@@ -65,9 +65,11 @@ for script in (
     "build_esp32_lib.sh",
 ):
     text = (ROOT / "scripts" / script).read_text(encoding="utf-8")
+    # jh library build constrains the output below .build
+    # (tools/jh/tests/check_library.cmake).
     require(
-        "jh_resolve_build_output" in text,
-        f"{script}: output path is not constrained by the shared helper",
+        "jh_launch_library_build" in text,
+        f"{script}: output path is not constrained by jh library build",
     )
 
 quality_gate = (ROOT / "runalltests.sh").read_text(encoding="utf-8")
@@ -433,39 +435,9 @@ require(
     "runalltests.sh sanitizer outputs are not below .build/gate",
 )
 
-helper = ROOT / "scripts" / "lib" / "build_artifacts.sh"
-accepted = subprocess.run(
-    [
-        "bash",
-        "-c",
-        'source "$1"; jh_resolve_build_output "$2" ".build/custom/test" unused',
-        "bash",
-        str(helper),
-        str(ROOT),
-    ],
-    check=False,
-    capture_output=True,
-    text=True,
-)
-require(accepted.returncode == 0, "shared helper rejected a .build output")
-require(
-    Path(accepted.stdout.strip()) == BUILD_ROOT / "custom" / "test",
-    "shared helper resolved an unexpected managed output",
-)
-rejected = subprocess.run(
-    [
-        "bash",
-        "-c",
-        'source "$1"; jh_resolve_build_output "$2" "build_legacy" unused',
-        "bash",
-        str(helper),
-        str(ROOT),
-    ],
-    check=False,
-    capture_output=True,
-    text=True,
-)
-require(rejected.returncode != 0, "shared helper accepted output outside .build")
+# The .build rule of library outputs is checked by
+# tools/jh/tests/check_library.cmake (accepted .build/custom/test, rejected
+# build_legacy).
 
 for probe in (
     "test_target_selection.cmake",
