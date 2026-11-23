@@ -8,6 +8,9 @@
     "C_Cpp.default.configurationProvider": "",
     "C_Cpp.default.compileCommands": "${workspaceFolder}/../../.build/examples/08_mqtt/rp2040/picow/compile_commands_patched.json",
     "C_Cpp.errorSquiggles": "enabled",
+    "C_Cpp.files.exclude": {
+        "**/.build": true
+    },
     "search.exclude": {
         "**/.build": true
     },

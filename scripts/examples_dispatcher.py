@@ -17,7 +17,6 @@ import os
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
 import time
 from typing import Any
 
@@ -311,7 +310,8 @@ def tail(path: Path, lines: int = 80) -> str:
 
 
 def dispatcher_log_path(target: str, example_name: str) -> Path:
-    return Path(tempfile.gettempdir()) / (
+    # Next to the example builds, which the gate's clean start removes.
+    return REPO_ROOT / ".build" / "examples" / "logs" / (
         f"jh_examples_dispatcher_{target}_{example_name}.log"
     )
 
@@ -331,6 +331,7 @@ def run_one_example(
     where = f"{target}/{selector[1]}" if selector[0] == "--assembly" else target
     log_path = dispatcher_log_path(where.replace("/", "-"), example_dir.name)
     label = f"{example_dir.name}@{where}"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     base_command = [
         str(JH_VSCODE),
         "build",

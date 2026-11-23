@@ -158,6 +158,7 @@ W pozostałych środowiskach domyślnie używa `python3`.
 ./runalltests.sh --stage host     # wybrane etapy, np. host,memcheck
 ./runalltests.sh --list-stages    # nazwy etapów w kolejności wykonania
 ./runalltests.sh --list-local-stages  # etapy, których CI nie uruchamia
+./runalltests.sh --clean-artifacts    # usuwa to, co zostawiają bramka i projekty testowe
 ```
 Etapy z tabeli poniżej to jedyna lista kontroli. Lokalne uruchomienie wykonuje
 je wszystkie po kolei. Linuksowe joby CI instalują narzędzia tym samym
@@ -180,6 +181,15 @@ Checkout, komponenty i narzędzia zostają na kolejny przebieg, więc pełne
 kopiowanie, instalacja i budowanie odbywają się tylko za pierwszym razem. Uruchamiaj go przed
 wysłaniem zmian. Kontrola tylko sprawdza artefakty
 generowane; odświeża je `python3 scripts/sync_generated.py --write`.
+
+Kompilacje i logi przebiegu zostają w `.build/gate/`, dopóki następne pełne
+uruchomienie nie usunie ich na starcie. `--clean-artifacts` usuwa je od razu,
+razem z buildami, które fixture'y ESP-IDF i testy sprzętowe trzymają we
+własnym `.build/`, checkoutami `commit-gate` po kopiach repozytorium, których
+już nie ma, oraz nieaktualnymi rejestracjami worktree. Nie uruchamia żadnego
+etapu i zostawia wszystko, z czego korzystają kolejne przebiegi: `.build/tools`,
+`.build/host-tools`, komponenty, pamięć podręczną kompilatora i checkouty
+`commit-gate` istniejących repozytoriów.
 
 | Etap | Co sprawdza |
 | --- | --- |

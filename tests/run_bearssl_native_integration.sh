@@ -2,11 +2,14 @@
 set -euo pipefail
 
 client=$1
-fixtures=$2
+# Parent of the generated certificates: the test's build directory, so a run
+# killed before its cleanup leaves them in the build tree only.
+work_root=$2
 port=19443
 
 umask 077
-generated=$(mktemp -d "$fixtures/generated.XXXXXX")
+mkdir -p "$work_root"
+generated=$(mktemp -d "$work_root/generated.XXXXXX")
 server_pid=
 
 run_openssl() {

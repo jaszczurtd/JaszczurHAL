@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.22)
 # The bootstrap builds jh from an exported tree with the managed checkouts of
 # another checkout, reuses an unchanged result, rebuilds a damaged or
-# interrupted one, keys every input and refuses a pin without its checkout.
+# interrupted one, keys every input, keeps only the newest results without
+# their work trees and refuses a pin without its checkout.
 # JH_VERIFY_ONLY, which firmware configure uses, returns a ready result built
 # from the same sources and otherwise fails without building or creating
 # anything. On Windows the Visual Studio developer environment of the Ninja
@@ -95,10 +96,24 @@ if(NOT recorded_root STREQUAL copy OR NOT recorded_dependency_root STREQUAL JH_H
     OR recorded_inputs LESS 10 OR NOT recorded_pointer MATCHES "^(4|8)$")
   message(FATAL_ERROR "The manifest does not record the build: ${manifest}")
 endif()
-if(EXISTS "${first_key_dir}/work.inprogress")
-  message(FATAL_ERROR "The in-progress marker survived a successful build")
+if(EXISTS "${first_key_dir}/work.inprogress" OR EXISTS "${first_key_dir}/work")
+  message(FATAL_ERROR "The in-progress marker or the work tree survived a successful build")
 endif()
 file(SHA256 "${first_exe}" first_sha)
+# Results of earlier keys for case 4, older than the rebuild of case 3: a
+# published one, an interrupted build, one another process holds, and a
+# directory that is not a key.
+set(stale_key "${variant_dir}/000000000000000000000001")
+set(interrupted_key "${variant_dir}/000000000000000000000002")
+set(held_key "${variant_dir}/000000000000000000000003")
+set(not_a_key "${variant_dir}/notes")
+foreach(dir IN ITEMS "${stale_key}" "${held_key}")
+  file(WRITE "${dir}/bin/manifest.json" "{}\n")
+  file(WRITE "${dir}/bin/${exe_name}" "stale\n")
+endforeach()
+file(WRITE "${interrupted_key}/work.inprogress" "stale\n")
+file(WRITE "${interrupted_key}/work/junk.txt" "stale\n")
+file(WRITE "${not_a_key}/keep.txt" "keep\n")
 
 # 2. Unchanged inputs reuse the published executable without touching it.
 file(TIMESTAMP "${first_exe}" before "%s")
@@ -136,10 +151,17 @@ if(NOT third_exe STREQUAL first_exe OR NOT third_sha STREQUAL first_sha OR EXIST
 endif()
 expect_runs("${third_exe}")
 
-# 4. A changed source is a new key; the earlier result stays untouched.
+# 4. A changed source is a new key; the earlier result stays untouched. With
+# two results kept, the build keeps the newest earlier one and deletes older
+# keys, except one whose lock another process holds.
 file(APPEND "${copy}/tools/jh/src/main.c" "\n// bootstrap check: changed input\n")
 verify_fails(verify_stale "jh is not prepared for this checkout and host")
-bootstrap(0 fourth)
+file(LOCK "${held_key}/lock" GUARD PROCESS RESULT_VARIABLE held)
+if(NOT held EQUAL 0)
+  message(FATAL_ERROR "Cannot lock ${held_key}: ${held}")
+endif()
+bootstrap(0 fourth -DJH_KEPT_RESULTS=2)
+file(LOCK "${held_key}/lock" RELEASE)
 get_filename_component(fourth_bin "${fourth_exe}" DIRECTORY)
 get_filename_component(fourth_key_dir "${fourth_bin}" DIRECTORY)
 file(SHA256 "${first_exe}" first_sha_again)
@@ -147,6 +169,11 @@ if(fourth_key_dir STREQUAL first_key_dir OR NOT first_sha_again STREQUAL first_s
   message(FATAL_ERROR "A changed input did not produce a new key, or replaced the old result")
 endif()
 expect_runs("${fourth_exe}")
+if(EXISTS "${fourth_key_dir}/work" OR EXISTS "${stale_key}" OR EXISTS "${interrupted_key}"
+    OR NOT EXISTS "${held_key}/bin/manifest.json" OR NOT EXISTS "${not_a_key}/keep.txt")
+  file(GLOB left LIST_DIRECTORIES TRUE "${variant_dir}/*")
+  message(FATAL_ERROR "The build did not keep exactly the newest results and the held key: ${left}")
+endif()
 
 # 5. A pin whose checkout is missing or different is refused before any build.
 # The pin is an input of the key, so it comes back byte for byte: file(READ)
@@ -189,9 +216,12 @@ else()
   set(launcher "${copy}/scripts/jh")
 endif()
 # The launcher must run the bootstrap with the CMake of this test: the CMake
-# version is part of the key, so another cmake in PATH would build anew.
+# version is part of the key, so another cmake in PATH would build anew. Its
+# result file must not stay in the temporary directory.
+set(launcher_tmp "${JH_WORK}/launcher tmp")
+file(MAKE_DIRECTORY "${launcher_tmp}")
 set(launcher_environment "JH_DEPENDENCY_ROOT=${JH_HAL_SOURCE}" "JH_OUTPUT_ROOT=${output}" --unset=JH_JHBASE_DIR
-  "JH_BOOTSTRAP_CMAKE=${CMAKE_COMMAND}"
+  "JH_BOOTSTRAP_CMAKE=${CMAKE_COMMAND}" "TMPDIR=${launcher_tmp}"
   "GIT_DIR=${JH_WORK}/other repo/.git" "GIT_WORK_TREE=${JH_WORK}/other repo")
 execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${launcher_environment}
     ${launcher} --version --json
@@ -209,6 +239,10 @@ execute_process(COMMAND "${CMAKE_COMMAND}" -E env ${launcher_environment}
   RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err)
 if(NOT code EQUAL 3 OR NOT out MATCHES "\"command\":\"generate.device-defaults\",\"status\":\"HAL_ENOENT\"")
   message(FATAL_ERROR "The launcher changed the command words: ${code}\n${out}\n${err}")
+endif()
+file(GLOB left "${launcher_tmp}/*")
+if(left)
+  message(FATAL_ERROR "The launcher left files in its temporary directory: ${left}")
 endif()
 # The tool's stdout reaches the caller byte for byte: sync_generated.py splits
 # the NUL-separated names of `repository files`, which a PowerShell pipeline

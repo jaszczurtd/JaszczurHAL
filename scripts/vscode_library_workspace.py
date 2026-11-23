@@ -662,6 +662,8 @@ def root_settings_document() -> dict[str, Any]:
         "cmake.configureOnOpen": False,
         # CMake Tools would otherwise configure into ${workspaceFolder}/build.
         "cmake.buildDirectory": "${workspaceFolder}/.build/vscode",
+        # Keeps build trees out of the cpptools symbol database.
+        "C_Cpp.files.exclude": {"**/.build": True},
         "files.exclude": {"**/.build": True},
         "search.exclude": {"**/.build": True},
     }

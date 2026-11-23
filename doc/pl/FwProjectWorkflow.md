@@ -38,7 +38,9 @@ pole `C_Cpp.default.configurationProvider` jest puste, więc CMake Tools nie
 podmienia tej bazy konfiguracją `CMakeLists.txt`, który skonfigurował na
 własną rękę, na przykład projektu testów hostowych. Do pierwszego odświeżenia
 obowiązuje `C_Cpp.default.compileCommands`. Katalog `.build` widać
-w eksploratorze, ale wyszukiwanie go pomija.
+w eksploratorze, ale wyszukiwanie go pomija. `C_Cpp.files.exclude` wyłącza
+go też z bazy symboli rozszerzenia C/C++, która inaczej indeksowałaby każdy
+katalog buildu i stale rosła.
 
 Wygenerowane pliki `launch.json` wskazują skrypty interfejsu i układu docelowego OpenOCD. W Windows uruchom `jh-vscode debug-tools --project <path> --json`, a następnie w ustawieniach użytkownika Cortex-Debug podaj wskazany plik wykonywalny OpenOCD i katalog narzędzi Arm. Rozszerzenie znajdzie w nim GDB. Ścieżki właściwe dla danego komputera nie są zapisywane w plikach projektu przechowywanych w Git.
 

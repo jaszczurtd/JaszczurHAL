@@ -216,7 +216,12 @@ whichever were selected, their verification rejects any local edit in them;
 PMD and the RISC-V toolchain are installed in the
 checkout from their pinned archives, and cppcheck and picotool are built
 there; all of them are kept for the next run. `--list-libraries` prints the
-target and board of each library stage. `-j N`, `--jobs N`, and `-jN` select
+target and board of each library stage. `--clean-artifacts` runs no stage: it
+removes the gate's build directories, the builds the ESP-IDF fixtures and
+hardware tests keep in their own `.build/`, commit-gate checkouts of
+repository copies that no longer exist and stale worktree registrations, and
+keeps the prepared tools, components, compiler cache and the commit-gate
+checkouts of existing repositories. `-j N`, `--jobs N`, and `-jN` select
 build parallelism. The gate verifies tracked feature, board, device default,
 example, root VS Code, and SBOM projections through `scripts/sync_generated.py --check` and
 never rewrites them. The stages are:
@@ -268,7 +273,8 @@ locally and in CI. It resolves an unversioned or versioned Clang toolchain,
 recreates a build below `.build/`, enables ASan, UBSan and libFuzzer, runs the
 complete host CTest suite with leak detection and fail-fast undefined-behavior
 reporting, then executes bounded smoke runs for the HTTP, WebSocket and
-multipart fuzz targets. A second build next to the first (`<build-dir>-tsan`)
+multipart fuzz targets. An input that fails one of them is saved in
+`<build-dir>/fuzz-artifacts/`. A second build next to the first (`<build-dir>-tsan`)
 runs the native C/C++ tests under ThreadSanitizer and stops at the first
 reported race. A third build (`<build-dir>-jh`) runs the native tests of the
 jh host CLI under ASan/UBSan. `--build-dir`, `--jobs`, and `--fuzz-runs` select its
@@ -300,7 +306,13 @@ those inputs and the SHA-256 of the executable; it is reused only when the
 manifest names the same key and the file still matches, never through PATH,
 a version number or a timestamp. A damaged executable or an interrupted
 build is rebuilt from a clean tree, and every key has its own lock, so
-concurrent launchers share one build. The variant is
+concurrent launchers share one build. After publishing, a build deletes its
+work tree and keeps the `JH_KEPT_RESULTS` (a `-D` option, default 8) newest
+results of the host variant. Older keys, left by earlier sources, pins or
+compilers, go unless another process holds their lock or, on Windows, still
+runs their executable. Several stay because the hook's index snapshot and the
+working tree can need different keys in one output directory. Reusing a
+result deletes nothing. The variant is
 `linux-<target triple of the compiler>`, `windows-x64` or `windows-x86`
 (`-Arch x86` builds a 32-bit process on Windows x64), and the tool must run
 before it is published. `JH_DEPENDENCY_ROOT` takes the managed checkouts

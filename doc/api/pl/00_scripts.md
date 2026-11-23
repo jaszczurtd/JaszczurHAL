@@ -232,7 +232,12 @@ którykolwiek etap, niezależnie od wyboru, ich weryfikacja odrzuca każdą
 lokalną zmianę. PMD i łańcuch narzędzi RISC-V są instalowane
 w checkoucie z przypiętych archiwów, a cppcheck i picotool budowane na
 miejscu; wszystko zostaje na kolejny przebieg. `--list-libraries` wypisuje target i
-płytkę każdego etapu bibliotek. Opcje `-j N`, `--jobs N` i `-jN` określają
+płytkę każdego etapu bibliotek. `--clean-artifacts` nie uruchamia żadnego
+etapu: usuwa katalogi kompilacji bramki, buildy, które fixture'y ESP-IDF
+i testy sprzętowe trzymają we własnym `.build/`, checkouty `commit-gate` po
+kopiach repozytorium, których już nie ma, oraz nieaktualne rejestracje
+worktree. Przygotowane narzędzia, komponenty, pamięć podręczna kompilatora
+i checkouty `commit-gate` istniejących repozytoriów zostają. Opcje `-j N`, `--jobs N` i `-jN` określają
 liczbę równoległych zadań kompilacji. Kontrola sprawdza wersjonowane pliki
 modułów, płytek, wartości domyślnych urządzeń, przykładów, głównej
 konfiguracji VS Code i SBOM przez
@@ -288,7 +293,9 @@ lokalnie i w CI. Wyszukuje dostępny toolchain Clang, z numerem wersji w nazwie
 lub bez niego, odtwarza konfigurację kompilacji w `.build/`, włącza ASan, UBSan i libFuzzer oraz uruchamia
 kompletny zestaw CTest hosta z wykrywaniem wycieków i natychmiastowym
 zatrzymaniem po wykryciu niezdefiniowanego zachowania, a następnie wykonuje
-krótkie testy fuzz dla parserów HTTP, WebSocket i multipart. Druga kompilacja
+krótkie testy fuzz dla parserów HTTP, WebSocket i multipart. Wejście, na
+którym któryś z nich zakończy się błędem, trafia do
+`<build-dir>/fuzz-artifacts/`. Druga kompilacja
 obok pierwszej (`<build-dir>-tsan`) uruchamia natywne testy C/C++ pod
 ThreadSanitizerem i zatrzymuje się na pierwszym zgłoszonym wyścigu. Trzecia
 kompilacja (`<build-dir>-jh`) uruchamia natywne testy CLI jh pod ASan/UBSan.
@@ -321,7 +328,13 @@ zapisującym te wejścia i SHA-256 programu; ponowne użycie wymaga tego samego
 klucza w manifeście i zgodnej sumy pliku, nigdy PATH, numeru wersji ani
 czasu modyfikacji. Uszkodzony program albo przerwany build są odbudowywane
 od czystego drzewa, a każdy klucz ma własną blokadę, więc równoległe
-launchery dzielą jeden build. Wariant to `linux-<triple kompilatora>`,
+launchery dzielą jeden build. Po publikacji build usuwa swoje drzewo robocze
+i zostawia `JH_KEPT_RESULTS` (opcja `-D`, domyślnie 8) najnowszych wyników
+danego wariantu hosta. Starsze klucze, pozostałe po wcześniejszych źródłach,
+pinach lub kompilatorach, znikają, chyba że inny proces trzyma ich blokadę
+albo, na Windows, wciąż uruchamia ich program. Zostaje kilka, bo migawka
+indeksu hooka i drzewo robocze mogą potrzebować różnych kluczy w jednym
+katalogu wyjściowym. Ponowne użycie wyniku niczego nie usuwa. Wariant to `linux-<triple kompilatora>`,
 `windows-x64` albo `windows-x86` (`-Arch x86` buduje proces 32-bitowy na
 Windows x64); przed publikacją narzędzie musi się uruchomić.
 `JH_DEPENDENCY_ROOT` bierze zarządzane checkouty z innego checkoutu,

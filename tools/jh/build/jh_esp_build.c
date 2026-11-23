@@ -12,6 +12,8 @@
 
 #define FAILURE_NAME "jh_esp_idf_failure.txt"
 #define LOG_NAME "build.log"
+/* State file of idf_tools.py export, kept in the build directory. */
+#define EXPORT_STATE_NAME "jh_idf_tools_export.json"
 
 void jh_esp_result_init(jh_esp_result_t *result) {
   memset(result, 0, sizeof *result);
@@ -388,6 +390,7 @@ static bool export_key(jb_json_span_t key) { return config_key(key); }
 static bool export_environment(jh_esp_t *e) {
   jb_vector_t baseline = {0}, arguments = {0}, export_env = {0};
   jb_string_t out = {0}, err = {0}, text = {0}, error_text = {0};
+  const char *state = NULL;
   if (!esp_environment_capture(e, &baseline) || !esp_list_init(e, &arguments) ||
       !esp_list_init(e, &export_env) ||
       !esp_storage(e, jb_string_init(&out, jb_heap_allocator())) ||
@@ -416,6 +419,14 @@ static bool export_environment(jh_esp_t *e) {
   for (size_t i = 0; i < jb_vector_size(&baseline) && esp_ok(e); ++i)
     (void)esp_push(e, &export_env, jh_string_span(jh_list_at(&baseline, i)));
   (void)esp_environment_set(e, &export_env, "PYTHONIOENCODING", "utf-8");
+  /* The export saves the variables a shell removes on deactivation to
+   * IDF_DEACTIVATE_FILE_PATH, without it to a new temporary file nothing
+   * deletes. A build has no shell to deactivate: the file stays in the build
+   * directory, apart from the caller's shell, and goes after the export. */
+  state = esp_join(e, e->build_dir, EXPORT_STATE_NAME);
+  if (esp_ok(e) && esp_remove(e, state))
+    (void)esp_environment_set(e, &export_env, "IDF_DEACTIVATE_FILE_PATH",
+                              state);
   if (!esp_ok(e))
     goto done;
   const esp_process_t process = {
@@ -503,6 +514,8 @@ static bool export_environment(jh_esp_t *e) {
     (void)ESP_FAIL(e, jh_span("ESP-IDF Python interpreter is missing: "),
                    jh_span(interpreter));
 done:
+  if (state != NULL)
+    (void)esp_remove(e, state);
   jb_string_destroy(&error_text);
   jb_string_destroy(&text);
   jb_string_destroy(&err);

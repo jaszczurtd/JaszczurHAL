@@ -25,6 +25,8 @@ trap 'rm -f "${result}"' EXIT
 "${CMAKE}" "-DJH_ROOT=${REPO_ROOT}" "-DJH_RESULT_FILE=${result}" \
     -P "${SCRIPT_DIR}/jh_bootstrap.cmake" >&2
 executable="$(head -n 1 "${result}")"
+# exec below replaces the shell without running the EXIT trap.
+rm -f "${result}"
 if [[ ! -x "${executable}" ]]; then
     echo "jh: the bootstrap published no executable at ${executable}" >&2
     exit 3

@@ -419,11 +419,13 @@ def project_view_settings(compile_commands: str) -> dict[str, Any]:
     project's host tests. ``compile_commands`` applies until the first
     refresh writes c_cpp_properties.json, and its presence keeps cpptools
     from picking a provider by itself. .build is visible in the explorer and
-    left out of search."""
+    left out of search and of the cpptools symbol database, which would
+    otherwise index every build tree and grow without bound."""
     return {
         "C_Cpp.default.configurationProvider": "",
         "C_Cpp.default.compileCommands": compile_commands,
         "C_Cpp.errorSquiggles": "enabled",
+        "C_Cpp.files.exclude": {BUILD_DIR_GLOB: True},
         "search.exclude": {BUILD_DIR_GLOB: True},
     }
 
@@ -433,9 +435,10 @@ def apply_project_view_settings(settings: dict[str, Any], compile_commands: str)
     keeping the project's other keys and exclusions; .build leaves
     files.exclude."""
     desired = project_view_settings(compile_commands)
-    search = settings.get("search.exclude")
-    desired["search.exclude"] = {**(search if isinstance(search, dict) else {}),
-                                 **desired["search.exclude"]}
+    for key in ("C_Cpp.files.exclude", "search.exclude"):
+        current = settings.get(key)
+        desired[key] = {**(current if isinstance(current, dict) else {}),
+                        **desired[key]}
     settings.update(desired)
     hidden = settings.get("files.exclude")
     if isinstance(hidden, dict):

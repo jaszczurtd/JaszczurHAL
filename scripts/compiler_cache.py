@@ -9,7 +9,6 @@ import os
 from pathlib import Path
 import shlex
 import sys
-import tempfile
 
 from codegen_support import atomic_write_text
 import component_manager
@@ -42,8 +41,11 @@ def compiler_cache_environment(repo_root: Path, label: str) -> tuple[Path, dict[
         "namespace = jaszczurhal",
         "",
     )), error_type=ValueError)
-    with tempfile.NamedTemporaryFile(dir=log_dir, prefix=f"{label}-", suffix=".log", delete=False) as log:
-        stats = log.name
+    # One statistics log per label (gate stage or example target), emptied
+    # for this run, so repeated runs do not add files.
+    stats_log = log_dir / f"{label}.log"
+    stats_log.write_text("", encoding="utf-8")
+    stats = str(stats_log)
     # Sloppiness, ignored headers or a caller's config must not weaken checks.
     environment = {key: value for key, value in os.environ.items() if not key.startswith("CCACHE_")}
     environment.update({

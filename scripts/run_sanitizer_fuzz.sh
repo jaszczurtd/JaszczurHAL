@@ -167,10 +167,13 @@ SANITIZER_ENV=(
 cmake -E env "${SANITIZER_ENV[@]}" \
     ctest --test-dir "${BUILD_DIR}" --output-on-failure --parallel "${JOBS}"
 
+# An input that fails is saved below the build, not in the caller's directory.
+FUZZ_ARTIFACTS="${BUILD_DIR}/fuzz-artifacts/"
+mkdir -p "${FUZZ_ARTIFACTS}"
 for target in fuzz_http_server fuzz_websocket fuzz_http_multipart; do
     cmake -E env "${SANITIZER_ENV[@]}" \
         "${BUILD_DIR}/tests/${target}" \
-        "-runs=${FUZZ_RUNS}" -max_len=1024
+        "-runs=${FUZZ_RUNS}" -max_len=1024 "-artifact_prefix=${FUZZ_ARTIFACTS}"
 done
 
 # The jh host CLI is its own CMake project. Cover its native tests and the

@@ -2007,6 +2007,16 @@ add_test(NAME test_build_dir_guard
 set_tests_properties(test_build_dir_guard test_build_artifact_layout
     PROPERTIES RESOURCE_LOCK repository_root)
 
+# runalltests.sh is a Bash script; Windows runs the gate through CI jobs.
+if(NOT WIN32)
+    add_test(NAME test_clean_artifacts
+        COMMAND ${CMAKE_COMMAND}
+            -DJH_ROOT=${CMAKE_SOURCE_DIR}
+            -DJH_TEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/test_clean_artifacts.cmake
+    )
+endif()
+
 set(JH_CW43_FIXTURE_SETUP_SCRIPT "" CACHE FILEPATH
     "Optional external CW43 hardware-fixture setup script, set locally via -DJH_CW43_FIXTURE_SETUP_SCRIPT=/path/to/script.sh")
 if(NOT "${JH_CW43_FIXTURE_SETUP_SCRIPT}" STREQUAL "" AND
@@ -3121,7 +3131,7 @@ if(JH_OPENSSL_EXECUTABLE AND NOT WIN32)
     add_test(NAME test_bearssl_native_integration
         COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/run_bearssl_native_integration.sh
                 $<TARGET_FILE:test_bearssl_native_client>
-                ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/tls_native)
+                ${CMAKE_CURRENT_BINARY_DIR}/bearssl_native_integration)
 elseif(WIN32)
     add_platform_disabled_test(test_bearssl_native_integration
         "native integration uses the POSIX socket transport and Bash harness"

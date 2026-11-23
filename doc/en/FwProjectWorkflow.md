@@ -38,7 +38,9 @@ writes for the selected board or assembly. `settings.json` leaves
 that database with a `CMakeLists.txt` it configured on its own, such as the
 project's host tests. `C_Cpp.default.compileCommands` applies until the first
 refresh. The `.build` directory is visible in the explorer and left out of
-search.
+search. `C_Cpp.files.exclude` also keeps it out of the C/C++ extension's
+symbol database, which would otherwise index every build tree and keep
+growing.
 
 Generated `launch.json` files specify the OpenOCD interface and target scripts. On Windows, run `jh-vscode debug-tools --project <path> --json`, then set the reported OpenOCD executable and Arm toolchain directory in the Cortex-Debug user settings. The extension locates GDB in that directory. These machine-specific paths are not stored in version-controlled project files.
 

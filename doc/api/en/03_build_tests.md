@@ -153,6 +153,7 @@ environments is `python3`.
 ./runalltests.sh --stage host     # selected stages, e.g. host,memcheck
 ./runalltests.sh --list-stages    # stage names in run order
 ./runalltests.sh --list-local-stages  # stages CI does not run
+./runalltests.sh --clean-artifacts    # remove what the gate and test projects leave
 ```
 The stages below are the only list of checks. A local run executes all of
 them in order. The Linux CI jobs install their tools with the same script and
@@ -174,6 +175,14 @@ the next run, so only the first one copies, installs, and builds
 everything. Run it before a push. The gate only
 checks generated artifacts; `python3 scripts/sync_generated.py --write`
 refreshes them.
+
+A run leaves its builds and logs in `.build/gate/` until the next full run
+starts by removing them. `--clean-artifacts` removes them right away, together
+with the builds the ESP-IDF fixtures and hardware tests keep in their own
+`.build/`, commit-gate checkouts of repository copies that no longer exist and
+stale worktree registrations. It runs no stage and keeps everything later runs
+reuse: `.build/tools`, `.build/host-tools`, the components, the compiler cache
+and the commit-gate checkouts of existing repositories.
 
 | Stage | What it checks |
 | --- | --- |

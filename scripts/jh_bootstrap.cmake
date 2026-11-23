@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.22)
 #   cmake -DJH_ROOT=<checkout> [-DJH_RESULT_FILE=<file>] [-DJH_ARCH=x64|x86]
 #         [-DJH_OUTPUT_ROOT=<dir>] [-DJH_GENERATOR=<name>] [-DJH_JOBS=<n>]
 #         [-DJH_BUILD_TYPE=<config>] [-DJH_VERIFY_ONLY=ON]
-#         -P scripts/jh_bootstrap.cmake
+#         [-DJH_KEPT_RESULTS=<n>] -P scripts/jh_bootstrap.cmake
 #
 # JH_VERIFY_ONLY returns a published executable built from exactly these
 # sources and fails when there is none, without building or creating
@@ -22,6 +22,14 @@ cmake_minimum_required(VERSION 3.22)
 # the build type and the CMake version. A published executable is reused only
 # when its manifest records the same key and its SHA-256 still matches.
 # Nothing is selected through PATH, version numbers or timestamps.
+#
+# A build removes its work tree after publishing, since a rebuild of a key
+# starts from an empty one, and keeps the JH_KEPT_RESULTS (default 8) newest
+# results of the host variant. Older keys, left by earlier sources, pins or
+# compilers, are deleted unless another process holds their lock or, on
+# Windows, runs their executable. Several are kept because the hook's index
+# snapshot and the working tree can use different keys of one output root.
+# Reuse and JH_VERIFY_ONLY delete nothing.
 #
 # JH_ARCH chooses the Windows process architecture (x64 default, x86 for a
 # 32-bit process on Windows x64). On Linux the variant follows the target
@@ -137,6 +145,62 @@ function(jh_published_ok key_dir key exe_name out)
   endif()
 endfunction()
 
+# Delete the results of variant_dir beyond the JH_KEPT_RESULTS newest, by the
+# time of their manifest (or directory, for an interrupted build); the key
+# just built always stays. Only key directories (hexadecimal names) count. A
+# key whose lock another process holds is skipped, and so is one whose bin
+# cannot be moved aside (Windows, while its jh runs). Failures to delete are
+# not errors: the tool is already published.
+function(jh_prune_results variant_dir current_key)
+  file(GLOB entries LIST_DIRECTORIES TRUE "${variant_dir}/*")
+  set(dated "")
+  foreach(entry IN LISTS entries)
+    get_filename_component(name "${entry}" NAME)
+    if(name STREQUAL current_key OR NOT name MATCHES "^[0-9a-f]+$" OR NOT IS_DIRECTORY "${entry}")
+      continue()
+    endif()
+    set(stamp "${entry}/bin/manifest.json")
+    if(NOT EXISTS "${stamp}")
+      set(stamp "${entry}")
+    endif()
+    file(TIMESTAMP "${stamp}" seconds "%s" UTC)
+    list(APPEND dated "${seconds}/${name}")
+  endforeach()
+  list(SORT dated COMPARE NATURAL ORDER DESCENDING)
+  set(kept 1)
+  foreach(item IN LISTS dated)
+    if(kept LESS JH_KEPT_RESULTS)
+      math(EXPR kept "${kept} + 1")
+      continue()
+    endif()
+    string(REGEX REPLACE "^[0-9]+/" "" name "${item}")
+    set(entry "${variant_dir}/${name}")
+    file(LOCK "${entry}/lock" GUARD FUNCTION TIMEOUT 0 RESULT_VARIABLE locked)
+    if(NOT locked EQUAL 0)
+      continue()
+    endif()
+    execute_process(COMMAND "${CMAKE_COMMAND}" -E rm -rf "${entry}/pruned"
+      RESULT_VARIABLE ignored OUTPUT_QUIET ERROR_QUIET)
+    set(moved 0)
+    if(EXISTS "${entry}/bin")
+      file(RENAME "${entry}/bin" "${entry}/pruned" RESULT moved)
+    endif()
+    if(moved EQUAL 0)
+      file(GLOB contents LIST_DIRECTORIES TRUE "${entry}/*")
+      list(REMOVE_ITEM contents "${entry}/lock")
+      if(contents)
+        execute_process(COMMAND "${CMAKE_COMMAND}" -E rm -rf ${contents}
+          RESULT_VARIABLE ignored OUTPUT_QUIET ERROR_QUIET)
+      endif()
+    endif()
+    file(LOCK "${entry}/lock" RELEASE)
+    if(moved EQUAL 0)
+      execute_process(COMMAND "${CMAKE_COMMAND}" -E rm -rf "${entry}"
+        RESULT_VARIABLE ignored OUTPUT_QUIET ERROR_QUIET)
+    endif()
+  endforeach()
+endfunction()
+
 # ---------------------------------------------------------------------------
 # Inputs
 # The managed checkouts are repositories of their own: the Git environment of
@@ -172,6 +236,11 @@ if(NOT DEFINED JH_GENERATOR)
 endif()
 if(NOT DEFINED JH_ARCH OR JH_ARCH STREQUAL "")
   set(JH_ARCH x64)
+endif()
+if(NOT DEFINED JH_KEPT_RESULTS OR JH_KEPT_RESULTS STREQUAL "")
+  set(JH_KEPT_RESULTS 8)
+elseif(NOT JH_KEPT_RESULTS MATCHES "^[1-9][0-9]?$")
+  jh_fail("JH_KEPT_RESULTS must be a number from 1 to 99: ${JH_KEPT_RESULTS}")
 endif()
 find_program(jh_git NAMES git NO_CACHE)
 if(NOT jh_git)
@@ -578,8 +647,16 @@ if(NOT reusable)
   if(NOT reusable)
     jh_fail("The published ${exe} does not match its manifest")
   endif()
+  # The published executable needs nothing from the work tree. A file the
+  # compiler still holds open on Windows stays until the next rebuild.
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E rm -rf "${work}"
+    RESULT_VARIABLE ignored OUTPUT_QUIET ERROR_QUIET)
+  set(published_now TRUE)
 endif()
 file(LOCK "${key_dir}/lock" RELEASE)
+if(published_now)
+  jh_prune_results("${JH_OUTPUT_ROOT}/${variant}" "${key}")
+endif()
 if(DEFINED JH_RESULT_FILE AND NOT JH_RESULT_FILE STREQUAL "")
   file(WRITE "${JH_RESULT_FILE}" "${exe}\n")
 else()

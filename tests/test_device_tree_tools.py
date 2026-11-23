@@ -456,12 +456,15 @@ class VsCodeFiles(unittest.TestCase):
             self.assertTrue(settings["C_Cpp.default.compileCommands"])
             self.assertNotIn(".build", json.dumps(settings.get("files.exclude", {})))
             self.assertEqual({"**/.build": True}, settings["search.exclude"])
+            self.assertEqual({"**/.build": True}, settings["C_Cpp.files.exclude"])
         # An existing project keeps its own keys and exclusions.
         settings = {"C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+                    "C_Cpp.files.exclude": {"**/third_party": True},
                     "files.exclude": {"**/.build": True, "**/*.o": True},
                     "search.exclude": {"**/logs": True}, "files.autoSave": "afterDelay"}
         vscode_task_config.apply_project_view_settings(settings, "${workspaceFolder}/db.json")
         self.assertEqual({"C_Cpp.default.configurationProvider": "",
+                          "C_Cpp.files.exclude": {"**/third_party": True, "**/.build": True},
                           "C_Cpp.default.compileCommands": "${workspaceFolder}/db.json",
                           "C_Cpp.errorSquiggles": "enabled",
                           "files.exclude": {"**/*.o": True},

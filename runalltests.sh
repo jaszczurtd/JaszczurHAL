@@ -20,6 +20,8 @@
 #   ./runalltests.sh --list-local-stages  # stages CI does not run
 #   ./runalltests.sh --list-libraries   # target:board of the library-* stages
 #   ./runalltests.sh -j8                # parallel jobs
+#   ./runalltests.sh --clean-artifacts  # remove what the gate and the test
+#                                       # projects leave, then exit
 #
 # Generated files are checked, never rewritten; refresh them with
 # python3 scripts/sync_generated.py --write (the pre-commit hook does it for
@@ -34,6 +36,8 @@ BUILD_ROOT="${SCRIPT_DIR}/.build"
 GATE_BUILD_ROOT="${BUILD_ROOT}/gate"
 LOG_ROOT="${GATE_BUILD_ROOT}/logs"
 GENERATED_REPORT="${LOG_ROOT}/generated_artifacts.txt"
+# Clean checkouts of --commit, one per repository copy.
+COMMIT_GATE_ROOT="${XDG_CACHE_HOME:-${HOME}/.cache}/jaszczurhal/commit-gate"
 export PYTHONPYCACHEPREFIX="${BUILD_ROOT}/python-cache"
 export PYTHONUTF8=1
 cd "${SCRIPT_DIR}"
@@ -118,6 +122,7 @@ JOBS="$(nproc 2>/dev/null || echo 4)"
 SELECTED=()
 COMMIT_MODE=0
 COMMIT_REV=HEAD
+CLEAN_MODE=0
 FORWARDED=()
 
 while [[ $# -gt 0 ]]; do
@@ -136,6 +141,7 @@ while [[ $# -gt 0 ]]; do
                 shift
             fi
             ;;
+        --clean-artifacts) CLEAN_MODE=1; shift ;;
         --list-stages) printf '%s\n' "${STAGES[@]}"; exit 0 ;;
         --list-local-stages) printf '%s\n' "${LOCAL_ONLY_STAGES[@]}"; exit 0 ;;
         --list-libraries) printf '%s\n' "${LIBRARY_BOARDS[@]}"; exit 0 ;;
@@ -171,7 +177,7 @@ run_on_commit() {
     local git_components=() archive_components=() excludes=(-e /.build/tools)
     sha="$(git rev-parse --verify "${COMMIT_REV}^{commit}")"
     # One checkout per repository copy.
-    worktree="${XDG_CACHE_HOME:-${HOME}/.cache}/jaszczurhal/commit-gate/$(printf '%s' "${SCRIPT_DIR}" | sha256sum | cut -c1-12)"
+    worktree="${COMMIT_GATE_ROOT}/$(printf '%s' "${SCRIPT_DIR}" | sha256sum | cut -c1-12)"
     while IFS= read -r entry; do
         entry="${entry%/}"
         [[ -d "${entry}" ]] || continue
@@ -235,6 +241,7 @@ clean_build_artifacts() {
         "${BUILD_ROOT}/examples"
         "${BUILD_ROOT}/python-cache"
         "${BUILD_ROOT}/tests"
+        "${BUILD_ROOT}/compiler-cache"
     )
 
     local candidate
@@ -248,6 +255,40 @@ clean_build_artifacts() {
         info "No existing build artifact directories to remove."
     else
         info "Removed ${cleaned} build artifact directories."
+    fi
+}
+
+# --clean-artifacts: the build directories of the gate, the builds the test
+# projects keep in their own .build (ESP-IDF fixtures and hardware tests),
+# commit-gate checkouts whose repository copy no longer exists and stale
+# worktree registrations of this repository. Managed tools (.build/tools,
+# .build/host-tools), components, the compiler cache and the commit-gate
+# checkout of a repository that still exists stay, so later runs do not
+# rebuild them.
+clean_all_artifacts() {
+    local dir tree gitdir
+    clean_build_artifacts
+    for dir in "${SCRIPT_DIR}"/tests/fixtures/*/.build "${SCRIPT_DIR}"/tests/hardware/*/.build; do
+        [[ -d "${dir}" ]] || continue
+        rm -rf -- "${dir}"
+        info "Removed ${dir}"
+    done
+    for tree in "${COMMIT_GATE_ROOT}"/*/; do
+        tree="${tree%/}"
+        [[ -d "${tree}" ]] || continue
+        gitdir=""
+        if [[ -f "${tree}/.git" ]]; then
+            gitdir="$(sed -n 's/^gitdir: //p' "${tree}/.git")"
+            if [[ -n "${gitdir}" && "${gitdir}" != /* ]]; then
+                gitdir="${tree}/${gitdir}"
+            fi
+        fi
+        [[ -z "${gitdir}" || ! -d "${gitdir}" ]] || continue
+        rm -rf -- "${tree}"
+        info "Removed ${tree}: its repository copy no longer exists"
+    done
+    if git -C "${SCRIPT_DIR}" rev-parse --git-dir >/dev/null 2>&1; then
+        git -C "${SCRIPT_DIR}" worktree prune
     fi
 }
 
@@ -915,6 +956,14 @@ run_stage() {
 }
 
 # ── Main ─────────────────────────────────────────────────────────────────────
+if [[ "${CLEAN_MODE}" -eq 1 ]]; then
+    if [[ "${COMMIT_MODE}" -eq 1 || "${#SELECTED[@]}" -gt 0 ]]; then
+        fail "--clean-artifacts runs alone, without --commit or --stage"
+        exit 1
+    fi
+    clean_all_artifacts
+    exit 0
+fi
 if [[ "${COMMIT_MODE}" -eq 1 ]]; then
     run_on_commit
 fi
@@ -932,8 +981,12 @@ mkdir -p "${LOG_ROOT}"
 # the bootstrap again.
 info "Preparing the jh host CLI..."
 jh_result="$(mktemp)"
-cmake "-DJH_ROOT=${SCRIPT_DIR}" "-DJH_RESULT_FILE=${jh_result}" \
-    -P "${SCRIPT_DIR}/scripts/jh_bootstrap.cmake" >&2
+if ! cmake "-DJH_ROOT=${SCRIPT_DIR}" "-DJH_RESULT_FILE=${jh_result}" \
+        -P "${SCRIPT_DIR}/scripts/jh_bootstrap.cmake" >&2; then
+    rm -f "${jh_result}"
+    fail "Preparing the jh host CLI failed"
+    exit 1
+fi
 JH_EXECUTABLE="$(head -n 1 "${jh_result}")"
 rm -f "${jh_result}"
 export JH_EXECUTABLE JH_EXECUTABLE_ROOT="${SCRIPT_DIR}"

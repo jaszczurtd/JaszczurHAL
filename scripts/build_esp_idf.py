@@ -285,9 +285,20 @@ def exported_environment(idf_dir: Path) -> dict[str, str]:
         "--format",
         "key-value",
     )
-    completed = subprocess.run(
-        command, check=False, capture_output=True, text=True, env=baseline
-    )
+    # The export saves the variables a shell removes on deactivation to
+    # IDF_DEACTIVATE_FILE_PATH, without it to a temporary file nothing
+    # deletes. A build has no shell to deactivate.
+    with tempfile.TemporaryDirectory(prefix="jh-idf-export-") as state_dir:
+        completed = subprocess.run(
+            command,
+            check=False,
+            capture_output=True,
+            text=True,
+            env={
+                **baseline,
+                "IDF_DEACTIVATE_FILE_PATH": str(Path(state_dir) / "state.json"),
+            },
+        )
     if completed.stderr:
         print(completed.stderr, file=sys.stderr, end="")
     if completed.returncode:

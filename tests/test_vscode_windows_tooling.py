@@ -325,25 +325,21 @@ require(
     == ("jh-vscode.cmd" if os.name == "nt" else "jh-vscode"),
     "example dispatcher selected the wrong host launcher",
 )
-with tempfile.TemporaryDirectory(prefix="jh dispatcher logs ") as temp_dir:
-    with mock.patch.object(
-        examples_dispatcher.tempfile,
-        "gettempdir",
-        return_value=temp_dir,
-    ):
-        dispatcher_log = examples_dispatcher.dispatcher_log_path(
-            "rp2350-arm",
-            "01_core_runtime",
-        )
-    require(
-        dispatcher_log.parent == Path(temp_dir),
-        "example dispatcher bypasses the host temporary directory",
-    )
-    require(
-        dispatcher_log.name
-        == "jh_examples_dispatcher_rp2350-arm_01_core_runtime.log",
-        "example dispatcher log name changed unexpectedly",
-    )
+# A path of this checkout, never a fixed /tmp: the gate's clean start removes
+# the logs with the example builds, on every host.
+dispatcher_log = examples_dispatcher.dispatcher_log_path(
+    "rp2350-arm",
+    "01_core_runtime",
+)
+require(
+    dispatcher_log.parent == ROOT.resolve() / ".build" / "examples" / "logs",
+    "example dispatcher logs are outside the example build directory",
+)
+require(
+    dispatcher_log.name
+    == "jh_examples_dispatcher_rp2350-arm_01_core_runtime.log",
+    "example dispatcher log name changed unexpectedly",
+)
 require(
     examples_dispatcher.tasks_for("rp2040", "pico", None) == expected_tasks,
     "example dispatcher bypasses the shared task builder",
