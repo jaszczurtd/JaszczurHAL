@@ -126,6 +126,13 @@ static const option_spec_t options[] = {
     {"link-library", "<path>",
      "Precompiled archive linked into the firmware; repeatable (esp build)"},
     {"idf-dir", "<path>", "Externally managed ESP-IDF checkout"},
+    {"dry-run", NULL, "Print the model and plan without building (compile)"},
+    {"debug", NULL, "Plan the debug build of the project (compile)"},
+    {"python", "<path>",
+     "Python3_EXECUTABLE of the configure (compile; default: "
+     "JH_COMPONENT_PYTHON, then python3 or python from PATH)"},
+    {"bootsel-volume", "<path>", "BOOTSEL volume of the upload (compile)"},
+    {"verbose", NULL, "Set the verbose flag of the project (compile)"},
     {"json", NULL, "Write a versioned JSON result on stdout"},
     {"json-version", "<major>",
      "Require a supported JSON result major version (1)"},
@@ -287,6 +294,12 @@ static const jh_command_spec_t commands[] = {
       opt_name, opt_output, opt_source, opt_include_dir, opt_link_library,
       opt_variant_option, opt_define, opt_port, opt_clean, opt_all_features,
       opt_project_config, opt_idf_dir, opt_count}},
+    {"compile",
+     "",
+     "compile",
+     {opt_root, opt_project, opt_target, opt_board_option, opt_assembly,
+      opt_variant_option, opt_port, opt_bootsel_volume, opt_python, opt_verbose,
+      opt_debug, opt_dry_run, opt_count}},
 };
 
 static const char usage[] =
@@ -338,7 +351,8 @@ static const char usage[] =
     "       jh library install --build-dir <path> --prefix <path>\n"
     "       jh library inspect --prefix <path>\n"
     "       jh esp (build | artifacts) --root <path> --project <path>"
-    " [options]\n\n"
+    " [options]\n"
+    "       jh compile --root <path> --project <path> --dry-run [options]\n\n"
     "Read JSON, select a value and optionally compare or write it,\n"
     "generate the C defaults of the HAL component types or the feature\n"
     "registry artifacts, evaluate a project's hal_project_config.h as\n"
@@ -456,9 +470,10 @@ static void select_command(jh_cli_t *ctx) {
   const size_t count = jb_vector_size(&ctx->args.command);
   if (count == 0 || ctx->failure.status != HAL_OK)
     return;
-  if (count == 2) {
+  if (count == 1 || count == 2) {
     const char *first = jb_string_data(jh_list_at(&ctx->args.command, 0));
-    const char *second = jb_string_data(jh_list_at(&ctx->args.command, 1));
+    const char *second =
+        count == 2 ? jb_string_data(jh_list_at(&ctx->args.command, 1)) : "";
     for (size_t i = 0; i < COUNTOF(commands); ++i)
       if (strcmp(first, commands[i].first) == 0 &&
           strcmp(second, commands[i].second) == 0) {
@@ -478,11 +493,12 @@ static void reject_foreign_options(jh_cli_t *ctx) {
     for (size_t i = 0; accepted[i] != opt_count; ++i)
       found = found || (size_t)accepted[i] == id;
     if (!found)
-      (void)jh_cli_error(ctx, HAL_EINVAL, 2,
-                         JH_PARTS(jh_span("--"), jh_span(options[id].name),
-                                  jh_span(" does not apply to "),
-                                  jh_span(ctx->command->first), jh_span(" "),
-                                  jh_span(ctx->command->second)));
+      (void)jh_cli_error(
+          ctx, HAL_EINVAL, 2,
+          JH_PARTS(jh_span("--"), jh_span(options[id].name),
+                   jh_span(" does not apply to "), jh_span(ctx->command->first),
+                   jh_span(ctx->command->second[0] != '\0' ? " " : ""),
+                   jh_span(ctx->command->second)));
   }
 }
 
@@ -630,6 +646,8 @@ static int dispatch(jh_cli_t *ctx, size_t argc, const char *const *argv) {
   case cmd_esp_build:
   case cmd_esp_artifacts:
     return jh_cli_esp(ctx, (jh_command_id_t)(ctx->command - commands));
+  case cmd_compile:
+    return jh_cli_compile(ctx);
   }
   (void)jh_cli_require(ctx, HAL_EINTERNAL, 3, "unexpected failure");
   return 0;

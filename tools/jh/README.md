@@ -20,7 +20,8 @@ build, and `jh clock` checks and lists the clock tree registry.
 `jh firmware read` backs up a selected device's complete flash for reflashing.
 `jh target` lists the targets with a linkable library and their build facts;
 `jh library` builds, installs and inspects that library, and `jh esp` builds
-and revalidates ESP-IDF firmware.
+and revalidates ESP-IDF firmware. `jh compile` plans the firmware build of a
+VS Code project.
 
 Prepare the pinned host dependencies explicitly before configuring:
 
@@ -890,6 +891,31 @@ that exports the ESP-IDF environment and runs the component manager is
 `JH_COMPONENT_PYTHON`, or `python3` (`python` on Windows) from `PATH`, the
 interpreter the `scripts/ensure_*.sh` scripts use; jh-vscode sets
 `JH_COMPONENT_PYTHON` to its own interpreter.
+
+## Firmware builds
+
+`jh compile --root <checkout> --project <dir> --dry-run [options]` computes
+the firmware build of a VS Code project the way `jh-vscode build` does, without
+starting a process or changing a file. The model has the members and values of
+`jh-vscode config-dump --json`: the manifest, `.vscode/settings.json`, the
+local selection in `.vscode/jaszczurhal.local.json`, the device tree assembly
+or the registry board, the target profile, the variant and the resolved HAL
+features. The plan holds the CMake source and build trees, the artifact
+directory, the configure and build commands with the environment they add, the
+cache keys the configure records and forgets and whether a stale CMake cache
+is reset. An ESP-IDF project gets its `jh esp build` and `jh esp artifacts`
+commands instead. The options are `--target`, `--board`, `--assembly`,
+`--variant`, `--port`, `--bootsel-volume` and `--verbose` of jh-vscode,
+`--debug` for the debug tree and `--python <path>`. Without `--json` the
+command prints the commands as `jh-vscode build --verbose` does.
+
+`Python3_EXECUTABLE` of the configure is `--python`, else
+`JH_COMPONENT_PYTHON`, else `python3` (`python` on Windows) from `PATH`, with
+links resolved; jh-vscode passes its own interpreter. The Pico SDK writes this
+path into the boot stage 2 commands, so another spelling of the same
+interpreter rebuilds and relinks RP firmware once. Below a Windows `buildRoot`
+of `host-environment.json` each variant has its own CMake tree,
+`<buildRoot>/<key>/cmake/variants/<id>`. Configuration errors exit with 2.
 
 ## Memory checks
 

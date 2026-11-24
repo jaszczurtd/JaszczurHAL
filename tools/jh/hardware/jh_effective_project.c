@@ -1,11 +1,10 @@
 #include "jh_effective_project.h"
 #include "jh_process_support.h"
 #include "jh_python_repr.h"
+#include "jh_usb_identifier.h"
 #include <jb/utf8.h>
 #include <stdlib.h>
 #include <string.h>
-#define PCRE2_CODE_UNIT_WIDTH 8
-#include <pcre2.h>
 
 static bool contains_target_token(jb_json_span_t text) {
   static const char token[] = "${target}";
@@ -76,129 +75,18 @@ const char *jh_effective_target(jh_hw_t *h, jb_json_tree_view_t manifest,
   return target;
 }
 
-typedef struct {
-  pcre2_code *code;
-  pcre2_match_data *match;
-} decimal_t;
-
-static bool decimal_scalar(jh_hw_t *h, decimal_t *decimal, uint32_t scalar) {
-  if (decimal->code == NULL) {
-    int error = 0;
-    PCRE2_SIZE offset = 0;
-    decimal->code =
-        pcre2_compile((PCRE2_SPTR) "\\A\\p{Nd}\\z", PCRE2_ZERO_TERMINATED,
-                      PCRE2_UTF | PCRE2_UCP, &error, &offset, NULL);
-    if (decimal->code != NULL)
-      decimal->match =
-          pcre2_match_data_create_from_pattern(decimal->code, NULL);
-    if (decimal->code == NULL || decimal->match == NULL) {
-      jh_node_storage(&h->memory, HAL_ENOMEM);
-      return false;
-    }
-  }
-  char bytes[4];
-  size_t length = 0;
-  if (jb_utf8_encode(scalar, bytes, sizeof bytes, &length) != HAL_OK)
-    return false;
-  const int result = pcre2_match(decimal->code, (PCRE2_SPTR)bytes, length, 0, 0,
-                                 decimal->match, NULL);
-  if (result < 0 && result != PCRE2_ERROR_NOMATCH)
-    jh_node_storage(&h->memory, result == PCRE2_ERROR_NOMEMORY ? HAL_ENOMEM
-                                                               : HAL_EINTERNAL);
-  return result >= 0;
-}
-
-/* Unicode decimal digits occur in complete, contiguous sets of ten. The
- * mathematical styled digits have adjacent sets, hence modulo ten. */
-static int digit(jh_hw_t *h, decimal_t *decimal, uint32_t scalar) {
-  if (scalar < 128)
-    return jh_hex_digit((char)scalar);
-  if (!decimal_scalar(h, decimal, scalar))
-    return -1;
-  uint32_t first = scalar;
-  while (first && h->memory.status == HAL_OK &&
-         decimal_scalar(h, decimal, first - 1))
-    --first;
-  return (int)((scalar - first) % 10);
-}
-
-static const char *usb_problem(jh_hw_t *h, decimal_t *decimal,
-                               jb_json_tree_view_t value) {
-  static const char range[] = " must be in range 0..65535";
-  static const char invalid[] =
-      " must be an integer or a USB hexadecimal identifier";
-  jb_json_span_t text = {0};
-  int64_t number = 0;
-  if (jh_json_int64(value, &number))
-    return number < 0 || number > 65535 ? range : NULL;
-  if (jh_json_type(value) == JB_JSON_NUMBER) {
-    (void)jb_json_tree_text(value, &text);
-    /* Out-of-int64 integer tokens are still Python ints; floats are ignored. */
-    if (memchr(text.data, '.', text.length) == NULL &&
-        memchr(text.data, 'e', text.length) == NULL &&
-        memchr(text.data, 'E', text.length) == NULL &&
-        memchr(text.data, 'I', text.length) == NULL &&
-        memchr(text.data, 'N', text.length) == NULL)
-      return range;
-  }
-  if (!jh_json_string(value, &text))
+static const char *usb_problem(jh_hw_t *h, jb_json_tree_view_t value) {
+  jh_usb_id_kind_t kind = JH_USB_ID_ABSENT;
+  uint32_t identifier = 0;
+  const hal_status_t status = jh_usb_identifier(value, &kind, &identifier);
+  if (status != HAL_OK) {
+    jh_node_storage(&h->memory, status);
     return NULL;
-  if (!jh_python_strip(text, &text))
-    return invalid;
-  if (!text.length)
-    return NULL;
-  unsigned base = 10;
-  size_t scalars = 0;
-  for (size_t i = 0; i < text.length;) {
-    uint32_t scalar = 0;
-    size_t consumed = 0;
-    if (jb_utf8_decode(text.data + i, text.length - i, &scalar, &consumed) !=
-        HAL_OK)
-      return invalid;
-    ++scalars;
-    if ((scalar >= 'a' && scalar <= 'f') || (scalar >= 'A' && scalar <= 'F'))
-      base = 16;
-    i += consumed;
   }
-  if (scalars == 4 || (text.length >= 2 && text.data[0] == '0' &&
-                       (text.data[1] == 'x' || text.data[1] == 'X')))
-    base = 16;
-  size_t at = 0;
-  const bool negative = text.data[0] == '-';
-  if (negative || text.data[0] == '+')
-    ++at;
-  if (base == 16 && text.length - at >= 2 && text.data[at] == '0' &&
-      (text.data[at + 1] == 'x' || text.data[at + 1] == 'X')) {
-    at += 2;
-    if (at < text.length && text.data[at] == '_')
-      ++at;
-  }
-  uint32_t total = 0;
-  bool previous_digit = false;
-  while (at < text.length) {
-    if (text.data[at] == '_') {
-      if (!previous_digit)
-        return invalid;
-      previous_digit = false;
-      ++at;
-      continue;
-    }
-    uint32_t scalar = 0;
-    size_t consumed = 0;
-    if (jb_utf8_decode(text.data + at, text.length - at, &scalar, &consumed) !=
-        HAL_OK)
-      return invalid;
-    const int value_of = digit(h, decimal, scalar);
-    if (value_of < 0 || (unsigned)value_of >= base)
-      return invalid;
-    if (total <= 65535)
-      total = total * base + (unsigned)value_of;
-    previous_digit = true;
-    at += consumed;
-  }
-  if (!previous_digit)
-    return invalid;
-  return total > 65535 || (negative && total) ? range : NULL;
+  return kind == JH_USB_ID_RANGE     ? " must be in range 0..65535"
+         : kind == JH_USB_ID_INVALID ? " must be an integer or a USB "
+                                       "hexadecimal identifier"
+                                     : NULL;
 }
 
 static bool configured(jb_json_tree_view_t value) {
@@ -281,20 +169,16 @@ void jh_effective_identity(jh_hw_t *h, jb_json_tree_view_t manifest,
                            jh_failure_t *failure) {
   const jb_json_tree_view_t identity =
       dictionary(h, jh_json_field(manifest, "identity"), "identity", failure);
-  decimal_t decimal = {0};
   static const char *const keys[] = {"usbVid", "usbPid"};
   for (size_t i = 0; h->memory.status == HAL_OK && failure->status == HAL_OK &&
                      i < COUNTOF(keys);
        ++i) {
-    const char *problem =
-        usb_problem(h, &decimal, jh_json_field(identity, keys[i]));
+    const char *problem = usb_problem(h, jh_json_field(identity, keys[i]));
     if (problem != NULL && h->memory.status == HAL_OK)
       (void)jh_check_fail(
           failure, JH_PARTS(jh_span("invalid USB identity configuration: "),
                             jh_span(keys[i]), jh_span(problem)));
   }
-  pcre2_match_data_free(decimal.match);
-  pcre2_code_free(decimal.code);
 }
 
 void jh_effective_sections(jh_hw_t *h, jb_json_tree_view_t manifest,

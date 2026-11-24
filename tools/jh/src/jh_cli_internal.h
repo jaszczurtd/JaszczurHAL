@@ -83,6 +83,11 @@ typedef enum {
   opt_include_dir,
   opt_link_library,
   opt_idf_dir,
+  opt_dry_run,
+  opt_debug,
+  opt_python,
+  opt_bootsel_volume,
+  opt_verbose,
   opt_machine,
   opt_json_version,
   opt_help,
@@ -124,7 +129,8 @@ typedef enum {
   cmd_library_install,
   cmd_library_inspect,
   cmd_esp_build,
-  cmd_esp_artifacts
+  cmd_esp_artifacts,
+  cmd_compile
 } jh_command_id_t;
 
 typedef struct {
@@ -234,6 +240,7 @@ int jh_cli_library_build(jh_cli_t *ctx);
 int jh_cli_library_install(jh_cli_t *ctx);
 int jh_cli_library_inspect(jh_cli_t *ctx);
 int jh_cli_esp(jh_cli_t *ctx, jh_command_id_t command);
+int jh_cli_compile(jh_cli_t *ctx);
 
 const char *jh_cli_load_boards(jh_cli_t *ctx, const char *command,
                                jh_board_registry_t *registry);

@@ -21,7 +21,8 @@ zegarów.
 `jh firmware read` zapisuje kopię całego flash wybranego urządzenia do ponownego reflasha.
 `jh target` wypisuje targety z biblioteką linkowalną i ich fakty builda,
 a `jh library` kompiluje, instaluje i sprawdza tę bibliotekę; `jh esp`
-kompiluje i ponownie sprawdza firmware ESP-IDF.
+kompiluje i ponownie sprawdza firmware ESP-IDF. `jh compile` planuje build
+firmware projektu VS Code.
 
 Przed konfiguracją przygotuj zależności hosta w wersjach wskazanych przez repozytorium:
 
@@ -913,6 +914,32 @@ który eksportuje środowisko ESP-IDF i uruchamia menedżer komponentów, to
 `JH_COMPONENT_PYTHON` albo `python3` (`python` na Windows) z `PATH`, czyli
 interpreter używany przez skrypty `scripts/ensure_*.sh`; jh-vscode ustawia
 `JH_COMPONENT_PYTHON` na swój interpreter.
+
+## Kompilacje firmware
+
+`jh compile --root <checkout> --project <katalog> --dry-run [opcje]` wylicza
+build firmware projektu VS Code tak jak `jh-vscode build`, bez uruchamiania
+procesów i zmiany plików. Model ma pola i wartości `jh-vscode config-dump
+--json`: manifest, `.vscode/settings.json`, lokalny wybór
+w `.vscode/jaszczurhal.local.json`, montaż device tree albo płytkę
+z rejestru, profil targetu, wariant i rozwiązane funkcje HAL. Plan zawiera
+katalog źródeł i drzewo CMake, katalog artefaktów, polecenia configure i build
+ze zmiennymi środowiska, które dokładają, klucze cache zapisywane
+i usuwane przez configure oraz decyzję o wyczyszczeniu nieaktualnego cache
+CMake. Projekt ESP-IDF dostaje zamiast tego polecenia `jh esp build`
+i `jh esp artifacts`. Opcje to `--target`, `--board`, `--assembly`,
+`--variant`, `--port`, `--bootsel-volume` i `--verbose` z jh-vscode, `--debug`
+dla drzewa debug oraz `--python <ścieżka>`. Bez `--json` polecenie wypisuje
+polecenia tak jak `jh-vscode build --verbose`.
+
+`Python3_EXECUTABLE` dla configure to `--python`, a bez niego
+`JH_COMPONENT_PYTHON`, a dalej `python3` (`python` na Windows) z `PATH`,
+z rozwiązanymi dowiązaniami; jh-vscode podaje swój interpreter. Pico SDK
+wpisuje tę ścieżkę do poleceń boot stage 2, więc inna pisownia tego samego
+interpretera raz przebudowuje i linkuje firmware RP. Pod Windows `buildRoot`
+z `host-environment.json` każdy wariant ma własne drzewo CMake,
+`<buildRoot>/<klucz>/cmake/variants/<id>`. Błędy konfiguracji kończą się
+kodem 2.
 
 ## Kontrola pamięci
 
