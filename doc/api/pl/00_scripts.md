@@ -485,6 +485,12 @@ Kompiluje, sprawdza i wgrywa projekty korzystające z ESP-IDF. Obsługuje konfig
 | `artifacts` | Ponownie waliduje dotychczasowe wyniki kompilacji i zapisuje deterministyczny manifest `jh_esp_idf_artifacts.json` bez kompilowania projektu; build z device tree uruchamia jedynie ponownie próby ABI w kompilatorze. |
 | `flash` | Ponownie sprawdza dotychczasowe wyniki kompilacji, wymaga `--port` i uruchamia flashowanie ESP-IDF z pełnym zestawem obrazów i przesunięć. Następnie sprawdza log flashowania i manifest. |
 
+Procesy ESP-IDF uruchamiane przez obie akcje dostają `TMPDIR` wskazujący na
+`tmp/` w katalogu builda; runner opróżnia ten katalog przed ich startem i usuwa
+go po zakończeniu. Kconfgen z ESP-IDF przy każdej konfiguracji zostawia w
+katalogu tymczasowym pusty `kconfgen_tmp*.old`; takie pliki znikają razem z
+przebiegiem, zamiast gromadzić się w systemowym katalogu tymczasowym.
+
 `--project` jest wymagane. `--target` domyślnie to `esp32s3`; jego deskryptor
 targetu wybiera `waveshare-esp32-s3-zero`, gdy pominięto `--board`.
 `--output` musi pozostać poniżej katalogu głównego `.build` projektu lub

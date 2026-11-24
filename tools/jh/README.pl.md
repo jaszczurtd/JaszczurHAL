@@ -900,7 +900,11 @@ skrypt Pythona: wejścia płytki albo device tree w `generated/jaszczurhal/`,
 `jh_esp_idf_toolchain.json`, `build.log` oraz manifest
 `jh_esp_idf_artifacts.json`, więc `scripts/build_esp_idf.py flash` przyjmuje
 build wykonany przez `jh esp`. Listy źródeł i zależności komponentów pochodzą
-z `config/tooling/esp_idf_components.json`.
+z `config/tooling/esp_idf_components.json`. Procesy ESP-IDF dostają `TMPDIR`
+wskazujący na `tmp/` w katalogu builda; przebieg opróżnia ten katalog przed ich
+startem i usuwa go po zakończeniu. Kconfgen z ESP-IDF przy każdej konfiguracji
+zostawia w katalogu tymczasowym pusty `kconfgen_tmp*.old`; takie pliki znikają
+razem z przebiegiem, zamiast gromadzić się w systemowym katalogu tymczasowym.
 
 Błąd wypisuje `jh: stage=<etap> failed: <komunikat>` i zapisuje tę samą linię
 do `jh_esp_idf_failure.txt` w katalogu builda. Polecenie kończy się wtedy

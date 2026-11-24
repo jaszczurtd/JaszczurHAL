@@ -29,6 +29,7 @@ MANIFEST_NAME = "jh_esp_idf_artifacts.json"
 LOG_NAME = "build.log"
 FLASH_LOG_NAME = "flash.log"
 FAILURE_DIAGNOSTIC_NAME = "jh_esp_idf_failure.txt"
+TEMPORARY_DIR_NAME = "tmp"
 GENERATED_DIR_NAME = "generated/jaszczurhal"
 GENERATED_CONFIG_NAME = "jh_board_config.h"
 PROJECT_CONFIG_CMAKE_NAME = "jh_esp_idf_project.cmake"
@@ -2480,6 +2481,13 @@ def run_idf(
         # The bootloader is an ExternalProject occupying one parent job.
         # Its nested cmake --build must not start another full job pool.
         build_environment["CMAKE_BUILD_PARALLEL_LEVEL"] = "1"
+    # kconfgen of ESP-IDF leaves an empty kconfgen_tmp*.old beside each
+    # temporary file it writes. Temporary files of the IDF processes stay in
+    # the build directory and go when the run ends.
+    temporary = build_dir / TEMPORARY_DIR_NAME
+    shutil.rmtree(temporary, ignore_errors=True)
+    temporary.mkdir(exist_ok=True)
+    build_environment["TMPDIR"] = str(temporary)
     try:
         completed = subprocess.run(
             command,
@@ -2496,6 +2504,8 @@ def run_idf(
         log_path.write_text(log, encoding="utf-8")
         print(log, end="", flush=True)
         raise EspIdfError(log.rstrip()) from error
+    finally:
+        shutil.rmtree(temporary, ignore_errors=True)
     log = completed.stdout or ""
     log_path.write_text(log, encoding="utf-8")
     print(log, end="", flush=True)

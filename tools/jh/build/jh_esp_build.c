@@ -12,6 +12,7 @@
 
 #define FAILURE_NAME "jh_esp_idf_failure.txt"
 #define LOG_NAME "build.log"
+#define TEMPORARY_NAME "tmp"
 /* State file of idf_tools.py export, kept in the build directory. */
 #define EXPORT_STATE_NAME "jh_idf_tools_export.json"
 
@@ -541,7 +542,7 @@ static bool run_idf(jh_esp_t *e, bool build) {
   const char *action = build ? "build" : "reconfigure";
   jb_vector_t arguments = {0}, environment = {0};
   jb_string_t raw = {0}, log = {0};
-  const char *program = NULL;
+  const char *program = NULL, *temporary = NULL;
   if (!esp_list_init(e, &arguments) ||
       !esp_storage(e, jb_string_init(&raw, jb_heap_allocator())) ||
       !esp_storage(e, jb_string_init(&log, jb_heap_allocator())))
@@ -610,6 +611,21 @@ static bool run_idf(jh_esp_t *e, bool build) {
   if (build && jobs != NULL && jobs[0] != '\0')
     (void)esp_environment_set(e, &environment, "CMAKE_BUILD_PARALLEL_LEVEL",
                               "1");
+  /* kconfgen of ESP-IDF leaves an empty kconfgen_tmp*.old beside each
+   * temporary file it writes. Temporary files of the IDF processes stay in
+   * the build directory and go when the run ends. */
+  const char *directory = esp_join(e, e->build_dir, TEMPORARY_NAME);
+  if (!esp_ok(e))
+    goto done;
+  (void)jb_fs_remove(directory, true);
+  temporary = directory;
+  const hal_status_t prepared = jb_fs_mkdir(temporary, false);
+  if (prepared != HAL_OK) {
+    (void)jh_fail(e->failure, prepared, 1,
+                  JH_PARTS(jh_span("cannot create "), jh_span(temporary)));
+    goto done;
+  }
+  (void)esp_environment_set(e, &environment, "TMPDIR", temporary);
   if (!esp_ok(e))
     goto done;
   int code = -1;
@@ -648,6 +664,8 @@ static bool run_idf(jh_esp_t *e, bool build) {
                    jh_span(" failed with exit code "), jh_span(number));
   }
 done:
+  if (temporary != NULL)
+    (void)jb_fs_remove(temporary, true);
   jh_list_destroy(&environment);
   jb_string_destroy(&log);
   jb_string_destroy(&raw);

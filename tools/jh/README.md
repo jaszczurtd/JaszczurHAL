@@ -877,7 +877,11 @@ with its stamp, `jh_esp_idf_project.cmake` and `.json`,
 `jh_esp_idf_toolchain.json`, `build.log` and the manifest
 `jh_esp_idf_artifacts.json`, so `scripts/build_esp_idf.py flash` accepts a
 build made by `jh esp`. The component source lists and dependencies come from
-`config/tooling/esp_idf_components.json`.
+`config/tooling/esp_idf_components.json`. ESP-IDF processes get `TMPDIR`
+pointing to `tmp/` in the build directory, which the run empties before they
+start and removes afterwards. ESP-IDF's kconfgen leaves an empty
+`kconfgen_tmp*.old` in its temporary directory on every configure; these files
+go with the run instead of piling up in the system temporary directory.
 
 A failure prints `jh: stage=<stage> failed: <message>` and writes the same line
 to `jh_esp_idf_failure.txt` in the build directory. The command then exits

@@ -11,6 +11,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from typing import Any
 import unittest
 from unittest import mock
 
@@ -1412,6 +1413,50 @@ class CommandContractTests(unittest.TestCase):
             output.assert_called_once_with(
                 "configure\ncompile\n", end="", flush=True
             )
+
+    def test_run_idf_keeps_temporary_files_in_the_build_directory(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-esp-run-") as text:
+            root = Path(text)
+            build_dir = root / "build"
+            temporary = build_dir / esp_idf.TEMPORARY_DIR_NAME
+            environment = {"IDF_PYTHON_ENV_PATH": str(root / "python")}
+            seen: list[str] = []
+
+            def idf_process(*args: Any, **kwargs: Any) -> mock.Mock:
+                # kconfgen leaves an empty <temporary>.old in TMPDIR.
+                directory = Path(kwargs["env"]["TMPDIR"])
+                seen.append(str(directory))
+                self.assertEqual(list(directory.iterdir()), [])
+                (directory / "kconfgen_tmpabcdefgh.old").write_bytes(b"")
+                return mock.Mock(returncode=returncode, stdout="")
+
+            for returncode in (0, 2):
+                # An interrupted run left its temporary files behind.
+                temporary.mkdir(parents=True, exist_ok=True)
+                (temporary / "kconfgen_tmpinterrupted.old").write_bytes(b"")
+                with mock.patch.object(
+                    esp_idf.subprocess, "run", side_effect=idf_process
+                ), mock.patch("builtins.print"):
+                    try:
+                        esp_idf.run_idf(
+                            root, build_dir, root / "idf", "esp32s3",
+                            environment, "reconfigure",
+                        )
+                    except esp_idf.EspIdfError:
+                        self.assertEqual(returncode, 2)
+                self.assertFalse(temporary.exists())
+            self.assertEqual(seen, [str(temporary)] * 2)
+            self.assertNotIn("TMPDIR", environment)
+
+            with mock.patch.object(
+                esp_idf.subprocess, "run", side_effect=OSError("unavailable")
+            ), mock.patch("builtins.print"):
+                with self.assertRaises(esp_idf.EspIdfError):
+                    esp_idf.run_idf(
+                        root, build_dir, root / "idf", "esp32s3",
+                        environment, "build",
+                    )
+            self.assertFalse(temporary.exists())
 
     def test_run_idf_start_failure_is_persisted(self) -> None:
         with tempfile.TemporaryDirectory(prefix="jh-esp-run-") as text:

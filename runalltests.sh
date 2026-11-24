@@ -779,15 +779,26 @@ stage_esp_idf() {
     local phase3="${GATE_BUILD_ROOT}/esp-idf/esp32s3-phase3"
     local gamepad="${GATE_BUILD_ROOT}/esp-idf/esp32-gamepad"
     local library="${GATE_BUILD_ROOT}/link-libraries/esp32s3"
+    # The build must leave nothing in the caller's temporary directory.
+    local phase3_tmp="${GATE_BUILD_ROOT}/esp-idf/esp32s3-phase3-tmpdir"
+    rm -rf "${phase3_tmp}"
+    mkdir -p "${phase3_tmp}"
 
     info "Building the ESP32-S3 Phase 3 fixture with pinned ESP-IDF..."
     run_esp_build "${LOG_ROOT}/jh_esp32s3_phase3.log" "${phase3}" \
+        env "TMPDIR=${phase3_tmp}" \
         "${JH_EXECUTABLE}" esp build --root "${SCRIPT_DIR}" \
             --project "${SCRIPT_DIR}/tests/fixtures/esp32s3_phase3" \
             --target esp32s3 \
             --board waveshare-esp32-s3-zero \
             --output "${phase3}" \
             --clean
+    if [[ -n "$(find "${phase3_tmp}" -mindepth 1 -print -quit)" ]]; then
+        fail "The ESP-IDF build left files in its temporary directory:"
+        find "${phase3_tmp}" -mindepth 1
+        exit 1
+    fi
+    rmdir "${phase3_tmp}"
 
     info "Building the ESP32 Classic gamepad fixture with pinned ESP-IDF..."
     run_esp_build "${LOG_ROOT}/jh_esp32_gamepad.log" "${gamepad}" \

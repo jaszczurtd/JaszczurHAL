@@ -458,6 +458,12 @@ Builds, validates, and flashes projects whose board descriptor selects the `esp-
 | `artifacts` | Revalidates an existing build and rewrites the deterministic `jh_esp_idf_artifacts.json` manifest without compiling the project; a device tree build only runs the compiler's ABI probes again. |
 | `flash` | Revalidates the existing build, requires `--port`, and invokes ESP-IDF flash with the complete image/offset set before validating the flash log and manifest again. |
 
+ESP-IDF processes started by either action get `TMPDIR` pointing to `tmp/` in
+the build directory, which the runner empties before they start and removes
+afterwards. ESP-IDF's kconfgen leaves an empty `kconfgen_tmp*.old` in its
+temporary directory on every configure; these files go with the run instead of
+piling up in the system temporary directory.
+
 `--project` is required. `--target` defaults to `esp32s3`; its target descriptor
 selects `waveshare-esp32-s3-zero` when `--board` is omitted. `--output` must
 remain below either the project or repository `.build` root. Repeatable
