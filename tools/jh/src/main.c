@@ -127,6 +127,8 @@ static const option_spec_t options[] = {
      "Precompiled archive linked into the firmware; repeatable (esp build)"},
     {"idf-dir", "<path>", "Externally managed ESP-IDF checkout"},
     {"dry-run", NULL, "Print the model and plan without building (compile)"},
+    {"configure-only", NULL,
+     "Run the CMake configure of the planned build and stop (compile)"},
     {"debug", NULL, "Plan the debug build of the project (compile)"},
     {"python", "<path>",
      "Python3_EXECUTABLE of the configure (compile; default: "
@@ -299,7 +301,7 @@ static const jh_command_spec_t commands[] = {
      "compile",
      {opt_root, opt_project, opt_target, opt_board_option, opt_assembly,
       opt_variant_option, opt_port, opt_bootsel_volume, opt_python, opt_verbose,
-      opt_debug, opt_dry_run, opt_count}},
+      opt_debug, opt_dry_run, opt_configure_only, opt_count}},
 };
 
 static const char usage[] =
@@ -352,7 +354,8 @@ static const char usage[] =
     "       jh library inspect --prefix <path>\n"
     "       jh esp (build | artifacts) --root <path> --project <path>"
     " [options]\n"
-    "       jh compile --root <path> --project <path> --dry-run [options]\n\n"
+    "       jh compile --root <path> --project <path>"
+    " (--dry-run | --configure-only) [options]\n\n"
     "Read JSON, select a value and optionally compare or write it,\n"
     "generate the C defaults of the HAL component types or the feature\n"
     "registry artifacts, evaluate a project's hal_project_config.h as\n"

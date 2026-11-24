@@ -917,6 +917,19 @@ interpreter rebuilds and relinks RP firmware once. Below a Windows `buildRoot`
 of `host-environment.json` each variant has its own CMake tree,
 `<buildRoot>/<key>/cmake/variants/<id>`. Configuration errors exit with 2.
 
+`--configure-only` runs the configure step of a CMake build the way
+`jh-vscode build` starts it, then stops. A cache of another source tree or
+generator loses `CMakeCache.txt` and `CMakeFiles/` first, with a warning;
+outside the project, the checkout's `.build` and a Windows `buildRoot` the
+command refuses to touch it. CMake runs in the working directory with the
+environment the plan adds and writes to stdout, or to stderr with `--json`.
+`--verbose`, or `jaszczurhal.verbose` in the settings, echoes the command
+first. After a successful configure the sorted cache keys of the project go
+to `.jh-vscode-cache-keys.json` in the CMake tree, in the format jh-vscode
+writes, so the next configure forgets the keys the project dropped. ESP-IDF
+projects configure inside `jh esp build` and exit with 2 here. A failed step
+exits with 5, the build failure code of jh-vscode.
+
 ## Memory checks
 
 The `memcheck` gate runs the native tests under Valgrind and the CLI suites

@@ -1,5 +1,5 @@
-/* jh compile: the model and plan of a VS Code firmware build (jh_compile.h).
- * C11. */
+/* jh compile: the model and plan of a VS Code firmware build and its
+ * configure step (jh_compile.h). C11. */
 #if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -77,27 +77,18 @@ static const char *jh_executable(jh_cli_t *ctx, const char *root) {
   return self_path(ctx);
 }
 
-static void print_line(jh_cli_t *ctx, jb_string_t *out, hal_status_t *status,
-                       jb_json_tree_view_t argv) {
-  if (argv.tree == NULL)
-    return;
-  jh_put(out, status, "+");
-  for (size_t i = 0; i < jh_json_count(argv); ++i) {
-    jb_json_span_t text = {0};
-    (void)jh_json_string(jh_json_item(argv, i), &text);
-    jh_put(out, status, " ");
-    jh_put_span(out, status, text);
-  }
-  jh_put(out, status, "\n");
-  (void)ctx;
-}
-
 int jh_cli_compile(jh_cli_t *ctx) {
   const jh_arguments_t *a = &ctx->args;
+  const bool dry_run = a->present[opt_dry_run];
+  const bool configure = a->present[opt_configure_only];
   if (!jh_cli_value(ctx, opt_root, "compile requires --root") ||
       !jh_cli_value(ctx, opt_project, "compile requires --project") ||
-      !jh_cli_require(ctx, a->present[opt_dry_run] ? HAL_OK : HAL_EUNSUPPORTED,
-                      2, "compile runs with --dry-run only"))
+      !jh_cli_require(ctx, dry_run || configure ? HAL_OK : HAL_EUNSUPPORTED, 2,
+                      "compile runs with --dry-run or --configure-only") ||
+      !jh_cli_require(
+          ctx, dry_run && configure ? HAL_EINVAL : HAL_OK, 2,
+          "compile takes --dry-run or --configure-only, not both") ||
+      (configure && !jh_cli_install_cancellation(ctx)))
     return 0;
   const char *root = jh_cli_checkout(ctx);
   if (ctx->failure.status != HAL_OK)
@@ -116,11 +107,16 @@ int jh_cli_compile(jh_cli_t *ctx) {
   options.jh = jh_executable(ctx, root);
   options.verbose = a->present[opt_verbose];
   options.debug = a->present[opt_debug];
+  /* With --json stdout carries the result, so CMake writes to stderr. */
+  options.log = ctx->json ? stderr : stdout;
+  options.canceled = configure ? jh_cli_canceled : NULL;
   if (ctx->failure.status != HAL_OK)
     return 0;
   jh_compile_t compile;
   jh_compile_init(&compile);
-  if (!jh_cli_ok(ctx, jh_compile_plan(&options, &compile, &ctx->failure)))
+  if (!jh_cli_ok(ctx, jh_compile_plan(&options, &compile, &ctx->failure)) ||
+      (configure && !jh_cli_ok(ctx, jh_compile_configure(&options, &compile,
+                                                         &ctx->failure))))
     goto done;
   jb_json_tree_view_t config = {0}, plan = {0};
   (void)jb_json_tree_root(compile.config, &config);
@@ -135,7 +131,7 @@ int jh_cli_compile(jh_cli_t *ctx) {
     jh_result_tree(ctx, "config", config);
     jh_result_tree(ctx, "plan", plan);
     (void)jh_result_finish(ctx);
-  } else {
+  } else if (dry_run) {
     jb_string_t text = {0};
     hal_status_t status = jb_string_init(&text, jb_heap_allocator());
     static const char *const steps[] = {"configure", "build", "artifacts"};
@@ -145,7 +141,7 @@ int jh_cli_compile(jh_cli_t *ctx) {
           jh_json_count(argv) != 0 &&
           jh_json_type(jh_json_item(argv, 0)) == JB_JSON_STRING &&
           !(i == 2 && jh_json_field(plan, "configure").tree != NULL))
-        print_line(ctx, &text, &status, argv);
+        status = jh_compile_command_line(argv, &text);
     }
     if (jh_cli_ok(ctx, status))
       (void)jh_cli_stdout(ctx, jh_string_span(&text));

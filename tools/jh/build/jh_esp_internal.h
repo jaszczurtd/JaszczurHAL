@@ -153,12 +153,15 @@ const char *esp_find_program(jh_esp_t *e, const jb_vector_t *environment,
                              const char *name);
 const char *esp_host_python(jh_esp_t *e);
 
-/* Child processes through jb_process_run. */
+/* Child processes through jb_process_run. When both streams reach one
+ * destination (MERGE, or FORWARD with the log stream on stderr), whole lines
+ * pass: a partial line waits for its newline, up to 64 KiB, or for the end of
+ * the child. The order between the two streams stays approximate. */
 enum {
   ESP_RUN_FORWARD = 0, /* stdout to the log stream, stderr to stderr. */
   ESP_RUN_CAPTURE = 1, /* stdout to out, stderr to err (separately). */
-  ESP_RUN_MERGE = 2,   /* Both into out, as stderr=STDOUT; echoed when
-                          echo is set. */
+  ESP_RUN_MERGE = 2,   /* Both into out (unless NULL), as stderr=STDOUT;
+                          echoed to the log stream when echo is set. */
 };
 typedef struct {
   const char *program;

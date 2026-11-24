@@ -941,6 +941,19 @@ z `host-environment.json` każdy wariant ma własne drzewo CMake,
 `<buildRoot>/<klucz>/cmake/variants/<id>`. Błędy konfiguracji kończą się
 kodem 2.
 
+`--configure-only` uruchamia configure buildu CMake tak, jak zaczyna go
+`jh-vscode build`, i na tym kończy. Cache innego katalogu źródeł albo
+generatora najpierw traci `CMakeCache.txt` i `CMakeFiles/`, z ostrzeżeniem;
+poza projektem, `.build` checkoutu i windowsowym `buildRoot` polecenie
+odmawia jego wyczyszczenia. CMake działa w katalogu roboczym ze zmiennymi
+środowiska, które dokłada plan, i pisze na stdout, a z `--json` na stderr.
+`--verbose` albo `jaszczurhal.verbose` w ustawieniach najpierw wypisuje
+polecenie. Po udanym configure posortowane klucze cache projektu trafiają do
+`.jh-vscode-cache-keys.json` w drzewie CMake, w formacie jh-vscode, więc
+następny configure zapomina klucze, z których projekt zrezygnował. Projekty
+ESP-IDF konfigurują się wewnątrz `jh esp build` i kończą się tu kodem 2.
+Nieudany krok kończy się kodem 5, kodem błędu builda w jh-vscode.
+
 ## Kontrola pamięci
 
 Etap `memcheck` uruchamia testy natywne pod Valgrindem, a zestawy testów CLI

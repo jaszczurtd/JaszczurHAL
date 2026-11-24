@@ -685,9 +685,15 @@ const char *esp_host_python(jh_esp_t *e) {
 
 /* ---- Processes ---- */
 
+/* A partial line longer than this passes without waiting for its newline. */
+#define PENDING_LINE_LIMIT (64u * 1024u)
+
 typedef struct {
   jh_esp_t *e;
   const esp_process_t *process;
+  /* The partial last lines of stdout and stderr while both streams reach one
+   * destination. */
+  jb_string_t pending[2];
 } sink_t;
 
 static hal_status_t append_limited(jb_string_t *out, const unsigned char *data,
@@ -704,9 +710,14 @@ static hal_status_t write_stream(FILE *file, const unsigned char *data,
   return HAL_OK;
 }
 
-static hal_status_t process_output(void *context, jb_process_stream_t stream,
-                                   const unsigned char *data, size_t length) {
-  const sink_t *sink = context;
+/* Both streams of the child reach one destination. */
+static bool shared_destination(const sink_t *sink) {
+  return sink->process->mode == ESP_RUN_MERGE ||
+         (sink->process->mode == ESP_RUN_FORWARD && sink->e->log == stderr);
+}
+
+static hal_status_t deliver(const sink_t *sink, jb_process_stream_t stream,
+                            const unsigned char *data, size_t length) {
   const esp_process_t *p = sink->process;
   if (p->mode == ESP_RUN_FORWARD)
     return write_stream(stream == JB_PROCESS_STDERR ? stderr : sink->e->log,
@@ -714,9 +725,35 @@ static hal_status_t process_output(void *context, jb_process_stream_t stream,
   if (p->mode == ESP_RUN_CAPTURE)
     return append_limited(stream == JB_PROCESS_STDERR ? p->err : p->out, data,
                           length);
-  hal_status_t status = append_limited(p->out, data, length);
+  hal_status_t status =
+      p->out != NULL ? append_limited(p->out, data, length) : HAL_OK;
   if (status == HAL_OK && p->echo)
     status = write_stream(sink->e->log, data, length);
+  return status;
+}
+
+/* The two pipes arrive separately, so a shared destination receives whole
+ * lines: a message the child writes in pieces is not split by the other
+ * stream, as with one pipe (stderr=STDOUT). */
+static hal_status_t process_output(void *context, jb_process_stream_t stream,
+                                   const unsigned char *data, size_t length) {
+  sink_t *sink = context;
+  if (!shared_destination(sink))
+    return deliver(sink, stream, data, length);
+  jb_string_t *pending = &sink->pending[stream == JB_PROCESS_STDERR ? 1 : 0];
+  hal_status_t status = jb_string_append(pending, (const char *)data, length);
+  if (status != HAL_OK)
+    return status;
+  size_t end = jb_string_size(pending);
+  while (end != 0 && jb_string_data(pending)[end - 1] != '\n')
+    --end;
+  if (end == 0 && jb_string_size(pending) >= PENDING_LINE_LIMIT)
+    end = jb_string_size(pending);
+  if (end != 0)
+    status = deliver(sink, stream,
+                     (const unsigned char *)jb_string_data(pending), end);
+  if (status == HAL_OK && end != 0)
+    status = jb_string_erase(pending, 0, end);
   return status;
 }
 
@@ -758,7 +795,9 @@ hal_status_t esp_process(jh_esp_t *e, const esp_process_t *p, int *exit_code) {
     jb_vector_destroy(&arguments);
     return e->failure->status;
   }
-  sink_t sink = {e, p};
+  sink_t sink = {e, p, {{0}, {0}}};
+  for (size_t i = 0; i < COUNTOF(sink.pending); ++i)
+    (void)jb_string_init(&sink.pending[i], jb_heap_allocator());
   jb_process_options_t options = {0};
   options.executable = p->program;
   options.arguments = jb_vector_const_data(&arguments);
@@ -772,6 +811,14 @@ hal_status_t esp_process(jh_esp_t *e, const esp_process_t *p, int *exit_code) {
   options.context = &sink;
   jb_process_result_t result = {0};
   status = jb_process_run(&options, &result);
+  /* A finished child also delivers a last line without its newline. */
+  for (size_t i = 0; i < COUNTOF(sink.pending); ++i) {
+    if (status == HAL_OK && jb_string_size(&sink.pending[i]) != 0)
+      status = deliver(&sink, i == 0 ? JB_PROCESS_STDOUT : JB_PROCESS_STDERR,
+                       (const unsigned char *)jb_string_data(&sink.pending[i]),
+                       jb_string_size(&sink.pending[i]));
+    jb_string_destroy(&sink.pending[i]);
+  }
   jb_vector_destroy(&environment);
   jb_vector_destroy(&arguments);
   if (status == HAL_ECANCELED)

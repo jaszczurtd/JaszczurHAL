@@ -84,6 +84,7 @@ typedef enum {
   opt_link_library,
   opt_idf_dir,
   opt_dry_run,
+  opt_configure_only,
   opt_debug,
   opt_python,
   opt_bootsel_volume,

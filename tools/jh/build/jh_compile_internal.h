@@ -92,5 +92,7 @@ const char *cc_json_dumps(jh_compile_ctx_t *c, jb_json_tree_view_t value);
 /* ---- Plan (jh_compile_plan.c) ---- */
 bool cc_plan(jh_compile_ctx_t *c, jb_json_tree_t *config,
              jb_json_tree_t **plan);
+/* os.environ.get(name): the value of a variable of this process, or NULL. */
+const char *cc_environment(jh_compile_ctx_t *c, const char *name);
 
 #endif

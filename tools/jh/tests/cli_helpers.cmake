@@ -12,15 +12,24 @@ function(jh_test_tool executable)
 endfunction()
 jh_test_tool("${JH}")
 
-# Run jh with ARGN, require exit code expected and keep stdout and stderr.
-function(invoke expected)
+# Run jh with ARGN and keep its exit code, stdout and stderr in code, stdout
+# and stderr, without checking them (a check may first remove its fixture).
+function(invoke_unchecked)
   execute_process(COMMAND "${JH}" ${ARGN} WORKING_DIRECTORY "${JH_WORK}/cwd"
-    RESULT_VARIABLE code OUTPUT_VARIABLE out ERROR_VARIABLE err ENCODING UTF-8)
-  if(NOT code STREQUAL "${expected}")
-    message(FATAL_ERROR "jh ${ARGN}: expected exit ${expected}, got ${code}\n${out}\n${err}")
-  endif()
+    RESULT_VARIABLE result OUTPUT_VARIABLE out ERROR_VARIABLE err ENCODING UTF-8)
+  set(code "${result}" PARENT_SCOPE)
   set(stdout "${out}" PARENT_SCOPE)
   set(stderr "${err}" PARENT_SCOPE)
+endfunction()
+
+# Run jh with ARGN, require exit code expected and keep stdout and stderr.
+function(invoke expected)
+  invoke_unchecked(${ARGN})
+  if(NOT code STREQUAL "${expected}")
+    message(FATAL_ERROR "jh ${ARGN}: expected exit ${expected}, got ${code}\n${stdout}\n${stderr}")
+  endif()
+  set(stdout "${stdout}" PARENT_SCOPE)
+  set(stderr "${stderr}" PARENT_SCOPE)
 endfunction()
 
 # Require one versioned JSON result on stdout with this status.

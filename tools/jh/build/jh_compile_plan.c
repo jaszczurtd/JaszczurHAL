@@ -57,7 +57,7 @@ static bool windows_host(void) {
 #endif
 }
 
-static const char *environment_value(jh_compile_ctx_t *c, const char *name) {
+const char *cc_environment(jh_compile_ctx_t *c, const char *name) {
   jb_string_t value = {0};
   bool found = false;
   const char *result = NULL;
@@ -76,7 +76,7 @@ static bool load_host(jh_compile_ctx_t *c) {
     c->host = cc_object(c);
     return cc_ok(c);
   }
-  const char *override = environment_value(c, "JH_WINDOWS_HOST_ENVIRONMENT");
+  const char *override = cc_environment(c, "JH_WINDOWS_HOST_ENVIRONMENT");
   const char *path =
       override != NULL && override[0] != '\0'
           ? esp_expand_user(&c->e, override)
@@ -303,6 +303,7 @@ static void reset_decision(jh_compile_ctx_t *c, jb_json_tree_t *plan,
   cc_set_text(c, reset, "requestedSource", requested);
   cc_set_text(c, reset, "cachedGenerator",
               cached_generator != NULL ? cached_generator : "?");
+  cc_set_text(c, reset, "generator", generator);
   jb_json_tree_t *allowed = cc_bool(c, managed_allowed(c, build));
   cc_set(c, reset, "allowed", cc_root(allowed));
   jb_json_tree_destroy(allowed);
@@ -474,7 +475,7 @@ static void cache_args(jh_compile_ctx_t *c, jb_json_tree_view_t config,
 static const char *python_executable(jh_compile_ctx_t *c) {
   const char *name = c->options->python;
   if (name[0] == '\0') {
-    const char *component = environment_value(c, "JH_COMPONENT_PYTHON");
+    const char *component = cc_environment(c, "JH_COMPONENT_PYTHON");
     name = component != NULL && component[0] != '\0' ? component :
 #ifdef _WIN32
                                                      "python";
@@ -512,7 +513,7 @@ static void platform_args(jh_compile_ctx_t *c, jb_json_tree_view_t config,
   static const char *const launchers[] = {"CMAKE_C_COMPILER_LAUNCHER",
                                           "CMAKE_CXX_COMPILER_LAUNCHER"};
   for (size_t i = 0; i < 2 && cc_ok(c); ++i) {
-    const char *value = environment_value(c, launchers[i]);
+    const char *value = cc_environment(c, launchers[i]);
     if (value != NULL)
       cc_append_text(c, argv,
                      CC_TEXT(c, jh_span("-D"), jh_span(launchers[i]),
@@ -520,7 +521,7 @@ static void platform_args(jh_compile_ctx_t *c, jb_json_tree_view_t config,
   }
   const char *target = config_text(c, config, "target");
   const char *ninja = host_tool(c, "ninja");
-  const char *picotool = environment_value(c, "JH_PICOTOOL_EXECUTABLE");
+  const char *picotool = cc_environment(c, "JH_PICOTOOL_EXECUTABLE");
   if (picotool == NULL || picotool[0] == '\0')
     picotool = host_tool(c, "picotool");
   if (picotool == NULL && native_rp(target))
@@ -573,7 +574,7 @@ static void environment(jh_compile_ctx_t *c, jb_json_tree_t *plan,
               &c->e, &directories,
               jh_span(cc_purepath(c, esp_parent(&c->e, CC_TEXT(c, text)))));
       }
-      const char *path = environment_value(c, "PATH");
+      const char *path = cc_environment(c, "PATH");
 #ifdef _WIN32
       const char *separator = ";";
 #else
@@ -816,6 +817,10 @@ bool cc_plan(jh_compile_ctx_t *c, jb_json_tree_t *config,
   cc_set(c, plan, "debug", cc_root(debug));
   jb_json_tree_destroy(debug);
   cc_set(c, plan, "toolchain", cc_get(root, "toolchain"));
+  /* as_bool(config.get("verbose")): the commands are echoed before they run. */
+  jb_json_tree_t *verbose = cc_bool(c, as_bool(c, cc_get(root, "verbose")));
+  cc_set(c, plan, "verbose", cc_root(verbose));
+  jb_json_tree_destroy(verbose);
   if (toolchain != NULL && strcmp(toolchain, "cmake") == 0)
     (void)cmake_plan(c, root, plan);
   else if (toolchain != NULL && strcmp(toolchain, "esp-idf") == 0)
