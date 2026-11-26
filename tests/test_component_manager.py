@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import contextlib
 import hashlib
+import http.server
 import importlib.util
 import io
 import json
@@ -18,6 +19,8 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import threading
+from typing import Iterator
 import unittest
 from unittest import mock
 import zipfile
@@ -55,6 +58,45 @@ def write_supplied_pins(root: Path, **pins: str) -> Path:
     for keyword, text in pins.items():
         (supplied / keyword.replace("_conf", ".conf")).write_text(text, encoding="utf-8")
     return third_party
+
+
+@contextlib.contextmanager
+def scripted_http_server(body: bytes, replies: list[str]) -> Iterator[tuple[str, list[str]]]:
+    """Serve BODY over loopback HTTP and yield its URL and the replies sent.
+
+    Requests get REPLIES in order: "ok", "short" (the full Content-Length,
+    half of BODY, then a closed connection) or an HTTP status such as "503".
+    A request beyond REPLIES gets 404.
+    """
+    served: list[str] = []
+
+    class Handler(http.server.BaseHTTPRequestHandler):
+        def do_GET(self) -> None:
+            reply = replies[len(served)] if len(served) < len(replies) else "404"
+            served.append(reply)
+            if reply.isdigit():
+                self.send_error(int(reply))
+                return
+            self.send_response(200)
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body if reply == "ok" else body[: len(body) // 2])
+            self.close_connection = True
+
+        def log_message(self, *_arguments: object) -> None:
+            pass
+
+    server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(
+        target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True
+    )
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}/tool.tar.gz", served
+    finally:
+        server.shutdown()
+        server.server_close()
+        thread.join()
 
 
 def git(directory: Path, *arguments: str) -> str:
@@ -434,6 +476,85 @@ class ArchiveManagerTests(unittest.TestCase):
             self.assertIn("=https", observed)
             self.assertEqual("3", observed[observed.index("--retry") + 1])
             self.assertEqual("5", observed[observed.index("--retry-delay") + 1])
+            self.assertEqual("60", observed[observed.index("--speed-time") + 1])
+
+    def test_windows_download_retries_broken_transfers_curl_does_not(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="jh-component-curl-retry-") as text:
+            temporary = Path(text)
+            system_root = temporary / "Windows"
+            curl = system_root / "System32/curl.exe"
+            curl.parent.mkdir(parents=True)
+            curl.write_bytes(b"fixture")
+            destination = temporary / "download.zip"
+            payload = b"authenticated archive"
+            # curl exit 18: partial file; 22: HTTP error left after curl's own retries.
+            for exits, completes in (([18, 0], True), ([22], False)):
+                with self.subTest(exits=exits):
+                    remaining = list(exits)
+
+                    def run(
+                        command: tuple[str, ...], **_kwargs: object
+                    ) -> subprocess.CompletedProcess[str]:
+                        code = remaining.pop(0)
+                        if code == 0:
+                            Path(command[command.index("--output") + 1]).write_bytes(payload)
+                        return subprocess.CompletedProcess(command, code, "", f"curl: ({code})")
+
+                    with (
+                        mock.patch.object(manager.sys, "platform", "win32"),
+                        mock.patch.dict(manager.os.environ, {"SystemRoot": str(system_root)}),
+                        mock.patch.object(manager.subprocess, "run", side_effect=run),
+                        mock.patch.object(manager, "DOWNLOAD_RETRY_DELAY_SECONDS", 0),
+                        contextlib.redirect_stdout(io.StringIO()),
+                    ):
+                        if completes:
+                            self.assertEqual(
+                                hashlib.sha256(payload).hexdigest(),
+                                manager._download("https://example.invalid/tool.zip", destination),
+                            )
+                        else:
+                            with self.assertRaises(manager.ComponentError):
+                                manager._download("https://example.invalid/tool.zip", destination)
+                    self.assertEqual([], remaining)
+
+    def test_broken_http_transfers_are_retried_and_never_published(self) -> None:
+        # CI 2026-11-26: a transfer cut short ended without an error and
+        # reached the SHA-256 check as a different archive.
+        with tempfile.TemporaryDirectory(prefix="jh-component-retry-") as text:
+            temporary = Path(text)
+            archive = temporary / "fixture.tar.gz"
+            with tarfile.open(archive, "w:gz") as package:
+                data = bytes(range(256)) * 64
+                member = tarfile.TarInfo("package/payload.bin")
+                member.size = len(data)
+                package.addfile(member, io.BytesIO(data))
+            body = archive.read_bytes()
+            digest = hashlib.sha256(body).hexdigest()
+            cases = (
+                (["short", "ok"], True),
+                (["503", "ok"], True),
+                (["404"], False),
+                (["short"] * (manager.DOWNLOAD_RETRIES + 1), False),
+            )
+            for index, (replies, installs) in enumerate(cases):
+                with self.subTest(replies=replies):
+                    destination = temporary / f"install-{index}"
+                    with (
+                        scripted_http_server(body, replies) as (url, served),
+                        mock.patch.object(manager, "DOWNLOAD_RETRY_DELAY_SECONDS", 0),
+                        contextlib.redirect_stdout(io.StringIO()),
+                    ):
+                        if installs:
+                            self.assertTrue(manager.sync_archive(url, digest, destination))
+                        else:
+                            with self.assertRaises(manager.ComponentError):
+                                manager.sync_archive(url, digest, destination)
+                    self.assertEqual(replies, served)
+                    if installs:
+                        self.assertEqual(data, (destination / "package/payload.bin").read_bytes())
+                    else:
+                        self.assertFalse(destination.exists())
+                    self.assertEqual([], list(temporary.glob(f".{destination.name}.*")))
 
     def test_pmd_archive_is_version_checked_and_resolved(self) -> None:
         self.assertIn("pmd", manager.SOURCE_COMPONENT_ORDER)

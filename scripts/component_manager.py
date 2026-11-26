@@ -7,6 +7,7 @@ import argparse
 import ast
 from dataclasses import dataclass
 import hashlib
+import http.client
 import json
 import os
 from pathlib import Path
@@ -15,6 +16,7 @@ import posixpath
 import re
 import shlex
 import shutil
+import socket
 import stat
 import subprocess
 import sys
@@ -22,6 +24,7 @@ import tarfile
 import tempfile
 import time
 from typing import Callable, Iterable, Optional, Sequence
+import urllib.error
 import urllib.request
 import urllib.parse
 import uuid
@@ -769,6 +772,27 @@ def _sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+# Transient download failures get one policy on every host: up to
+# DOWNLOAD_RETRIES retries, DOWNLOAD_RETRY_DELAY_SECONDS apart, each from an
+# empty file, so a mirror that is busy or drops a connection for a moment does
+# not end the setup. A download that makes no progress for
+# DOWNLOAD_STALL_SECONDS fails as a timeout. The SHA-256 check of the result
+# stays as it is.
+DOWNLOAD_RETRIES = 3
+DOWNLOAD_RETRY_DELAY_SECONDS = 5
+DOWNLOAD_STALL_SECONDS = 60
+_TRANSIENT_HTTP_STATUS = frozenset((408, 429, 500, 502, 503, 504))
+# curl --retry covers timeouts, name resolution and the HTTP statuses above.
+# A failed connection and a transfer that breaks after it started are left to
+# the caller: could not connect (7), HTTP/2 framing (16), partial file (18),
+# empty reply (52), send (55) and receive (56) errors, HTTP/2 stream reset (92).
+_CURL_TRANSIENT_EXIT_CODES = frozenset((7, 16, 18, 52, 55, 56, 92))
+
+
+class _TransientDownloadError(Exception):
+    """A download attempt that a later attempt may complete."""
+
+
 def _download_windows_https(url: str, destination: Path) -> str:
     system_root = os.environ.get("SystemRoot")
     curl = Path(system_root) / "System32/curl.exe" if system_root else None
@@ -776,47 +800,98 @@ def _download_windows_https(url: str, destination: Path) -> str:
         raise ComponentError(
             "Windows system curl.exe is required for authenticated HTTPS downloads."
         )
-    # Transient failures (timeouts, HTTP 408, 429, 500, 502, 503, 504) are retried,
-    # so a mirror that is busy for a moment does not end the setup; the SHA-256
-    # check of the result stays as it is.
+    stall = str(DOWNLOAD_STALL_SECONDS)
     command = (
         str(curl), "--fail", "--location", "--silent", "--show-error",
         "--proto", "=https", "--proto-redir", "=https", "--tlsv1.2",
-        "--retry", "3", "--retry-delay", "5",
+        "--retry", str(DOWNLOAD_RETRIES),
+        "--retry-delay", str(DOWNLOAD_RETRY_DELAY_SECONDS),
+        "--connect-timeout", stall, "--speed-limit", "1", "--speed-time", stall,
         "--output", str(destination), url,
     )
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
-        detail = (result.stderr or result.stdout).strip()
-        raise ComponentError(
-            f"Windows HTTPS download failed for {url}: {detail or result.returncode}"
-        )
+        detail = (result.stderr or result.stdout).strip() or f"curl exit {result.returncode}"
+        if result.returncode in _CURL_TRANSIENT_EXIT_CODES:
+            raise _TransientDownloadError(detail)
+        raise ComponentError(f"Windows HTTPS download failed for {url}: {detail}")
     if not destination.is_file():
         raise ComponentError(f"Windows HTTPS download produced no file for {url}.")
     return _sha256_file(destination)
 
 
-def _download(url: str, destination: Path) -> str:
-    if (
-        sys.platform == "win32"
-        and urllib.parse.urlparse(url).scheme.lower() == "https"
-    ):
-        return _download_windows_https(url, destination)
+def _transient_url_error(error: BaseException) -> bool:
+    if isinstance(error, urllib.error.HTTPError):
+        return error.code in _TRANSIENT_HTTP_STATUS
+    if isinstance(error, urllib.error.URLError):
+        reason = error.reason
+        return isinstance(reason, BaseException) and _transient_url_error(reason)
+    # socket.timeout is TimeoutError only from Python 3.10 on.
+    return isinstance(
+        error,
+        (
+            ConnectionError, TimeoutError, socket.timeout, socket.gaierror,
+            http.client.HTTPException,
+        ),
+    )
 
+
+def _download_url(url: str, destination: Path) -> str:
     digest = hashlib.sha256()
+    announced: Optional[str] = None
+    received = 0
     try:
-        with urllib.request.urlopen(url) as response, destination.open("wb") as output:
+        response = urllib.request.urlopen(url, timeout=DOWNLOAD_STALL_SECONDS)
+        with response, destination.open("wb") as output:
+            announced = response.headers.get("Content-Length")
             while True:
                 block = response.read(1024 * 1024)
                 if not block:
                     break
                 output.write(block)
                 digest.update(block)
+                received += len(block)
     except Exception as error:
+        if _transient_url_error(error):
+            raise _TransientDownloadError(str(error)) from error
         raise ComponentError(
             f"Could not download {url}. If offline, pre-populate the destination: {error}"
         ) from error
+    # http.client ends a sized body at a closed connection without an error,
+    # so a transfer cut short would otherwise reach the SHA-256 check as a
+    # different archive.
+    if announced is not None and announced.strip().isdecimal() and received != int(announced):
+        raise _TransientDownloadError(
+            f"connection closed after {received} of {announced.strip()} bytes"
+        )
     return digest.hexdigest()
+
+
+def _download(url: str, destination: Path) -> str:
+    """Download URL to DESTINATION and return the SHA-256 of its bytes."""
+    if (
+        sys.platform == "win32"
+        and urllib.parse.urlparse(url).scheme.lower() == "https"
+    ):
+        attempt_download = _download_windows_https
+    else:
+        attempt_download = _download_url
+    attempt = 1
+    while True:
+        try:
+            return attempt_download(url, destination)
+        except _TransientDownloadError as error:
+            if attempt > DOWNLOAD_RETRIES:
+                raise ComponentError(
+                    f"Could not download {url} in {attempt} attempts: {error}. "
+                    "If offline, pre-populate the destination."
+                ) from error
+            info(
+                f"Download of {url} failed ({error}); retry {attempt} of "
+                f"{DOWNLOAD_RETRIES} in {DOWNLOAD_RETRY_DELAY_SECONDS} s."
+            )
+        time.sleep(DOWNLOAD_RETRY_DELAY_SECONDS)
+        attempt += 1
 
 
 def sync_archive(
@@ -846,7 +921,8 @@ def sync_archive(
         actual = _download(url, archive)
         if actual.lower() != sha256.lower():
             raise ComponentError(
-                f"Archive checksum mismatch for {url}; expected SHA-256 {sha256}, got {actual}."
+                f"Archive checksum mismatch for {url}; expected SHA-256 {sha256}, "
+                f"got {actual} ({archive.stat().st_size} bytes)."
             )
         lowered = urllib.parse.urlparse(url).path.lower()
         if lowered.endswith(".zip") or lowered.endswith(".nupkg"):

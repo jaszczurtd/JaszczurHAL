@@ -569,6 +569,16 @@ Archive-backed managed directories use an exact SHA-256 pin and a deterministic
 manifest of the extracted files. A missing or modified installation is replaced
 in normal mode and rejected by `--verify-only`.
 
+The manager retries a download after a transient network failure up to three
+times, five seconds apart, and every attempt starts from an empty file.
+Transient failures are a timeout, a failed name lookup, a refused or dropped
+connection, a transfer that ends before its announced `Content-Length`, and
+HTTP 408, 429, 500, 502, 503 or 504. A connection that does not open or
+receives no data for 60 seconds ends as a timeout. Other HTTP errors stop the
+run at once, and so does a complete download whose SHA-256 differs from the
+pin. On Windows the system `curl.exe` fetches HTTPS archives under the same
+rules.
+
 User-provided FreeRTOS, Pico SDK, and picotool paths are treated as externally
 managed. They are verified and are not replaced by their focused helpers.
 

@@ -603,6 +603,16 @@ SHA-256 oraz deterministycznego manifestu wyodrębnionych plików.
 Brakująca lub zmodyfikowana instalacja jest zastępowana w trybie normalnym i
 odrzucana przez `--verify-only`.
 
+Po przejściowym błędzie sieci skrypt ponawia pobieranie najwyżej trzy razy,
+co pięć sekund, a każda próba zaczyna od pustego pliku. Przejściowy błąd to
+timeout, nieudane rozwiązanie nazwy hosta, odrzucone lub zerwane połączenie,
+transfer zakończony przed zapowiedzianym `Content-Length` oraz odpowiedź HTTP
+408, 429, 500, 502, 503 lub 504. Połączenie, które przez 60 sekund się nie
+otworzy albo nie odbierze żadnych danych, kończy się timeoutem. Inne błędy HTTP
+przerywają pracę od razu, podobnie jak kompletne archiwum z innym SHA-256 niż
+w pinie. Na Windows archiwa HTTPS pobiera systemowy `curl.exe` według tych
+samych zasad.
+
 Ścieżki FreeRTOS, Pico SDK i picotool dostarczone przez użytkownika są
 traktowane jako zarządzane zewnętrznie. Są weryfikowane i nie są zastępowane
 przez ich dedykowane skrypty.
