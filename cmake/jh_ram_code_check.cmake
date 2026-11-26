@@ -1,8 +1,8 @@
 # Check a GNU ld map after the link: every .text input section of the
 # HAL_RAM_CODE_SOURCES objects lies outside flash. Run with cmake -P:
 #   -DJH_RAM_CODE_MAP=<map file>
-#   -DJH_RAM_CODE_OBJECTS=<object name ending>|...   ("/a.c.o", "libmain.a(a.c.obj)")
-#   -DJH_RAM_CODE_FLASH=<begin>|<end>|...            (hexadecimal, end exclusive)
+#   -DJH_RAM_CODE_OBJECTS=<object name ending>;...   ("/a.c.o", "libmain.a(a.c.obj)")
+#   -DJH_RAM_CODE_FLASH=<begin>;<end>;...            (hexadecimal, end exclusive)
 cmake_minimum_required(VERSION 3.22)
 
 foreach(_jh_var IN ITEMS JH_RAM_CODE_MAP JH_RAM_CODE_OBJECTS JH_RAM_CODE_FLASH)
@@ -16,8 +16,8 @@ endif()
 
 file(READ "${JH_RAM_CODE_MAP}" _jh_map)
 string(REPLACE "\r" "" _jh_map "${_jh_map}")
-string(REPLACE "|" ";" _jh_objects "${JH_RAM_CODE_OBJECTS}")
-string(REPLACE "|" ";" _jh_flash "${JH_RAM_CODE_FLASH}")
+set(_jh_objects "${JH_RAM_CODE_OBJECTS}")
+set(_jh_flash "${JH_RAM_CODE_FLASH}")
 list(LENGTH _jh_flash _jh_flash_count)
 math(EXPR _jh_odd "${_jh_flash_count} % 2")
 if(_jh_flash_count EQUAL 0 OR _jh_odd EQUAL 1)

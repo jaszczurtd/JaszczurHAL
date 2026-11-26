@@ -249,7 +249,8 @@ static hal_status_t ensure(jh_esp_t *e, const char *name, bool verify_only,
   if (esp_ok(e)) {
     const esp_process_t process = {
         program, &arguments, NULL, environment, ESP_RUN_CAPTURE,
-        false,   false,      0,    out,         err};
+        false,   false,      0,    out,         err,
+        0};
     status = esp_process(e, &process, code);
   }
   jh_list_destroy(&arguments);
@@ -431,8 +432,8 @@ static bool export_environment(jh_esp_t *e) {
   if (!esp_ok(e))
     goto done;
   const esp_process_t process = {
-      python, &arguments, NULL, &export_env, ESP_RUN_CAPTURE,
-      false,  true,       0,    &out,        &err};
+      python, &arguments, NULL, &export_env, ESP_RUN_CAPTURE, false, true, 0,
+      &out,   &err,       0};
   int code = -1;
   const hal_status_t status = esp_process(e, &process, &code);
   if (!esp_ok(e))
@@ -631,9 +632,17 @@ static bool run_idf(jh_esp_t *e, bool build) {
   int code = -1;
   hal_status_t status = HAL_ENOENT;
   if (program != NULL) {
-    const esp_process_t process = {
-        program, &arguments, e->repo_root, &environment, ESP_RUN_MERGE, true,
-        true,    0,          &raw,         NULL};
+    const esp_process_t process = {program,
+                                   &arguments,
+                                   e->repo_root,
+                                   &environment,
+                                   ESP_RUN_MERGE,
+                                   true,
+                                   true,
+                                   0,
+                                   &raw,
+                                   NULL,
+                                   0};
     status = esp_process(e, &process, &code);
   }
   if (!esp_ok(e))

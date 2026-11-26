@@ -41,12 +41,24 @@ bool jh_cli_install_cancellation(jh_cli_t *ctx) {
       SetConsoleCtrlHandler(cancel_console, TRUE) != FALSE ? HAL_OK : HAL_EIO,
       3, "cannot install console cancellation");
 #else
+  /* Child processes run in their own process group, so a terminal Ctrl+C or
+   * the SIGHUP of a closed VS Code task reaches only jh; it stops them by
+   * cancellation. A SIGHUP or SIGTERM the caller ignores stays ignored, as
+   * under nohup. */
+  static const int signals[] = {SIGINT, SIGTERM, SIGHUP};
   struct sigaction action = {0};
   action.sa_handler = cancel_signal;
   (void)sigemptyset(&action.sa_mask);
-  return jh_cli_require(
-      ctx, sigaction(SIGINT, &action, NULL) == 0 ? HAL_OK : HAL_EIO, 3,
-      "cannot install SIGINT cancellation");
+  hal_status_t status = HAL_OK;
+  for (size_t i = 0; i < COUNTOF(signals) && status == HAL_OK; ++i) {
+    struct sigaction previous;
+    if (signals[i] != SIGINT && sigaction(signals[i], NULL, &previous) == 0 &&
+        previous.sa_handler == SIG_IGN)
+      continue;
+    if (sigaction(signals[i], &action, NULL) != 0)
+      status = HAL_EIO;
+  }
+  return jh_cli_require(ctx, status, 3, "cannot install signal cancellation");
 #endif
 }
 

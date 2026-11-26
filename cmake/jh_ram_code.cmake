@@ -222,8 +222,12 @@ function(jh_ram_code_add_map_check)
     if(NOT EXISTS "${_jh_script}" OR NOT _JH_RC_OBJECTS OR NOT _JH_RC_FLASH)
         message(FATAL_ERROR "[JH-RAM-CODE] map check misconfigured for ${_JH_RC_TARGET}")
     endif()
-    list(JOIN _JH_RC_OBJECTS "|" _jh_objects)
-    list(JOIN _JH_RC_FLASH "|" _jh_flash)
+    # The lists reach cmake -P as lists. On Windows a post-build step runs
+    # in a cmd.exe line nested in the link's own cmd.exe /C "...", where the
+    # quotes of an argument end the outer ones: a cmd.exe operator such as
+    # | in an argument splits the line there, a semicolon does not.
+    list(JOIN _JH_RC_OBJECTS "$<SEMICOLON>" _jh_objects)
+    list(JOIN _JH_RC_FLASH "$<SEMICOLON>" _jh_flash)
     add_custom_command(TARGET "${_JH_RC_TARGET}" POST_BUILD
         COMMAND "${CMAKE_COMMAND}"
             "-DJH_RAM_CODE_MAP=${_JH_RC_MAP}"

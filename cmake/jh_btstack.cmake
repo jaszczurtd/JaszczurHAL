@@ -245,19 +245,26 @@ function(_jh_target_enable_btstack TARGET_NAME)
     if(_jh_gatt_source)
         find_package(Python3 COMPONENTS Interpreter REQUIRED)
         set(_jh_generated_gatt "${_jh_generated_dir}/${_jh_gatt_header}")
+        # Every configure generates the header again; replace it only when
+        # the text changes, or each build recompiles and relinks the backend.
+        set(_jh_generated_gatt_new "${_jh_generated_gatt}.new")
         execute_process(
             COMMAND "${Python3_EXECUTABLE}"
                 "${_jh_btstack_root}/tool/compile_gatt.py"
                 "${_jh_gatt_source}"
-                "${_jh_generated_gatt}"
+                "${_jh_generated_gatt_new}"
             RESULT_VARIABLE _jh_gatt_result
             OUTPUT_VARIABLE _jh_gatt_stdout
             ERROR_VARIABLE _jh_gatt_stderr)
         if(NOT _jh_gatt_result EQUAL 0)
+            file(REMOVE "${_jh_generated_gatt_new}")
             message(FATAL_ERROR
                 "BTstack GATT generation failed (${_jh_gatt_result}):\n"
                 "${_jh_gatt_stdout}${_jh_gatt_stderr}")
         endif()
+        file(COPY_FILE "${_jh_generated_gatt_new}" "${_jh_generated_gatt}"
+            ONLY_IF_DIFFERENT)
+        file(REMOVE "${_jh_generated_gatt_new}")
     endif()
 
     target_sources(${TARGET_NAME} PRIVATE ${_jh_btstack_sources})

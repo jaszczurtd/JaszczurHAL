@@ -9,7 +9,10 @@ cmake_minimum_required(VERSION 3.22)
 # test's generator on a source tree without languages: environment and
 # arguments of the configure, whole lines of its interleaved output, the key
 # record, forgotten keys, the reset of a stale cache and the failures of the
-# step.
+# step. A build then runs the fixture's firmware target: publication from
+# the CMake tree also after a build without work, invalidated artifacts and
+# the linker diagnostics of a failed build, the build lock between two runs,
+# and the preflight that stops an STM32G474 network build before CMake.
 if(NOT EXISTS "${JH}" OR NOT IS_DIRECTORY "${JH_HAL_SOURCE}/boards" OR
    NOT JH_GENERATOR)
   message(FATAL_ERROR "jh_compile needs JH, JH_HAL_SOURCE and JH_GENERATOR")
@@ -32,6 +35,8 @@ unset(ENV{JH_EXECUTABLE})
 unset(ENV{JH_EXECUTABLE_ROOT})
 set(ENV{NO_COLOR} 1)
 unset(ENV{FORCE_COLOR})
+# The fixtures build no ELF objdump could read.
+set(ENV{JH_VSCODE_MEMORY_OVERVIEW} 0)
 
 # A Python executable reached through a link resolves to its target.
 file(MAKE_DIRECTORY "${work}/bin")
@@ -288,8 +293,6 @@ unset(ENV{JH_TEST_WINDOWS_HOST})
 set(ENV{JH_WINDOWS_HOST_ENVIRONMENT} "${work}/no-host-environment.json")
 
 # --- Configuration errors ---
-invoke(2 ${base_args} --json)
-text_at("compile runs with --dry-run or --configure-only" "without a mode" message)
 invoke(2 ${base_args} --dry-run --configure-only --json)
 text_at("compile takes --dry-run or --configure-only, not both" "both modes" message)
 invoke(2 ${base_args} --board nucleo-g474re --dry-run --json)
@@ -385,7 +388,8 @@ set(expected esp build --root "${root}" --project "${example}" --target esp32s3 
 if(NOT esp STREQUAL expected)
   message(FATAL_ERROR "jh esp build: ${esp}\nexpected: ${expected}")
 endif()
-invoke(2 compile --root "${root}" --project "${example}" --assembly esp32s3-zero --debug --dry-run
+# EXIT_UNSUPPORTED of jh-vscode, which its adapter passes on.
+invoke(8 compile --root "${root}" --project "${example}" --assembly esp32s3-zero --debug --dry-run
   --json)
 text_at("ESP-IDF debug builds are not implemented by jh-vscode" "ESP debug" message)
 invoke(2 compile --root "${root}" --project "${example}" --assembly esp32s3-zero --configure-only
@@ -413,6 +417,32 @@ file(WRITE "${CMAKE_BINARY_DIR}/seen.txt"
   "JH_EXECUTABLE=$ENV{JH_EXECUTABLE}\nJH_EXECUTABLE_ROOT=$ENV{JH_EXECUTABLE_ROOT}\n"
   "Python3_EXECUTABLE=${Python3_EXECUTABLE}\nFLAG_ON=${FLAG_ON}\nSTALE_KEY=${STALE_KEY}\n")
 message(STATUS "fixture configured")
+# The firmware target writes its artifacts once; the map as the ARM linker
+# names it.
+set(outputs firmware.elf firmware.bin firmware.hex firmware.uf2 firmware.elf.map)
+add_custom_command(OUTPUT ${outputs}
+  COMMAND "${CMAKE_COMMAND}" "-DOUT=${CMAKE_BINARY_DIR}"
+    -P "${CMAKE_CURRENT_LIST_DIR}/firmware.cmake"
+  VERBATIM)
+add_custom_target(firmware DEPENDS ${outputs})
+]=])
+file(WRITE "${source}/firmware.cmake" [=[
+if(DEFINED ENV{FIXTURE_LOG})
+  file(APPEND "$ENV{FIXTURE_LOG}" "start\n")
+  execute_process(COMMAND "${CMAKE_COMMAND}" -E sleep 2)
+  file(APPEND "$ENV{FIXTURE_LOG}" "end\n")
+endif()
+if(DEFINED ENV{FIXTURE_OVERFLOW})
+  message("ld: section `.text' will not fit in region `FLASH'")
+  message("ld: region `FLASH' overflowed by 1234 bytes")
+  message("ld: section `.data' will not fit in region `RAM'")
+  message("ld: region `FLASH' overflowed by 1234 bytes")
+  message(FATAL_ERROR "fixture link failure")
+endif()
+foreach(name elf bin hex uf2)
+  file(WRITE "${OUT}/firmware.${name}" "fixture ${name}\n")
+endforeach()
+file(WRITE "${OUT}/firmware.elf.map" "fixture map\n")
 ]=])
 set(cfg "${work}/cfg")
 function(write_configure_project executable build_dir)
@@ -545,6 +575,118 @@ contains("${stderr}" "fixture configure failure" "CMake error on stderr")
 file(READ "${cfg_tree}/.jh-vscode-cache-keys.json" kept)
 if(NOT kept STREQUAL "MARKER\n")
   message(FATAL_ERROR "a failed configure wrote the record: ${kept}")
+endif()
+
+# --- Build ---
+set(cfg_out "${cfg}/.build")
+function(require_published what)
+  foreach(name elf bin hex uf2 map)
+    set(expected "fixture ${name}\n")
+    set(path "${cfg_out}/firmware.${name}")
+    if(EXISTS "${path}")
+      file(READ "${path}" actual)
+    endif()
+    if(NOT EXISTS "${path}" OR NOT actual STREQUAL expected)
+      message(FATAL_ERROR "${what}: firmware.${name} is not the fixture's")
+    endif()
+  endforeach()
+endfunction()
+# A stale OTA image goes; every planned artifact comes from the tree.
+file(WRITE "${cfg_out}/firmware.ota" "stale\n")
+invoke(0 ${cfg_args})
+require_published("build")
+if(EXISTS "${cfg_out}/firmware.ota")
+  message(FATAL_ERROR "a stale OTA image survived the build")
+endif()
+# A build without work publishes the files of the tree again.
+file(REMOVE "${cfg_out}/firmware.bin" "${cfg_out}/firmware.uf2")
+invoke(0 ${cfg_args} --json)
+status(HAL_OK)
+require_published("build without work")
+
+# A failed link leaves no uploadable file and explains the overflow once,
+# then the section of a region that did not overflow.
+file(REMOVE "${cfg_tree}/firmware.elf")
+set(ENV{FIXTURE_OVERFLOW} 1)
+invoke(5 ${cfg_args} --json)
+unset(ENV{FIXTURE_OVERFLOW})
+string(JSON message GET "${stdout}" message)
+contains("${message}" "CMake build failed with exit code " "build failure")
+contains("${stderr}" "\nJaszczurHAL diagnostics:\n  - axis-3: firmware does not fit rp2040/pico region FLASH; linker reports overflow by 1.2 KiB (1234 bytes).\n  - axis-3: section .data will not fit rp2040/pico region RAM.\n"
+  "linker diagnostics")
+foreach(name elf bin hex uf2 map)
+  if(EXISTS "${cfg_out}/firmware.${name}")
+    message(FATAL_ERROR "a failed build kept firmware.${name}")
+  endif()
+endforeach()
+
+# Two builds of one artifact directory at once: the second waits for the
+# lock, so the firmware step never overlaps, and plans again, so a stale cache
+# both found is reset once. execute_process starts its commands together;
+# each runner keeps the output of its jh, so neither writes into the other's
+# input.
+file(READ "${cfg_tree}/CMakeCache.txt" cache)
+string(REGEX REPLACE "CMAKE_HOME_DIRECTORY:INTERNAL=[^\n]*"
+  "CMAKE_HOME_DIRECTORY:INTERNAL=${work}/elsewhere" cache "${cache}")
+file(WRITE "${cfg_tree}/CMakeCache.txt" "${cache}")
+set(runner "execute_process(COMMAND")
+foreach(item "${JH}" ${cfg_args})
+  string(APPEND runner " [==[${item}]==]")
+endforeach()
+string(APPEND runner " WORKING_DIRECTORY [==[${JH_WORK}/cwd]==] RESULT_VARIABLE code"
+  " OUTPUT_VARIABLE out ERROR_VARIABLE err)\n"
+  "file(WRITE \"\${RESULT}\" \"\${code}\\n\${out}\\n\${err}\")\n")
+file(WRITE "${work}/run-build.cmake" "${runner}")
+set(ENV{FIXTURE_LOG} "${work}/build-log.txt")
+execute_process(
+  COMMAND "${CMAKE_COMMAND}" "-DRESULT=${work}/build-1.txt" -P "${work}/run-build.cmake"
+  COMMAND "${CMAKE_COMMAND}" "-DRESULT=${work}/build-2.txt" -P "${work}/run-build.cmake"
+  RESULTS_VARIABLE codes)
+unset(ENV{FIXTURE_LOG})
+file(READ "${work}/build-log.txt" log)
+file(READ "${work}/build-1.txt" first)
+file(READ "${work}/build-2.txt" second)
+if(NOT codes STREQUAL "0;0" OR NOT first MATCHES "^0\n" OR NOT second MATCHES "^0\n" OR
+   NOT log MATCHES "^(start\nend\n)+$")
+  message(FATAL_ERROR "concurrent builds overlapped or failed:\n${log}\n${first}\n${second}")
+endif()
+string(REGEX MATCHALL "warning: stale CMake cache contract changed" resets "${first}${second}")
+list(LENGTH resets reset_count)
+if(NOT reset_count EQUAL 1)
+  message(FATAL_ERROR "the stale cache was reset ${reset_count} times:\n${first}\n${second}")
+endif()
+require_published("concurrent builds")
+
+# --- Build preflight: STM32G474 network modules need the CYW43 profile ---
+set(pf "${work}/pf")
+file(MAKE_DIRECTORY "${pf}/.vscode")
+file(WRITE "${pf}/.vscode/settings.json" "${settings}")
+file(WRITE "${pf}/.vscode/jaszczurhal.project.json" "{
+  \"project\": \"Fixture\", \"module\": \"app\", \"toolchain\": \"cmake\",
+  \"target\": \"stm32g474\", \"board\": \"nucleo-g474re\",
+  \"buildDir\": \"\${project}/.build\", \"cmakeBuildDir\": \"\${buildDir}/cmake\",
+  \"cmake\": {\"executable\": \"${CMAKE_COMMAND}\", \"generator\": \"${JH_GENERATOR}\",
+            \"sourceDir\": \"${source}\", \"cache\": {\"JH_PROJECT_DIR\": \"\${project}\"}}
+}
+")
+file(WRITE "${pf}/hal_project_config.h" "#define HAL_ENABLE_WIFI\n")
+set(pf_args compile --root "${root}" --project "${pf}" --python "${python_given}")
+set(preflight "axis-2: stm32g474 network modules require the explicit CYW43 gSPI/lwIP backend profile; enabled modules: HAL_ENABLE_WIFI. Define HAL_NETWORK_BACKEND_CYW43, HAL_CYW43_BUS_STM32_GSPI and HAL_CYW43_STACK_LWIP, or disable those modules.")
+invoke(0 ${pf_args} --dry-run --json)
+plan_list(found preflight)
+if(NOT found STREQUAL preflight)
+  message(FATAL_ERROR "preflight: ${found}")
+endif()
+invoke(5 ${pf_args})
+contains("${stderr}" "\nJaszczurHAL diagnostics:\n  - ${preflight}\n" "preflight diagnostics")
+if(EXISTS "${pf}/.build/cmake")
+  message(FATAL_ERROR "the preflight let CMake configure")
+endif()
+file(WRITE "${pf}/hal_project_config.h" "#define HAL_ENABLE_WIFI\n#define HAL_NETWORK_BACKEND_CYW43\n#define HAL_CYW43_BUS_STM32_GSPI\n#define HAL_CYW43_STACK_LWIP\n")
+invoke(0 ${pf_args} --dry-run --json)
+string(JSON count LENGTH "${stdout}" plan preflight)
+if(NOT count EQUAL 0)
+  message(FATAL_ERROR "the CYW43 profile still stops the build: ${stdout}")
 endif()
 
 # A missing program.

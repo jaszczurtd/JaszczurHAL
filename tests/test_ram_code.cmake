@@ -21,7 +21,7 @@ function(_check_map MAP OUT_RESULT OUT_OUTPUT)
     execute_process(
         COMMAND "${CMAKE_COMMAND}" "-DJH_RAM_CODE_MAP=${MAP}"
             "-DJH_RAM_CODE_OBJECTS=/proj/a.c.o"
-            "-DJH_RAM_CODE_FLASH=0x10000000|0x20000000"
+            "-DJH_RAM_CODE_FLASH=0x10000000;0x20000000"
             -P "${JH_ROOT}/cmake/jh_ram_code_check.cmake"
         RESULT_VARIABLE _result OUTPUT_VARIABLE _out ERROR_VARIABLE _err)
     set(${OUT_RESULT} "${_result}" PARENT_SCOPE)

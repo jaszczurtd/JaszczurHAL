@@ -1,5 +1,8 @@
-/* The configure step of jh compile: configure_cmake_project of
- * vscode/runtime/jh_vscode.py over a computed plan (jh_compile.h). C11. */
+/* The steps of jh compile over a computed plan (jh_compile.h): the build lock,
+ * then configure_cmake_project and the rest of command_build of
+ * vscode/runtime/jh_vscode.py (artifact invalidation, preflight, cmake
+ * --build with its diagnostics, publication and the memory map overview).
+ * C11. */
 #if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -9,6 +12,8 @@
 #include "jh_json_file.h"
 #include "jh_process_support.h"
 #include "jh_project_build.h"
+#include "jh_python_repr.h"
+#include <inttypes.h>
 #include <jb/array.h>
 #include <jb/filesystem.h>
 #include <string.h>
@@ -25,6 +30,9 @@
 /* EXIT_BUILD of jh-vscode: command_build reports every failed step so. */
 #define BUILD_FAILED 5
 #define CACHE_KEYS_FILE ".jh-vscode-cache-keys.json"
+/* run_command_capture keeps the last 250000 characters of a build's output in
+ * whole lines for its diagnostics; here bytes. */
+#define CAPTURE_LIMIT 250000u
 
 static bool step_fail(jh_compile_ctx_t *c, const jb_json_span_t *parts,
                       size_t count) {
@@ -101,12 +109,13 @@ static bool reset_cache(jh_compile_ctx_t *c, jb_json_tree_view_t plan,
   return cc_ok(c);
 }
 
-/* The process environment: the current one with the plan's entries. */
+/* The process environment: the current one with the entries of the plan
+ * member key. */
 static bool child_environment(jh_compile_ctx_t *c, jb_json_tree_view_t plan,
-                              jb_vector_t *environment) {
+                              const char *key, jb_vector_t *environment) {
   if (!esp_environment_capture(&c->e, environment))
     return false;
-  const jb_json_tree_view_t added = cc_get(plan, "configureEnvironment");
+  const jb_json_tree_view_t added = cc_get(plan, key);
   for (size_t i = 0;
        cc_is(added, JB_JSON_OBJECT) && i < jh_json_count(added) && cc_ok(c);
        ++i) {
@@ -199,11 +208,13 @@ static bool echo(jh_compile_ctx_t *c, jb_json_tree_view_t argv) {
 }
 
 /* Start program with argv[1:] in the working directory and environment
- * ("NAME=VALUE" strings), as run_command: a program named cmake has
- * stderr=STDOUT on the log stream, any other keeps stderr. A failure to start
- * or a nonzero exit fails the step. */
+ * ("NAME=VALUE" strings). Without capture as run_command: a program named
+ * cmake has stderr=STDOUT on the log stream, any other keeps stderr. With
+ * capture as run_command_capture: both streams reach the log stream and
+ * capture. A failure to start fails the step; *code is the exit code. */
 static bool start(jh_compile_ctx_t *c, const char *program, const char *name,
-                  jb_json_tree_view_t argv, const jb_vector_t *environment) {
+                  jb_json_tree_view_t argv, const jb_vector_t *environment,
+                  jb_string_t *capture, int *code) {
   jb_vector_t arguments = {0};
   if (!esp_list_init(&c->e, &arguments))
     return false;
@@ -211,21 +222,14 @@ static bool start(jh_compile_ctx_t *c, const char *program, const char *name,
     const char *item = cc_str(c, jh_json_item(argv, i));
     (void)esp_push(&c->e, &arguments, jh_span(item != NULL ? item : ""));
   }
-  int code = -1;
   hal_status_t status = HAL_OK;
   if (cc_ok(c)) {
-    const esp_process_t process = {program,
-                                   &arguments,
-                                   NULL,
-                                   environment,
-                                   named_cmake(name) ? ESP_RUN_MERGE
-                                                     : ESP_RUN_FORWARD,
-                                   true,
-                                   false,
-                                   0,
-                                   NULL,
-                                   NULL};
-    status = esp_process(&c->e, &process, &code);
+    const int mode =
+        capture != NULL || named_cmake(name) ? ESP_RUN_MERGE : ESP_RUN_FORWARD;
+    const esp_process_t process = {
+        program, &arguments, NULL,    environment, mode,         true,
+        false,   0,          capture, NULL,        CAPTURE_LIMIT};
+    status = esp_process(&c->e, &process, code);
   }
   jh_list_destroy(&arguments);
   if (!cc_ok(c))
@@ -235,30 +239,40 @@ static bool start(jh_compile_ctx_t *c, const char *program, const char *name,
   if (status != HAL_OK)
     return STEP_FAIL(c, jh_span("failed to run "), jh_span(name), jh_span(": "),
                      jh_span(hal_status_to_string(status)));
-  if (code != 0)
-    return STEP_FAIL(c, jh_span("CMake configure failed with exit code "),
-                     jh_span(esp_decimal(&c->e, (uint64_t)code)));
   return true;
 }
 
-static bool run_configure(jh_compile_ctx_t *c, jb_json_tree_view_t plan) {
-  const jb_json_tree_view_t argv = cc_get(plan, "configure");
+/* One CMake step of the plan: the command of member key with the environment
+ * of member environment_key, echoed first when the plan is verbose. *code is
+ * its exit code; a missing program or a failed start fails the step. */
+static bool run_step(jh_compile_ctx_t *c, jb_json_tree_view_t plan,
+                     const char *key, const char *environment_key,
+                     jb_string_t *capture, int *code) {
+  const jb_json_tree_view_t argv = cc_get(plan, key);
   if (!cc_is(argv, JB_JSON_ARRAY) || jh_json_count(argv) == 0)
-    return STEP_FAIL(c, jh_span("the plan has no configure command"));
+    return STEP_FAIL(c, jh_span("the plan has no "), jh_span(key),
+                     jh_span(" command"));
   const char *name = cc_str(c, jh_json_item(argv, 0));
   if (name == NULL)
     name = "";
   jb_vector_t environment = {0};
-  if (child_environment(c, plan, &environment) &&
+  *code = -1;
+  if (child_environment(c, plan, environment_key, &environment) &&
       (!plan_flag(plan, "verbose") || echo(c, argv))) {
     const char *program = find_program(c, &environment, name);
     if (program != NULL)
-      (void)start(c, program, name, argv, &environment);
+      (void)start(c, program, name, argv, &environment, capture, code);
     else if (cc_ok(c))
       (void)STEP_FAIL(c, jh_span("command not found: "), jh_span(name));
   }
   jh_list_destroy(&environment);
   return cc_ok(c);
+}
+
+static bool step_code(jh_compile_ctx_t *c, const char *what, int code) {
+  return code == 0 || STEP_FAIL(c, jh_span("CMake "), jh_span(what),
+                                jh_span(" failed with exit code "),
+                                jh_span(esp_decimal(&c->e, (uint64_t)code)));
 }
 
 /* record_cmake_cache_keys: json.dumps(sorted keys, indent=2) and a newline,
@@ -312,11 +326,364 @@ static bool record_keys(jh_compile_ctx_t *c, jb_json_tree_view_t plan,
   return cc_ok(c);
 }
 
-hal_status_t jh_compile_configure(const jh_compile_options_t *options,
-                                  const jh_compile_t *compile,
-                                  jh_failure_t *failure) {
+/* ---- The build lock and the stable artifacts ---- */
+
+/* The uploadable files of the artifact directory (STABLE_FIRMWARE_ARTIFACTS).
+ */
+static const char *const stable_artifacts[] = {"firmware.elf", "firmware.bin",
+                                               "firmware.hex", "firmware.map",
+                                               "firmware.uf2", "firmware.ota"};
+
+/* .jh-build.lock of the artifact directory, created with its parents. A
+ * lock another build holds is announced on stderr, then awaited without a
+ * time limit (cancellation still stops the wait); *waited tells. */
+static bool lock_build(jh_compile_ctx_t *c, jb_json_tree_view_t plan,
+                       jb_file_lock_t **lock, bool *waited) {
+  const char *artifacts = plan_text(c, plan, "artifactDir");
+  const char *path = plan_text(c, plan, "lockFile");
+  if (!cc_ok(c))
+    return false;
+  if (artifacts[0] == '\0' || path[0] == '\0')
+    return STEP_FAIL(c, jh_span("the plan has no build lock"));
+  hal_status_t status = jb_fs_mkdir(artifacts, true);
+  if (status != HAL_OK)
+    return status == HAL_ENOMEM
+               ? cc_storage(c, status)
+               : STEP_FAIL(c, jh_span("cannot create "), jh_span(artifacts),
+                           jh_span(": "),
+                           jh_span(hal_status_to_string(status)));
+  const jh_compile_options_t *o = c->options;
+  status = jb_file_lock_acquire(path, 0, o->canceled, o->cancel_context, lock);
+  if (status == HAL_EBUSY) {
+    *waited = true;
+    (void)fprintf(stderr, "waiting for another build of %s (%s)\n", artifacts,
+                  path);
+    (void)fflush(stderr);
+    status = jb_file_lock_acquire(path, UINT32_MAX, o->canceled,
+                                  o->cancel_context, lock);
+  }
+  if (status == HAL_ECANCELED) {
+    (void)jh_fail_text(c->e.failure, status, 130, "canceled");
+    return false;
+  }
+  if (status != HAL_OK)
+    return status == HAL_ENOMEM
+               ? cc_storage(c, status)
+               : STEP_FAIL(c, jh_span("cannot lock "), jh_span(path),
+                           jh_span(": "),
+                           jh_span(hal_status_to_string(status)));
+  return true;
+}
+
+/* A run that waited for the lock plans again: the other build may have reset
+ * the cache or recorded other cache keys meanwhile, and a stale plan would
+ * reset its fresh tree again. The new plan must keep the same lock. A run that
+ * locks at once keeps its plan, which reads the CMake tree in its last
+ * milliseconds; another configure and build cannot fit between that read and
+ * the lock, and planning twice would cost every build about half a second. */
+static bool replan(jh_compile_ctx_t *c, jh_compile_t *compile,
+                   jb_json_tree_view_t *config, jb_json_tree_view_t *plan) {
+  const char *locked = plan_text(c, *plan, "lockFile");
+  jh_compile_t fresh;
+  jh_compile_init(&fresh);
+  if (cc_ok(c) && jh_compile_plan(c->options, &fresh, c->e.failure) == HAL_OK) {
+    jh_compile_destroy(compile);
+    *compile = fresh;
+    *config = cc_root(compile->config);
+    *plan = cc_root(compile->plan);
+    if (strcmp(plan_text(c, *plan, "lockFile"), locked) != 0)
+      (void)STEP_FAIL(c,
+                      jh_span("the build directory changed while waiting "
+                              "for the build lock "),
+                      jh_span(locked));
+  } else {
+    jh_compile_destroy(&fresh);
+  }
+  return cc_ok(c);
+}
+
+/* invalidate_stable_firmware_artifacts: no stale upload survives a build that
+ * fails. */
+static bool invalidate(jh_compile_ctx_t *c, jb_json_tree_view_t plan) {
+  const char *artifacts = plan_text(c, plan, "artifactDir");
+  for (size_t i = 0; i < COUNTOF(stable_artifacts) && cc_ok(c); ++i) {
+    const char *path = esp_join(&c->e, artifacts, stable_artifacts[i]);
+    if (!cc_ok(c) || !esp_is_file(path))
+      continue;
+    const hal_status_t status = jb_fs_remove(path, false);
+    if (status != HAL_OK)
+      return status == HAL_ENOMEM
+                 ? cc_storage(c, status)
+                 : STEP_FAIL(c,
+                             jh_span("failed to invalidate firmware artifacts: "
+                                     "cannot remove "),
+                             jh_span(path), jh_span(": "),
+                             jh_span(hal_status_to_string(status)));
+  }
+  return cc_ok(c);
+}
+
+/* ---- Diagnostics ---- */
+
+/* print_build_diagnostics: a blank line, the yellow title and the messages
+ * (jb_string_t) on stderr. */
+static void print_diagnostics(jh_compile_ctx_t *c,
+                              const jb_vector_t *messages) {
+  if (jb_vector_size(messages) == 0)
+    return;
+  const bool color = color_enabled(c);
+  (void)fprintf(stderr, "\n%sJaszczurHAL diagnostics:%s\n",
+                color ? "\033[33m" : "", color ? "\033[0m" : "");
+  for (size_t i = 0; i < jb_vector_size(messages); ++i)
+    (void)fprintf(stderr, "  - %s\n", esp_at(messages, i));
+  (void)fflush(stderr);
+}
+
+/* A name in matching quotes of the linker, [`'][^`']+[`'], at text[at]: its
+ * end, or 0 without one. */
+static size_t quoted(jb_json_span_t text, size_t at, jb_json_span_t *name) {
+  if (at >= text.length || (text.data[at] != '`' && text.data[at] != '\''))
+    return 0;
+  size_t end = at + 1;
+  while (end < text.length && text.data[end] != '`' && text.data[end] != '\'')
+    ++end;
+  if (end == at + 1 || end == text.length)
+    return 0;
+  *name = (jb_json_span_t){text.data + at + 1, end - at - 1};
+  return end + 1;
+}
+
+/* One match of the linker message at text[at]: region `R' overflowed by N
+ * bytes (overflow) or section `S' will not fit in region `R'. Returns its
+ * end, or 0. */
+static size_t linker_match(jb_json_span_t text, size_t at, bool overflow,
+                           jb_json_span_t *section, jb_json_span_t *region,
+                           uint64_t *bytes) {
+  size_t i = at + strlen(overflow ? "region " : "section ");
+  i = quoted(text, i, overflow ? region : section);
+  if (i == 0)
+    return 0;
+  if (!overflow) {
+    if (!cc_literal_at(text, i, " will not fit in region "))
+      return 0;
+    return quoted(text, i + strlen(" will not fit in region "), region);
+  }
+  if (!cc_literal_at(text, i, " overflowed by "))
+    return 0;
+  i += strlen(" overflowed by ");
+  const size_t digits = i;
+  uint64_t value = 0;
+  while (i < text.length && text.data[i] >= '0' && text.data[i] <= '9') {
+    const uint64_t digit = (uint64_t)(text.data[i] - '0');
+    value = value > (UINT64_MAX - digit) / 10 ? UINT64_MAX : value * 10 + digit;
+    ++i;
+  }
+  if (i == digits || !cc_literal_at(text, i, " bytes"))
+    return 0;
+  *bytes = value;
+  return i + strlen(" bytes");
+}
+
+/* diagnose_build_output over the captured output: each overflowed region
+ * once, then each region a section will not fit, unless it overflowed. */
+static void diagnose(jh_compile_ctx_t *c, jb_json_span_t output,
+                     const char *display, jb_vector_t *messages) {
+  jb_vector_t overflowed = {0}, sections = {0};
+  if (!esp_list_init(&c->e, &overflowed) || !esp_list_init(&c->e, &sections))
+    goto done;
+  for (int pass = 0; pass < 2 && cc_ok(c); ++pass) {
+    const bool overflow = pass == 0;
+    const char *prefix = overflow ? "region " : "section ";
+    for (size_t at = 0; at < output.length && cc_ok(c);) {
+      if (!cc_literal_at(output, at, prefix)) {
+        ++at;
+        continue;
+      }
+      jb_json_span_t section = {0}, region = {0};
+      uint64_t bytes = 0;
+      const size_t end =
+          linker_match(output, at, overflow, &section, &region, &bytes);
+      if (end == 0) {
+        ++at;
+        continue;
+      }
+      at = end;
+      const char *name = CC_TEXT(c, region);
+      jb_vector_t *seen = overflow ? &overflowed : &sections;
+      if (!cc_ok(c) || jh_list_contains(seen, jh_span(name)) ||
+          (!overflow && jh_list_contains(&overflowed, jh_span(name))))
+        continue;
+      (void)esp_push(&c->e, seen, jh_span(name));
+      (void)esp_push(
+          &c->e, messages,
+          overflow
+              ? jh_span(CC_TEXT(
+                    c, jh_span("axis-3: firmware does not fit "),
+                    jh_span(display), jh_span(" region "), region,
+                    jh_span("; linker reports overflow by "),
+                    jh_span(cc_format_size(c, bytes)), jh_span(" ("),
+                    jh_span(esp_decimal(&c->e, bytes)), jh_span(" bytes).")))
+              : jh_span(CC_TEXT(c, jh_span("axis-3: section "), section,
+                                jh_span(" will not fit "), jh_span(display),
+                                jh_span(" region "), region, jh_span("."))));
+    }
+  }
+done:
+  jh_list_destroy(&sections);
+  jh_list_destroy(&overflowed);
+}
+
+/* The preflight messages of the plan stop the build before CMake runs. */
+static bool check_preflight(jh_compile_ctx_t *c, jb_json_tree_view_t plan) {
+  const jb_json_tree_view_t found = cc_get(plan, "preflight");
+  jb_vector_t messages = {0};
+  if (esp_list_init(&c->e, &messages)) {
+    for (size_t i = 0; i < jh_json_count(found) && cc_ok(c); ++i) {
+      const char *message = cc_str(c, jh_json_item(found, i));
+      if (message != NULL)
+        (void)esp_push(&c->e, &messages, jh_span(message));
+    }
+    if (cc_ok(c) && jb_vector_size(&messages) != 0) {
+      print_diagnostics(c, &messages);
+      (void)STEP_FAIL(c, jh_span("the build preflight stopped the build"));
+    }
+  }
+  jh_list_destroy(&messages);
+  return cc_ok(c);
+}
+
+/* cmake --build of the plan; on a failure the diagnostics of the linker
+ * messages in the end of its output. */
+static bool run_build(jh_compile_ctx_t *c, jb_json_tree_view_t config,
+                      jb_json_tree_view_t plan) {
+  jb_string_t output = {0};
+  jb_vector_t messages = {0};
+  int code = -1;
+  if (!cc_storage(c, jb_string_init(&output, jb_heap_allocator())) ||
+      !esp_list_init(&c->e, &messages))
+    goto done;
+  if (run_step(c, plan, "build", "buildEnvironment", &output, &code) &&
+      code != 0) {
+    const jb_json_span_t text = jh_string_span(&output);
+    const size_t start = esp_tail(text, CAPTURE_LIMIT);
+    diagnose(c, (jb_json_span_t){text.data + start, text.length - start},
+             cc_display_name(c, config), &messages);
+    if (cc_ok(c))
+      print_diagnostics(c, &messages);
+    (void)step_code(c, "build", code);
+  }
+done:
+  jh_list_destroy(&messages);
+  jb_string_destroy(&output);
+  return cc_ok(c);
+}
+
+/* ---- Publication ---- */
+
+/* The size limit of one published artifact. */
+#define ARTIFACT_LIMIT (1024u * 1024u * 1024u)
+
+static bool sync_fail(jh_compile_ctx_t *c, const char *what, const char *path,
+                      hal_status_t status) {
+  return status == HAL_ENOMEM
+             ? cc_storage(c, status)
+             : STEP_FAIL(c,
+                         jh_span("failed to synchronize firmware artifacts: "),
+                         jh_span(what), jh_span(path), jh_span(": "),
+                         jh_span(hal_status_to_string(status)));
+}
+
+/* shutil.copy2 of the content: the destination gets the bytes of source,
+ * published atomically with the permissions a new file gets. */
+static bool copy_artifact(jh_compile_ctx_t *c, const char *source,
+                          const char *destination) {
+  jb_file_data_t data = {0};
+  const hal_status_t status = jb_file_read(source, ARTIFACT_LIMIT, &data);
+  if (status != HAL_OK) {
+    jb_file_release(&data);
+    return sync_fail(c, "cannot read ", source, status);
+  }
+  jh_failure_t error;
+  jh_failure_init(&error);
+  bool changed = false;
+  if (jh_project_build_write(
+          destination, (jb_json_span_t){(const char *)data.data, data.length},
+          &changed, &error) != HAL_OK)
+    (void)sync_fail(c, "cannot write ", destination, error.status);
+  jh_failure_destroy(&error);
+  jb_file_release(&data);
+  return cc_ok(c);
+}
+
+/* synchronize_cmake_firmware_artifacts: every published file of the plan
+ * comes from the CMake tree (firmware.map also as firmware.elf.map), also
+ * after a build that changed nothing; a UF2 or OTA image the plan does not
+ * publish leaves the artifact directory. */
+static bool publish(jh_compile_ctx_t *c, jb_json_tree_view_t config,
+                    jb_json_tree_view_t plan) {
+  const char *tree = plan_text(c, plan, "cmakeBuildDir");
+  const char *artifacts = plan_text(c, plan, "artifactDir");
+  const jb_json_tree_view_t published = cc_get(plan, "artifacts");
+  const jb_json_tree_view_t target = cc_get(config, "target");
+  jb_vector_t sources = {0}, names = {0};
+  if (!esp_list_init(&c->e, &sources) || !esp_list_init(&c->e, &names))
+    goto done;
+  for (size_t i = 0; i < jh_json_count(published) && cc_ok(c); ++i) {
+    const char *name = cc_str(c, jh_json_item(published, i));
+    if (name == NULL)
+      continue;
+    const char *candidates[] = {
+        name, strcmp(name, "firmware.map") == 0 ? "firmware.elf.map" : NULL};
+    const char *source = NULL;
+    for (size_t k = 0; k < COUNTOF(candidates) && source == NULL; ++k) {
+      const char *path =
+          candidates[k] != NULL ? esp_join(&c->e, tree, candidates[k]) : NULL;
+      if (path != NULL && esp_is_file(path))
+        source = path;
+    }
+    if (source == NULL) {
+      (void)STEP_FAIL(c, jh_span("successful "),
+                      jh_span(cc_truthy(target) ? cc_pystr(c, target) : ""),
+                      jh_span(" build omitted "), jh_span(name),
+                      jh_span(" in "), jh_span(tree));
+      goto done;
+    }
+    (void)esp_push(&c->e, &sources, jh_span(source));
+    (void)esp_push(&c->e, &names, jh_span(name));
+  }
+  for (size_t i = 0; i < jb_vector_size(&sources) && cc_ok(c); ++i) {
+    const char *source = esp_at(&sources, i);
+    const char *destination = esp_join(&c->e, artifacts, esp_at(&names, i));
+    if (cc_ok(c) && !cc_same_path(esp_resolve(&c->e, source, c->base),
+                                  esp_resolve(&c->e, destination, c->base)))
+      (void)copy_artifact(c, source, destination);
+  }
+  static const char *const optional[] = {"firmware.uf2", "firmware.ota"};
+  for (size_t i = 0; i < COUNTOF(optional) && cc_ok(c); ++i) {
+    const char *stale = esp_join(&c->e, artifacts, optional[i]);
+    if (!jh_list_contains(&names, jh_span(optional[i])) && cc_ok(c) &&
+        esp_is_file(stale)) {
+      const hal_status_t status = jb_fs_remove(stale, false);
+      if (status != HAL_OK)
+        (void)sync_fail(c, "cannot remove ", stale, status);
+    }
+  }
+done:
+  jh_list_destroy(&names);
+  jh_list_destroy(&sources);
+  return cc_ok(c);
+}
+
+/* ---- Entry ---- */
+
+/* The steps of one run under the build lock: configure only, or the whole
+ * build of command_build. */
+static hal_status_t run(const jh_compile_options_t *options,
+                        jh_compile_t *compile, jh_failure_t *failure,
+                        bool build) {
   if (options == NULL || compile == NULL || failure == NULL ||
-      options->root == NULL || options->base == NULL || compile->plan == NULL)
+      options->root == NULL || options->base == NULL ||
+      compile->config == NULL || compile->plan == NULL)
     return jh_fail_arguments(failure);
   jh_compile_ctx_t c = {0};
   static const jb_vector_t empty_list = {0};
@@ -334,20 +701,50 @@ hal_status_t jh_compile_configure(const jh_compile_options_t *options,
   jh_board_registry_init(&c.e.boards);
   jh_feature_registry_init(&c.e.features);
   jh_hardware_registry_init(&c.e.hardware);
-  const jb_json_tree_view_t plan = cc_root(compile->plan);
+  jb_json_tree_view_t config = cc_root(compile->config);
+  jb_json_tree_view_t plan = cc_root(compile->plan);
+  jb_file_lock_t *lock = NULL;
+  bool waited = false;
+  int code = -1;
   if (esp_list_init(&c.e, &c.e.strings)) {
     const char *toolchain = cc_str(&c, cc_get(plan, "toolchain"));
-    const char *build = plan_text(&c, plan, "cmakeBuildDir");
     if (toolchain == NULL || strcmp(toolchain, "cmake") != 0)
-      (void)jh_fail_text(failure, HAL_EUNSUPPORTED, 2,
-                         "--configure-only applies to CMake projects; an "
-                         "ESP-IDF project configures in jh esp build");
-    else if (reset_cache(&c, plan, build) && run_configure(&c, plan))
-      (void)record_keys(&c, plan, build);
+      (void)jh_fail_text(
+          failure, HAL_EUNSUPPORTED, 2,
+          build ? "jh compile builds CMake projects; an ESP-IDF project "
+                  "builds with jh esp build"
+                : "--configure-only applies to CMake projects; an ESP-IDF "
+                  "project configures in jh esp build");
+    else if (lock_build(&c, plan, &lock, &waited) &&
+             (!waited || replan(&c, compile, &config, &plan))) {
+      const char *tree = plan_text(&c, plan, "cmakeBuildDir");
+      if ((!build || (invalidate(&c, plan) && check_preflight(&c, plan))) &&
+          reset_cache(&c, plan, tree) &&
+          run_step(&c, plan, "configure", "configureEnvironment", NULL,
+                   &code) &&
+          step_code(&c, "configure", code) && record_keys(&c, plan, tree) &&
+          build && run_build(&c, config, plan) && publish(&c, config, plan))
+        (void)cc_memory_overview(&c, tree, cc_str(&c, cc_get(plan, "objdump")));
+    }
   }
+  const hal_status_t released = jb_file_lock_release(&lock);
+  if (released != HAL_OK && failure->status == HAL_OK)
+    (void)STEP_FAIL(&c, jh_span("cannot release the build lock: "),
+                    jh_span(hal_status_to_string(released)));
   jh_list_destroy(&c.e.strings);
   jh_hardware_registry_destroy(&c.e.hardware);
   jh_feature_registry_destroy(&c.e.features);
   jh_board_registry_destroy(&c.e.boards);
   return failure->status;
+}
+
+hal_status_t jh_compile_configure(const jh_compile_options_t *options,
+                                  jh_compile_t *compile,
+                                  jh_failure_t *failure) {
+  return run(options, compile, failure, false);
+}
+
+hal_status_t jh_compile_build(const jh_compile_options_t *options,
+                              jh_compile_t *compile, jh_failure_t *failure) {
+  return run(options, compile, failure, true);
 }

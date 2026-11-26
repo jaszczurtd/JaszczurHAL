@@ -20,8 +20,8 @@ build, and `jh clock` checks and lists the clock tree registry.
 `jh firmware read` backs up a selected device's complete flash for reflashing.
 `jh target` lists the targets with a linkable library and their build facts;
 `jh library` builds, installs and inspects that library, and `jh esp` builds
-and revalidates ESP-IDF firmware. `jh compile` plans the firmware build of a
-VS Code project.
+and revalidates ESP-IDF firmware. `jh compile` builds the firmware of a VS
+Code project, or only plans or configures that build.
 
 Prepare the pinned host dependencies explicitly before configuring:
 
@@ -174,8 +174,8 @@ filenames outside UTF-8. Child stderr is forwarded. `--json` returns UTF-8
 `termSignal`, `nativeError`; a non-UTF-8 filename fails explicitly in this mode.
 `--max-bytes` bounds captured path bytes in JSON mode with the same default
 and ceiling as inspection. `--timeout-ms` accepts 0 through 4294967295;
-zero waits indefinitely. SIGINT (Ctrl+C or Ctrl+Break on Windows) requests
-cancellation and waits for process cleanup. Timeout exits with 124 and
+zero waits indefinitely. SIGINT, SIGTERM or SIGHUP (Ctrl+C or Ctrl+Break on
+Windows) requests cancellation and waits for process cleanup. Timeout exits with 124 and
 cancellation with 130; other Git exit codes are retained. A failure to launch
 or stream exits with 3 (4 for allocation or byte limits), and its JSON status
 identifies the cause. These process
@@ -894,20 +894,23 @@ interpreter the `scripts/ensure_*.sh` scripts use; jh-vscode sets
 
 ## Firmware builds
 
-`jh compile --root <checkout> --project <dir> --dry-run [options]` computes
-the firmware build of a VS Code project the way `jh-vscode build` does, without
-starting a process or changing a file. The model has the members and values of
-`jh-vscode config-dump --json`: the manifest, `.vscode/settings.json`, the
-local selection in `.vscode/jaszczurhal.local.json`, the device tree assembly
-or the registry board, the target profile, the variant and the resolved HAL
-features. The plan holds the CMake source and build trees, the artifact
-directory, the configure and build commands with the environment they add, the
-cache keys the configure records and forgets and whether a stale CMake cache
-is reset. An ESP-IDF project gets its `jh esp build` and `jh esp artifacts`
-commands instead. The options are `--target`, `--board`, `--assembly`,
-`--variant`, `--port`, `--bootsel-volume` and `--verbose` of jh-vscode,
-`--debug` for the debug tree and `--python <path>`. Without `--json` the
-command prints the commands as `jh-vscode build --verbose` does.
+`jh compile --root <checkout> --project <dir> [options]` builds the firmware of
+a VS Code project the way `jh-vscode build` does. With `--dry-run` it only
+computes that build, without starting a process or changing a file. The model
+has the members and values of `jh-vscode config-dump --json`: the manifest,
+`.vscode/settings.json`, the local selection in
+`.vscode/jaszczurhal.local.json`, the device tree assembly or the registry
+board, the target profile, the variant and the resolved HAL features. The plan
+holds the CMake source and build trees, the artifact directory, the configure
+and build commands with the environment they add, the cache keys the configure
+records and forgets and whether a stale CMake cache is reset. It also lists the
+artifacts the build publishes, the preflight messages that would stop the build
+and the objdump of the memory map overview. An ESP-IDF project gets its `jh esp
+build` and `jh esp artifacts` commands instead. The options are `--target`,
+`--board`, `--assembly`, `--variant`, `--port`, `--bootsel-volume` and
+`--verbose` of jh-vscode, `--debug` for the debug build and `--python <path>`.
+`--dry-run` without `--json` prints the commands as `jh-vscode build --verbose`
+does.
 
 `Python3_EXECUTABLE` of the configure is `--python`, else
 `JH_COMPONENT_PYTHON`, else `python3` (`python` on Windows) from `PATH`, with
@@ -915,20 +918,46 @@ links resolved; jh-vscode passes its own interpreter. The Pico SDK writes this
 path into the boot stage 2 commands, so another spelling of the same
 interpreter rebuilds and relinks RP firmware once. Below a Windows `buildRoot`
 of `host-environment.json` each variant has its own CMake tree,
-`<buildRoot>/<key>/cmake/variants/<id>`. Configuration errors exit with 2.
+`<buildRoot>/<key>/cmake/variants/<id>`. Configuration errors exit with 2. An
+ESP-IDF debug build and a toolchain without a build exit with 8, the code
+jh-vscode returns for a build it does not support.
 
-`--configure-only` runs the configure step of a CMake build the way
-`jh-vscode build` starts it, then stops. A cache of another source tree or
-generator loses `CMakeCache.txt` and `CMakeFiles/` first, with a warning;
-outside the project, the checkout's `.build` and a Windows `buildRoot` the
-command refuses to touch it. CMake runs in the working directory with the
-environment the plan adds and writes to stdout, or to stderr with `--json`.
-`--verbose`, or `jaszczurhal.verbose` in the settings, echoes the command
-first. After a successful configure the sorted cache keys of the project go
-to `.jh-vscode-cache-keys.json` in the CMake tree, in the format jh-vscode
-writes, so the next configure forgets the keys the project dropped. ESP-IDF
-projects configure inside `jh esp build` and exit with 2 here. A failed step
-exits with 5, the build failure code of jh-vscode.
+`--configure-only` runs the configure step of a CMake build the way `jh-vscode
+build` starts it, then stops. Like the build, it first takes the exclusive lock
+`.jh-build.lock` in the artifact directory; while another build of that
+directory holds it, the command says so on stderr, waits and then plans the
+build again, since the other build may have changed the CMake tree. A cache of
+another source tree or generator loses `CMakeCache.txt` and `CMakeFiles/`
+first, with a warning; outside the project, the checkout's `.build` and a
+Windows `buildRoot` the command refuses to touch it. CMake runs in the working
+directory with the environment the plan adds and writes to stdout, or to stderr
+with `--json`. `--verbose`, or `jaszczurhal.verbose` in the settings, echoes
+the command first. After a successful configure the sorted cache keys of the
+project go to `.jh-vscode-cache-keys.json` in the CMake tree, in the format
+jh-vscode writes, so the next configure forgets the keys the project dropped.
+ESP-IDF projects configure inside `jh esp build` and exit with 2 here. A failed
+step exits with 5, the build failure code of jh-vscode.
+
+Without `--dry-run` and `--configure-only` the command builds the firmware,
+under the same lock. It first removes `firmware.elf`, `.bin`, `.hex`, `.map`,
+`.uf2` and `.ota` from the artifact directory, so a failed build leaves nothing
+to upload. Preflight messages stop the build before CMake runs: a skeleton
+target, or STM32G474 network modules without the CYW43 gSPI/lwIP backend
+profile. Then the configure above runs, followed by `cmake --build` of the
+target `firmware`, or `firmware_debug` with `--debug`. When the link fails, the
+command lists the memory regions the firmware overflowed and the sections that
+do not fit under `JaszczurHAL diagnostics:` on stderr; the preflight messages
+appear there in the same form. After a successful build it copies the
+artifacts of the plan from the CMake tree to the artifact directory, even when
+the build had nothing to do. It then prints the memory map overview of
+`firmware.elf`: the sections of each memory region with their addresses and
+sizes, and the flash and SRAM totals. `JH_VSCODE_MEMORY_OVERVIEW` set to `0`,
+`false`, `no` or `off` turns the overview off; a missing or failing objdump
+only prints a warning. Every failed step exits with 5. ESP-IDF projects build
+with `jh esp build` and exit with 2 here.
+
+SIGINT, SIGTERM or SIGHUP cancels the configure or the build with 130; a
+SIGTERM or SIGHUP the caller ignores stays ignored.
 
 ## Memory checks
 

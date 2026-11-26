@@ -172,12 +172,20 @@ typedef struct {
   bool echo, text; /* text: universal newlines and errors="replace". */
   uint32_t timeout_ms;
   jb_string_t *out, *err;
+  /* MERGE into out: bound out while the child writes by dropping its oldest
+   * whole lines once it holds 2 * tail bytes; esp_tail then gives the end of
+   * whole lines of at most tail bytes (0 keeps everything). */
+  size_t tail;
 } esp_process_t;
 /* HAL_OK with exit_code set when the process ran; another status when it
  * could not start, timed out or was canceled (not recorded as a failure,
  * except cancellation and memory). */
 hal_status_t esp_process(jh_esp_t *e, const esp_process_t *process,
                          int *exit_code);
+/* The start of the longest end of text made of whole lines (the last may
+ * lack its newline) that holds at most tail bytes; text.length when even the
+ * last line is longer. */
+size_t esp_tail(jb_json_span_t text, size_t tail);
 /* Text of captured output as Python's text mode decodes it. */
 bool esp_decode_text(jh_esp_t *e, jb_json_span_t input, jb_string_t *out);
 /* str.strip() and str.splitlines()[0] of text. */

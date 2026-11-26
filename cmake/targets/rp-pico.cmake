@@ -47,31 +47,21 @@ target_sources(JaszczurHAL PRIVATE
 target_include_directories(JaszczurHAL PUBLIC "${JH_BOARD_GENERATED_DIR}")
 
 set(_jh_out_dir "${JH_ARTIFACT_DIR}")
+# Post-build steps run in this binary directory. On Windows they share one
+# cmd.exe line of at most 8191 characters with the link, so name the outputs
+# relative to it and copy them with one command.
+set(_jh_outputs firmware.bin firmware.uf2 firmware.hex)
+if(_jh_rp_ota)
+    list(APPEND _jh_outputs firmware.ota)
+endif()
 add_custom_command(TARGET firmware POST_BUILD
     COMMAND "${CMAKE_COMMAND}" -E make_directory "${_jh_out_dir}"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "$<TARGET_FILE:firmware>" "${_jh_out_dir}/firmware.elf"
+            "$<TARGET_FILE:firmware>" ${_jh_outputs} "${_jh_out_dir}"
     COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${CMAKE_CURRENT_BINARY_DIR}/firmware.bin"
-            "${_jh_out_dir}/firmware.bin"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${CMAKE_CURRENT_BINARY_DIR}/firmware.uf2"
-            "${_jh_out_dir}/firmware.uf2"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${CMAKE_CURRENT_BINARY_DIR}/firmware.hex"
-            "${_jh_out_dir}/firmware.hex"
-    COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-            "${CMAKE_CURRENT_BINARY_DIR}/firmware.elf.map"
-            "${_jh_out_dir}/firmware.map"
+            firmware.elf.map "${_jh_out_dir}/firmware.map"
     VERBATIM
 )
-if(_jh_rp_ota)
-    add_custom_command(TARGET firmware POST_BUILD
-        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
-                "${CMAKE_CURRENT_BINARY_DIR}/firmware.ota"
-                "${_jh_out_dir}/firmware.ota"
-        VERBATIM)
-endif()
 
 add_custom_target(firmware_debug DEPENDS firmware)
 add_custom_target(firmware_upload DEPENDS firmware)

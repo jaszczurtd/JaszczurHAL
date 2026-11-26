@@ -113,7 +113,7 @@ target_sources(jh_build PRIVATE build/jh_esp_build.c build/jh_esp_model.c
 # The firmware build of a VS Code project (jh compile) on the same support
 # layer. C11.
 target_sources(jh_build PRIVATE build/jh_compile_model.c build/jh_compile_plan.c
-  build/jh_compile_run.c)
+  build/jh_compile_run.c build/jh_compile_memory.c)
 target_link_libraries(jh_build PUBLIC jh_host jh_device PRIVATE pcre2-8-static)
 if(WIN32)
   target_link_libraries(jh_build PRIVATE shell32)
@@ -287,8 +287,9 @@ if(BUILD_TESTING)
     -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/check_library.cmake")
   set_tests_properties(jh_library PROPERTIES TIMEOUT 120)
   # The model and plan of a firmware build (jh compile --dry-run) on a
-  # fixture project and the examples, and its configure step with this CMake
-  # on a source tree without languages; no SDK and no build.
+  # fixture project and the examples, then its configure and build with this
+  # CMake on a source tree without languages, whose firmware target writes the
+  # artifacts; no SDK and no compiler.
   add_test(NAME jh_compile COMMAND "${CMAKE_COMMAND}" "-DJH=$<TARGET_FILE:jh>"
     "-DJH_HAL_SOURCE=${CMAKE_CURRENT_SOURCE_DIR}/../.."
     "-DJH_GENERATOR=${CMAKE_GENERATOR}"

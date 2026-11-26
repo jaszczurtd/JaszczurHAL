@@ -1,5 +1,5 @@
-/* jh compile: the model and plan of a VS Code firmware build and its
- * configure step (jh_compile.h). C11. */
+/* jh compile: the model and plan of a VS Code firmware build, its configure
+ * step and the build (jh_compile.h). C11. */
 #if !defined(_WIN32) && !defined(_POSIX_C_SOURCE)
 #define _POSIX_C_SOURCE 200809L
 #endif
@@ -83,12 +83,10 @@ int jh_cli_compile(jh_cli_t *ctx) {
   const bool configure = a->present[opt_configure_only];
   if (!jh_cli_value(ctx, opt_root, "compile requires --root") ||
       !jh_cli_value(ctx, opt_project, "compile requires --project") ||
-      !jh_cli_require(ctx, dry_run || configure ? HAL_OK : HAL_EUNSUPPORTED, 2,
-                      "compile runs with --dry-run or --configure-only") ||
       !jh_cli_require(
           ctx, dry_run && configure ? HAL_EINVAL : HAL_OK, 2,
           "compile takes --dry-run or --configure-only, not both") ||
-      (configure && !jh_cli_install_cancellation(ctx)))
+      (!dry_run && !jh_cli_install_cancellation(ctx)))
     return 0;
   const char *root = jh_cli_checkout(ctx);
   if (ctx->failure.status != HAL_OK)
@@ -109,14 +107,16 @@ int jh_cli_compile(jh_cli_t *ctx) {
   options.debug = a->present[opt_debug];
   /* With --json stdout carries the result, so CMake writes to stderr. */
   options.log = ctx->json ? stderr : stdout;
-  options.canceled = configure ? jh_cli_canceled : NULL;
+  options.canceled = dry_run ? NULL : jh_cli_canceled;
   if (ctx->failure.status != HAL_OK)
     return 0;
   jh_compile_t compile;
   jh_compile_init(&compile);
   if (!jh_cli_ok(ctx, jh_compile_plan(&options, &compile, &ctx->failure)) ||
       (configure && !jh_cli_ok(ctx, jh_compile_configure(&options, &compile,
-                                                         &ctx->failure))))
+                                                         &ctx->failure))) ||
+      (!dry_run && !configure &&
+       !jh_cli_ok(ctx, jh_compile_build(&options, &compile, &ctx->failure))))
     goto done;
   jb_json_tree_view_t config = {0}, plan = {0};
   (void)jb_json_tree_root(compile.config, &config);

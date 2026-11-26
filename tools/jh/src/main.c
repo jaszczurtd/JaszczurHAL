@@ -129,7 +129,7 @@ static const option_spec_t options[] = {
     {"dry-run", NULL, "Print the model and plan without building (compile)"},
     {"configure-only", NULL,
      "Run the CMake configure of the planned build and stop (compile)"},
-    {"debug", NULL, "Plan the debug build of the project (compile)"},
+    {"debug", NULL, "Build the debug configuration of the project (compile)"},
     {"python", "<path>",
      "Python3_EXECUTABLE of the configure (compile; default: "
      "JH_COMPONENT_PYTHON, then python3 or python from PATH)"},
@@ -355,7 +355,7 @@ static const char usage[] =
     "       jh esp (build | artifacts) --root <path> --project <path>"
     " [options]\n"
     "       jh compile --root <path> --project <path>"
-    " (--dry-run | --configure-only) [options]\n\n"
+    " [--dry-run | --configure-only] [options]\n\n"
     "Read JSON, select a value and optionally compare or write it,\n"
     "generate the C defaults of the HAL component types or the feature\n"
     "registry artifacts, evaluate a project's hal_project_config.h as\n"

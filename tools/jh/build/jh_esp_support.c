@@ -727,6 +727,12 @@ static hal_status_t deliver(const sink_t *sink, jb_process_stream_t stream,
                           length);
   hal_status_t status =
       p->out != NULL ? append_limited(p->out, data, length) : HAL_OK;
+  /* Whole lines arrive here (process_output); a line esp_tail drops now
+   * never belongs to the end it gives later. */
+  if (status == HAL_OK && p->out != NULL && p->tail != 0 &&
+      jb_string_size(p->out) / 2 > p->tail)
+    status =
+        jb_string_erase(p->out, 0, esp_tail(jh_string_span(p->out), p->tail));
   if (status == HAL_OK && p->echo)
     status = write_stream(sink->e->log, data, length);
   return status;
@@ -828,6 +834,15 @@ hal_status_t esp_process(jh_esp_t *e, const esp_process_t *p, int *exit_code) {
   else if (status == HAL_OK)
     *exit_code = jh_build_exit_code(&result);
   return status;
+}
+
+size_t esp_tail(jb_json_span_t text, size_t tail) {
+  size_t start = 0;
+  while (text.length - start > tail) {
+    const char *newline = memchr(text.data + start, '\n', text.length - start);
+    start = newline != NULL ? (size_t)(newline - text.data) + 1 : text.length;
+  }
+  return start;
 }
 
 bool esp_decode_text(jh_esp_t *e, jb_json_span_t input, jb_string_t *out) {

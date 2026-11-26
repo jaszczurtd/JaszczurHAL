@@ -524,12 +524,14 @@ function(jh_add_rp_pico_firmware TARGET_NAME)
         if(NOT DEFINED JH_OTA_VERSION OR "${JH_OTA_VERSION}" STREQUAL "")
             set(JH_OTA_VERSION "dev")
         endif()
+        # Names relative to the binary directory the post-build steps run
+        # in: on Windows they share one cmd.exe line with the link.
         add_custom_command(TARGET "${TARGET_NAME}" POST_BUILD
             COMMAND "${Python3_EXECUTABLE}"
                 "${JH_ROOT}/scripts/rp_ota_artifacts.py"
                 package
-                --binary "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}.bin"
-                --output "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}.ota"
+                --binary "${TARGET_NAME}.bin"
+                --output "${TARGET_NAME}.ota"
                 --target "${JH_RP_TARGET_NAME}"
                 --program-offset "${_jh_rp_program_offset}"
                 --generation "${JH_OTA_GENERATION}"
@@ -537,9 +539,9 @@ function(jh_add_rp_pico_firmware TARGET_NAME)
             COMMAND "${Python3_EXECUTABLE}"
                 "${JH_ROOT}/scripts/rp_ota_artifacts.py"
                 merge-uf2
-                --boot "${CMAKE_CURRENT_BINARY_DIR}/${_jh_boot_target}.uf2"
-                --application "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}.uf2"
-                --output "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}.uf2"
+                --boot "${_jh_boot_target}.uf2"
+                --application "${TARGET_NAME}.uf2"
+                --output "${TARGET_NAME}.uf2"
             VERBATIM)
     endif()
     jh_rp_apply_ram_code("${TARGET_NAME}" ${JH_NATIVE_RAM_CODE_SOURCES})

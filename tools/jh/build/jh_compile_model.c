@@ -46,6 +46,13 @@ bool cc_fail(jh_compile_ctx_t *c, const jb_json_span_t *parts, size_t count) {
   return false;
 }
 
+bool cc_unsupported(jh_compile_ctx_t *c, const jb_json_span_t *parts,
+                    size_t count) {
+  if (cc_ok(c))
+    (void)jh_fail(c->e.failure, HAL_EUNSUPPORTED, 8, parts, count);
+  return false;
+}
+
 bool cc_storage(jh_compile_ctx_t *c, hal_status_t status) {
   return esp_storage(&c->e, status);
 }
@@ -296,6 +303,19 @@ bool cc_path_within(jh_compile_ctx_t *c, const char *child,
   const char *a = esp_resolve(&c->e, child, c->base);
   const char *b = esp_resolve(&c->e, parent, c->base);
   return cc_ok(c) && jh_build_inside(a, b);
+}
+
+/* target_display_name: "<target>/<assembly or board>", or the target
+ * ("default" without one). */
+const char *cc_display_name(jh_compile_ctx_t *c, jb_json_tree_view_t config) {
+  const jb_json_tree_view_t target = cc_get(config, "target");
+  jb_json_tree_view_t board = cc_get(config, "assembly");
+  if (!cc_truthy(board))
+    board = cc_get(config, "board");
+  const char *name = cc_truthy(target) ? cc_pystr(c, target) : "default";
+  return cc_truthy(board) ? CC_TEXT(c, jh_span(name), jh_span("/"),
+                                    jh_span(cc_pystr(c, board)))
+                          : name;
 }
 
 /* Path(text).expanduser(), joined to the project when relative, as str(). */
@@ -1680,22 +1700,41 @@ static bool hardware_header(jh_compile_ctx_t *c, const char *assembly,
   if (!hardware_registry(c))
     return false;
   jh_hardware_t hardware = {0};
-  jb_string_t header = {0};
+  jb_string_t header = {0}, board = {0};
+  jb_json_tree_t *board_tree = NULL;
   const char *tree_path = esp_join(&c->e, c->project_dir, "device_tree.json");
   if (cc_storage(c, jb_string_init(&header, jb_heap_allocator())) &&
+      cc_storage(c, jb_string_init(&board, jb_heap_allocator())) &&
       jh_hardware_load(&hardware, &c->e.hardware, tree_path, c->e.failure) ==
           HAL_OK &&
       jh_hardware_resolve(&hardware, NULL, assembly, c->e.failure) == HAL_OK &&
       jh_hardware_header(&hardware, &header, c->e.failure) == HAL_OK &&
+      jh_hardware_board_json(&hardware, &board, c->e.failure) == HAL_OK &&
       jh_process_scratch(scratch, c->e.failure) == HAL_OK) {
     *path = esp_join(&c->e, jb_temp_dir_path(*scratch), "jh_hardware.h");
     bool changed = false;
     (void)cc_storage(c, jb_file_write_atomic(*path, jb_string_data(&header),
                                              jb_string_size(&header), false,
                                              &changed));
+    /* device_tree_project.components: the assembly board's components, which
+     * the build preflight checks for the CYW43 transport. */
+    jb_json_tree_view_t root = {0};
+    if (cc_ok(c) &&
+        cc_storage(
+            c, jh_json_tree_from_text(jh_string_span(&board), &board_tree)) &&
+        cc_storage(c, jb_json_tree_root(board_tree, &root))) {
+      const jb_json_tree_view_t names = cc_get(root, "components");
+      for (size_t i = 0; i < jh_json_count(names) && cc_ok(c); ++i) {
+        jb_json_span_t name = {0};
+        if (jh_json_string(jh_json_item(names, i), &name))
+          (void)esp_push(&c->e, &c->assembly_components, name);
+      }
+    }
   } else {
     (void)hardware_failure(c);
   }
+  jb_json_tree_destroy(board_tree);
+  jb_string_destroy(&board);
   jb_string_destroy(&header);
   jh_hardware_destroy(&hardware);
   return cc_ok(c);
@@ -1762,6 +1801,25 @@ static bool feature_resolution(jh_compile_ctx_t *c, jb_json_tree_t *config) {
     if (c->e.failure->status != HAL_ENOMEM)
       c->e.failure->exit_code = 2;
     goto done;
+  }
+  /* project_config.defined() of the three symbols the build preflight
+   * accepts as the STM32G474 CYW43 gSPI/lwIP profile. */
+  {
+    static const char *const cyw43[] = {"HAL_NETWORK_BACKEND_CYW43",
+                                        "HAL_CYW43_BUS_STM32_GSPI",
+                                        "HAL_CYW43_STACK_LWIP"};
+    const jb_json_tree_view_t macros = cc_get(build.config_root, "macros");
+    size_t found = 0;
+    for (size_t k = 0; k < COUNTOF(cyw43); ++k)
+      for (size_t i = 0; i < jh_json_count(macros); ++i) {
+        jb_json_span_t name = {0};
+        if (jh_json_string(cc_get(jh_json_item(macros, i), "name"), &name) &&
+            jh_span_equal(name, jh_span(cyw43[k]))) {
+          ++found;
+          break;
+        }
+      }
+    c->cyw43_defined = found == COUNTOF(cyw43);
   }
   /* The context of the findings: "<header> [<label>]". */
   const char *label = CC_TEXT(

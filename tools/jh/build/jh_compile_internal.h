@@ -24,6 +24,11 @@ typedef struct {
   /* The evaluated project configuration of the build (project_build). */
   jb_vector_t resolved_features; /* jb_string_t */
   bool device_tree;
+  /* What the build preflight reads: whether the evaluated configuration
+   * defines the three CYW43 gSPI/lwIP symbols, and the components of a
+   * device tree assembly (jb_string_t). */
+  bool cyw43_defined;
+  jb_vector_t assembly_components;
 } jh_compile_ctx_t;
 
 /* ---- Trees (jh_compile_model.c) ---- */
@@ -36,6 +41,10 @@ char *cc_mutable(jh_compile_ctx_t *c, const char *text);
 /* A configuration error (exit code 2) with the concatenated message. */
 bool cc_fail(jh_compile_ctx_t *c, const jb_json_span_t *parts, size_t count);
 #define CC_FAIL(c, ...) cc_fail((c), JH_PARTS(__VA_ARGS__))
+/* A build jh-vscode does not implement: exit code 8, its EXIT_UNSUPPORTED. */
+bool cc_unsupported(jh_compile_ctx_t *c, const jb_json_span_t *parts,
+                    size_t count);
+#define CC_UNSUPPORTED(c, ...) cc_unsupported((c), JH_PARTS(__VA_ARGS__))
 bool cc_storage(jh_compile_ctx_t *c, hal_status_t status);
 
 jb_json_tree_t *cc_object(jh_compile_ctx_t *c);
@@ -85,6 +94,8 @@ bool cc_same_path(const char *a, const char *b);
 const char *cc_project_absolute(jh_compile_ctx_t *c, const char *path);
 
 /* ---- Model (jh_compile_model.c) ---- */
+/* target_display_name of the model: "<target>/<assembly or board>". */
+const char *cc_display_name(jh_compile_ctx_t *c, jb_json_tree_view_t config);
 /* load_config_for_action: the model of the build in *config. */
 bool cc_model(jh_compile_ctx_t *c, jb_json_tree_t **config);
 const char *cc_json_dumps(jh_compile_ctx_t *c, jb_json_tree_view_t value);
@@ -94,5 +105,19 @@ bool cc_plan(jh_compile_ctx_t *c, jb_json_tree_t *config,
              jb_json_tree_t **plan);
 /* os.environ.get(name): the value of a variable of this process, or NULL. */
 const char *cc_environment(jh_compile_ctx_t *c, const char *name);
+
+/* ---- Memory map overview (jh_compile_memory.c) ---- */
+/* format_size of jh-vscode: B below 1 KiB, KiB with one decimal below 1 MiB,
+ * else MiB with two. */
+const char *cc_format_size(jh_compile_ctx_t *c, uint64_t size);
+/* Whether literal starts at text[at]. */
+bool cc_literal_at(jb_json_span_t text, size_t at, const char *literal);
+/* The sections of <tree>/firmware.elf by memory region, read with objdump -h
+ * (NULL: none found, a warning), on the log stream; nothing when
+ * JH_VSCODE_MEMORY_OVERVIEW is 0, false, no or off or the ELF is missing. A
+ * failing objdump is a warning; false only for memory, log or cancellation
+ * failures. */
+bool cc_memory_overview(jh_compile_ctx_t *c, const char *tree,
+                        const char *objdump);
 
 #endif

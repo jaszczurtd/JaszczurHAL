@@ -118,6 +118,8 @@ endfunction()
 # jh_rp_check_flash_range(TARGET OFFSET LENGTH)
 # Fail the build when the target's UF2 does not start at the region origin or
 # leaves the region, i.e. when the region override did not reach the linker.
+# The UF2 is named relative to the binary directory the post-build steps run
+# in, which keeps the Windows cmd.exe line of link and post-build steps short.
 function(jh_rp_check_flash_range TARGET_NAME OFFSET LENGTH)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     math(EXPR _jh_start "0x10000000 + ${OFFSET}" OUTPUT_FORMAT HEXADECIMAL)
@@ -126,7 +128,7 @@ function(jh_rp_check_flash_range TARGET_NAME OFFSET LENGTH)
         COMMAND "${Python3_EXECUTABLE}"
             "${JH_ROOT}/scripts/rp_ota_artifacts.py"
             check-range
-            --uf2 "${CMAKE_CURRENT_BINARY_DIR}/${TARGET_NAME}.uf2"
+            --uf2 "${TARGET_NAME}.uf2"
             --start "${_jh_start}"
             --end "${_jh_end}"
         VERBATIM)

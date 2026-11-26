@@ -613,6 +613,114 @@ static void set_text_member(jh_compile_ctx_t *c, jb_json_tree_t *plan,
   cc_set_text(c, plan, key, text);
 }
 
+/* ---- Build preflight (build_preflight_diagnostics) ---- */
+
+/* STM32G474_NETWORK_MODULES, in name order. */
+static const char *const stm32_network_modules[] = {
+    "HAL_ENABLE_BSD_SOCKETS",  "HAL_ENABLE_HTTP_FILES",
+    "HAL_ENABLE_HTTP_SERVER",  "HAL_ENABLE_MQTT",
+    "HAL_ENABLE_NET_COMMANDS", "HAL_ENABLE_NET_CONSOLE",
+    "HAL_ENABLE_OTA",          "HAL_ENABLE_TCP",
+    "HAL_ENABLE_TIME",         "HAL_ENABLE_UDP",
+    "HAL_ENABLE_WEBSOCKET",    "HAL_ENABLE_WIFI",
+    "HAL_ENABLE_WIREGUARD"};
+
+/* The messages that stop a build before CMake runs: a skeleton target, and
+ * STM32G474 network modules without the CYW43 gSPI/lwIP profile, which the
+ * configuration defines or the board (or assembly) components provide. */
+static void preflight(jh_compile_ctx_t *c, jb_json_tree_view_t config,
+                      jb_json_tree_t *plan) {
+  jb_vector_t messages = {0}, network = {0};
+  if (!esp_list_init(&c->e, &messages) || !esp_list_init(&c->e, &network))
+    goto done;
+  const char *target = config_text(c, config, "target");
+  const jb_json_tree_view_t desc = target != NULL
+                                       ? cc_get(cc_root(c->registry), target)
+                                       : (jb_json_tree_view_t){0};
+  const char *status = cc_str(c, cc_get(desc, "status"));
+  if (cc_is(desc, JB_JSON_OBJECT) && status != NULL &&
+      strcmp(status, "skeleton") == 0) {
+    (void)esp_push(
+        &c->e, &messages,
+        jh_span(CC_TEXT(c, jh_span("axis-2: target "),
+                        jh_span(cc_display_name(c, config)),
+                        jh_span(" is a skeleton; the HAL backend/recipe is "
+                                "not implemented yet."))));
+    goto done;
+  }
+  if (target == NULL || strcmp(target, "stm32g474") != 0)
+    goto done;
+  for (size_t i = 0; i < COUNTOF(stm32_network_modules); ++i)
+    if (jh_list_contains(&c->resolved_features,
+                         jh_span(stm32_network_modules[i])))
+      (void)esp_push(&c->e, &network, jh_span(stm32_network_modules[i]));
+  bool gspi = false, lwip = false;
+  if (cc_truthy(cc_get(config, "assembly"))) {
+    gspi =
+        jh_list_contains(&c->assembly_components, jh_span("cyw43-stm32-gspi"));
+    lwip = jh_list_contains(&c->assembly_components, jh_span("cyw43-lwip"));
+  } else if (cc_is(desc, JB_JSON_OBJECT)) {
+    const char *selected = config_text(c, config, "board");
+    const jb_json_tree_view_t boards = cc_get(desc, "boards");
+    for (size_t i = 0; i < jh_json_count(boards); ++i) {
+      const jb_json_tree_view_t board = jh_json_item(boards, i);
+      const char *id = cc_str(c, cc_get(board, "id"));
+      if (id == NULL || strcmp(id, selected != NULL ? selected : "") != 0)
+        continue;
+      const jb_json_tree_view_t components = cc_get(board, "components");
+      for (size_t k = 0; k < jh_json_count(components); ++k) {
+        const char *name = cc_str(c, jh_json_item(components, k));
+        gspi = gspi || (name != NULL && strcmp(name, "cyw43-stm32-gspi") == 0);
+        lwip = lwip || (name != NULL && strcmp(name, "cyw43-lwip") == 0);
+      }
+      break;
+    }
+  }
+  if (jb_vector_size(&network) != 0 && !c->cyw43_defined && !(gspi && lwip))
+    (void)esp_push(
+        &c->e, &messages,
+        jh_span(CC_TEXT(
+            c,
+            jh_span("axis-2: stm32g474 network modules require the explicit "
+                    "CYW43 gSPI/lwIP backend profile; enabled modules: "),
+            jh_span(esp_join_list(&c->e, &network, ", ")),
+            jh_span(". Define HAL_NETWORK_BACKEND_CYW43, "
+                    "HAL_CYW43_BUS_STM32_GSPI and HAL_CYW43_STACK_LWIP, or "
+                    "disable those modules."))));
+done:
+  set_list(c, plan, "preflight", &messages);
+  jh_list_destroy(&network);
+  jh_list_destroy(&messages);
+}
+
+/* objdump_program: the objdump of the verified Windows toolchain, else the
+ * target's objdump from PATH, else objdump. NULL when none exists. */
+static const char *objdump_program(jh_compile_ctx_t *c,
+                                   jb_json_tree_view_t config) {
+  const char *target = config_text(c, config, "target");
+  const bool riscv = target != NULL && strcmp(target, "rp2350-riscv") == 0;
+  const char *tool = host_tool(c, riscv ? "riscv" : "gnu-arm");
+  if (tool != NULL) {
+    const char *candidate =
+        cc_purepath(c, esp_join(&c->e, esp_parent(&c->e, tool),
+                                riscv ? "riscv32-unknown-elf-objdump.exe"
+                                      : "arm-none-eabi-objdump.exe"));
+    if (esp_is_file(candidate))
+      return candidate;
+  }
+  jb_vector_t environment = {0};
+  const char *found = NULL;
+  if (esp_environment_capture(&c->e, &environment)) {
+    found = esp_find_program(&c->e, &environment,
+                             riscv ? "riscv32-unknown-elf-objdump"
+                                   : "arm-none-eabi-objdump");
+    if (found == NULL)
+      found = esp_find_program(&c->e, &environment, "objdump");
+  }
+  jh_list_destroy(&environment);
+  return found;
+}
+
 /* The CMake build: command_build with cmake_build_config. */
 static bool cmake_plan(jh_compile_ctx_t *c, jb_json_tree_view_t config,
                        jb_json_tree_t *plan) {
@@ -706,6 +814,10 @@ static bool cmake_plan(jh_compile_ctx_t *c, jb_json_tree_view_t config,
     set_list(c, plan, "artifacts", &published);
   }
   jh_list_destroy(&published);
+  /* The memory map overview after the build reads the ELF with it. */
+  const char *objdump = objdump_program(c, config);
+  if (objdump != NULL)
+    set_text_member(c, plan, "objdump", objdump);
 done:
   jb_json_tree_destroy(build_argv);
   jb_json_tree_destroy(configure);
@@ -720,8 +832,8 @@ done:
 static bool esp_plan(jh_compile_ctx_t *c, jb_json_tree_view_t config,
                      jb_json_tree_t *plan) {
   if (c->options->debug)
-    return CC_FAIL(c, jh_span("ESP-IDF debug builds are not implemented by "
-                              "jh-vscode"));
+    return CC_UNSUPPORTED(c, jh_span("ESP-IDF debug builds are not "
+                                     "implemented by jh-vscode"));
   const jb_json_tree_view_t esp = cc_get(config, "espIdf");
   if (!cc_is(esp, JB_JSON_OBJECT))
     return CC_FAIL(c, jh_span("ESP-IDF target is missing its tooling "
@@ -826,9 +938,10 @@ bool cc_plan(jh_compile_ctx_t *c, jb_json_tree_t *config,
   else if (toolchain != NULL && strcmp(toolchain, "esp-idf") == 0)
     (void)esp_plan(c, root, plan);
   else
-    (void)CC_FAIL(c, jh_span("build for toolchain '"),
-                  jh_span(cc_pystr(c, cc_get(root, "toolchain"))),
-                  jh_span("' is not implemented"));
+    (void)CC_UNSUPPORTED(c, jh_span("build for toolchain '"),
+                         jh_span(cc_pystr(c, cc_get(root, "toolchain"))),
+                         jh_span("' is not implemented"));
+  preflight(c, root, plan);
   if (!cc_ok(c)) {
     jb_json_tree_destroy(plan);
     return false;
@@ -876,7 +989,8 @@ hal_status_t jh_compile_plan(const jh_compile_options_t *options,
   jh_hardware_registry_init(&c.e.hardware);
   jb_json_tree_t *config = NULL, *plan = NULL;
   if (!esp_list_init(&c.e, &c.e.strings) ||
-      !esp_list_init(&c.e, &c.resolved_features))
+      !esp_list_init(&c.e, &c.resolved_features) ||
+      !esp_list_init(&c.e, &c.assembly_components))
     goto done;
   c.root =
       esp_resolve(&c.e, esp_expand_user(&c.e, options->root), options->base);
@@ -903,6 +1017,7 @@ done:
   jb_json_tree_destroy(c.host);
   jb_json_tree_destroy(c.sources);
   jb_json_tree_destroy(c.registry);
+  jh_list_destroy(&c.assembly_components);
   jh_list_destroy(&c.resolved_features);
   jh_list_destroy(&c.e.strings);
   /* Also a registry whose load failed part way. */

@@ -544,9 +544,17 @@ static const char *tool_version(jh_esp_t *e, const jb_vector_t *command,
   for (size_t i = 1; i < jb_vector_size(command); ++i)
     (void)esp_push(e, &arguments, jh_string_span(jh_list_at(command, i)));
   const char *program = esp_at(command, 0);
-  const esp_process_t process = {
-      program, &arguments, NULL, &e->environment, ESP_RUN_CAPTURE, false, true,
-      0,       &out,       &err};
+  const esp_process_t process = {program,
+                                 &arguments,
+                                 NULL,
+                                 &e->environment,
+                                 ESP_RUN_CAPTURE,
+                                 false,
+                                 true,
+                                 0,
+                                 &out,
+                                 &err,
+                                 0};
   int code = -1;
   const hal_status_t status = esp_process(e, &process, &code);
   if (!esp_ok(e))
@@ -656,9 +664,17 @@ static bool python_tools(jh_esp_t *e, const char *python, const contract_t *c,
       !esp_push(e, &arguments, jh_span(program)) ||
       !esp_push(e, &arguments, jh_string_span(&names)))
     goto done;
-  const esp_process_t process = {
-      python, &arguments, NULL, &e->environment, ESP_RUN_CAPTURE, false, true,
-      0,      &out,       &err};
+  const esp_process_t process = {python,
+                                 &arguments,
+                                 NULL,
+                                 &e->environment,
+                                 ESP_RUN_CAPTURE,
+                                 false,
+                                 true,
+                                 0,
+                                 &out,
+                                 &err,
+                                 0};
   int code = -1;
   status = esp_process(e, &process, &code);
   if (!esp_ok(e))
@@ -1218,7 +1234,8 @@ static hal_status_t run_ninja(jh_esp_t *e, const char *ninja,
     if (esp_storage(e, jb_string_init(&raw, jb_heap_allocator()))) {
       const esp_process_t process = {
           ninja, arguments, e->build_dir, &environment, ESP_RUN_MERGE,
-          false, true,      30000,        &raw,         NULL};
+          false, true,      30000,        &raw,         NULL,
+          0};
       status = esp_process(e, &process, code);
       if (status == HAL_OK)
         (void)esp_decode_text(e, jh_string_span(&raw), out);

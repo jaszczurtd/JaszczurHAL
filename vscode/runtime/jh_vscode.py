@@ -202,6 +202,22 @@ def maybe_yellow_output(line: str) -> str:
     return line
 
 
+def echo_command_output(line: str) -> None:
+    """Print a line of child output that may hold U+FFFD.
+
+    Child output is decoded with errors="replace": tools such as cmd.exe print
+    in another code page than Python's. A redirected stdout keeps the strict
+    locale encoding, which has no U+FFFD.
+    """
+    text = maybe_yellow_output(line)
+    try:
+        sys.stdout.write(text)
+    except UnicodeEncodeError:
+        encoding = sys.stdout.encoding or "ascii"
+        sys.stdout.write(text.encode(encoding, errors="replace").decode(encoding))
+    sys.stdout.flush()
+
+
 def strip_json_comments(text: str) -> str:
     """Remove JSONC comments while preserving string contents."""
     result: list[str] = []
@@ -2836,6 +2852,7 @@ def run_command(
                 stdout=subprocess.PIPE,
                 stderr=subprocess.STDOUT,
                 text=True,
+                errors="replace",
                 bufsize=1,
                 env=environment,
             )
@@ -2848,8 +2865,7 @@ def run_command(
 
         assert process.stdout is not None
         for line in process.stdout:
-            sys.stdout.write(maybe_yellow_output(line))
-            sys.stdout.flush()
+            echo_command_output(line)
         return int(process.wait())
 
     try:
@@ -2878,6 +2894,7 @@ def run_command_capture(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            errors="replace",
             bufsize=1,
             env=environment,
         )
@@ -2892,8 +2909,7 @@ def run_command_capture(
     captured_size = 0
     assert process.stdout is not None
     for line in process.stdout:
-        sys.stdout.write(maybe_yellow_output(line))
-        sys.stdout.flush()
+        echo_command_output(line)
         captured.append(line)
         captured_size += len(line)
         while captured_size > capture_limit and captured:
@@ -3172,7 +3188,9 @@ def resolve_elf_artifact(config: dict[str, Any], project_dir: Path) -> Path | No
 
 def parse_objdump_sections(elf: Path, objdump: str) -> list[dict[str, Any]]:
     try:
-        result = subprocess.run([objdump, "-h", str(elf)], check=False, capture_output=True, text=True)
+        result = subprocess.run(
+            [objdump, "-h", str(elf)], check=False, capture_output=True, text=True, errors="replace"
+        )
     except OSError as exc:
         print(f"warning: memory map overview skipped; failed to run {objdump}: {exc}", file=sys.stderr)
         return []
